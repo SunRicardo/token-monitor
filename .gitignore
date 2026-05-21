@@ -3,6 +3,7 @@ data/
 .claude/
 CLAUDE.md
 AGENTS.md
+docs/superpowers/
 .env
 .env.*
 !.env.example

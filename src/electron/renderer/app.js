@@ -1,8 +1,56 @@
 ﻿'use strict';
 
 const clientLabels = { claude: 'Claude Code', codex: 'Codex', hermes: 'Hermes', gemini: 'Gemini', cursor: 'Cursor', opencode: 'OpenCode', openclaw: 'OpenClaw' };
-const clientColors = { claude: '#cc7c5e', codex: '#49a3b0', hermes: '#a57df0', gemini: '#6ab4f0', deepseek: '#6ab4f0', cursor: '#f0d66a', opencode: '#7fb069', openclaw: '#d4845c', default: '#6ab4f0' };
-const clientsWithIcon = new Set(['claude', 'codex']);
+const clientColors = {
+  claude: '#cc7c5e',
+  codex: '#49a3b0',
+  hermes: '#d4af37',
+  gemini: '#4992ea',
+  deepseek: '#3982ff',
+  cursor: '#000000',
+  opencode: '#24292e',
+  openclaw: '#e05c2b',
+  xai: '#000000',
+  meta: '#0668e1',
+  mistral: '#fa520f',
+  qwen: '#615ced',
+  moonshot: '#16191e',
+  zai: '#0066ff',
+  cohere: '#ff7759',
+  xiaomi: '#ff6700',
+  minimax: '#b4393c',
+  default: '#6ab4f0'
+};
+const clientsWithIcon = new Set([
+  'claude', 'codex', 'gemini', 'cursor', 'opencode', 'openclaw', 'hermes',
+  'xai', 'deepseek', 'meta', 'mistral', 'qwen', 'moonshot', 'zai', 'cohere', 'xiaomi', 'minimax'
+]);
+
+function osIconFor(platform) {
+  const prefix = String(platform || '').toLowerCase().split('-')[0];
+  if (prefix === 'darwin') return 'apple';
+  if (prefix === 'win32') return 'windows';
+  if (prefix === 'linux' || prefix === 'freebsd' || prefix === 'openbsd') return 'linux';
+  return null;
+}
+
+function iconKindFor(rowData, breakdown) {
+  if (!state.settings?.showToolIcons) return { kind: 'dot' };
+  if (breakdown === 'device') {
+    const os = osIconFor(rowData.platform);
+    return os ? { kind: 'icon', iconClass: `row-icon-os-${os}` } : { kind: 'dot' };
+  }
+  if (breakdown === 'model') {
+    const vendor = modelVendorFor(rowData.key);
+    return vendor && clientsWithIcon.has(vendor)
+      ? { kind: 'icon', iconClass: `row-icon-${vendor}` }
+      : { kind: 'dot' };
+  }
+  return clientsWithIcon.has(rowData.key)
+    ? { kind: 'icon', iconClass: `row-icon-${rowData.key}` }
+    : { kind: 'dot' };
+}
+
 const KNOWN_CLIENTS = [
   { id: 'claude', label: 'Claude Code' },
   { id: 'codex', label: 'Codex' },
@@ -21,9 +69,9 @@ const deviceColors = ['#49a3b0', '#6ab4f0', '#cc7c5e', '#a57df0', '#f0d66a', '#f
 const fallbackModelColors = ['#6ab4f0', '#cc7c5e', '#a57df0', '#49a3b0', '#f0d66a', '#f06a7b'];
 const baseBreakdownOrder = ['tool', 'device', 'model'];
 const state = { period: 'today', breakdown: 'tool', settings: null, stats: null, refreshTimer: null, currentTotal: 0, rowSignature: '', streamConnected: false, mode: 'idle' };
-const defaultAppearance = { glassOpacity: 68, glassBlur: 32, systemGlass: true, showLiveDot: true };
+const defaultAppearance = { glassOpacity: 68, glassBlur: 32, systemGlass: true, showLiveDot: true, showToolIcons: true };
 const els = {
-  shell: document.querySelector('.shell'), status: document.getElementById('status'), liveDot: document.getElementById('liveDot'), totalTokens: document.getElementById('totalTokens'), cost: document.getElementById('cost'), breakdown: document.getElementById('breakdown'), limitsPanel: document.getElementById('limitsPanel'), breakdownToggle: document.getElementById('breakdownToggle'), pinButton: document.getElementById('pinButton'), settingsButton: document.getElementById('settingsButton'), settingsPanel: document.getElementById('settingsPanel'), hubUrlInput: document.getElementById('hubUrlInput'), secretInput: document.getElementById('secretInput'), deviceIdInput: document.getElementById('deviceIdInput'), limitProviderCheckboxes: document.getElementById('limitProviderCheckboxes'), limitsRefreshInput: document.getElementById('limitsRefreshInput'), showLimitSourceInput: document.getElementById('showLimitSourceInput'), systemGlassInput: document.getElementById('systemGlassInput'), liveDotInput: document.getElementById('liveDotInput'), glassInput: document.getElementById('glassInput'), blurInput: document.getElementById('blurInput'), saveSettingsButton: document.getElementById('saveSettingsButton'), clientCheckboxes: document.getElementById('clientCheckboxes'), resetAppearanceButton: document.getElementById('resetAppearanceButton'), openConfigButton: document.getElementById('openConfigButton'), refreshButton: document.getElementById('refreshButton'), minButton: document.getElementById('minButton'), closeButton: document.getElementById('closeButton')
+  shell: document.querySelector('.shell'), status: document.getElementById('status'), liveDot: document.getElementById('liveDot'), totalTokens: document.getElementById('totalTokens'), cost: document.getElementById('cost'), breakdown: document.getElementById('breakdown'), limitsPanel: document.getElementById('limitsPanel'), breakdownToggle: document.getElementById('breakdownToggle'), pinButton: document.getElementById('pinButton'), settingsButton: document.getElementById('settingsButton'), settingsPanel: document.getElementById('settingsPanel'), hubUrlInput: document.getElementById('hubUrlInput'), secretInput: document.getElementById('secretInput'), deviceIdInput: document.getElementById('deviceIdInput'), limitProviderCheckboxes: document.getElementById('limitProviderCheckboxes'), limitsRefreshInput: document.getElementById('limitsRefreshInput'), showLimitSourceInput: document.getElementById('showLimitSourceInput'), systemGlassInput: document.getElementById('systemGlassInput'), liveDotInput: document.getElementById('liveDotInput'), toolIconsInput: document.getElementById('toolIconsInput'), glassInput: document.getElementById('glassInput'), blurInput: document.getElementById('blurInput'), saveSettingsButton: document.getElementById('saveSettingsButton'), clientCheckboxes: document.getElementById('clientCheckboxes'), resetAppearanceButton: document.getElementById('resetAppearanceButton'), openConfigButton: document.getElementById('openConfigButton'), refreshButton: document.getElementById('refreshButton'), minButton: document.getElementById('minButton'), closeButton: document.getElementById('closeButton')
 };
 
 function formatNumber(value) { return Math.round(Number(value || 0)).toLocaleString('en-US'); }
@@ -84,18 +132,28 @@ function rowWidth(value, max) {
 }
 
 function rowTemplate(rowData) {
-  const { key, name } = rowData;
+  const { key, name, platform } = rowData;
   const row = document.createElement('div');
   row.dataset.key = key;
-  row.innerHTML = '<div class="row-head"><div class="row-name"><span class="dot"></span><span></span></div><div class="row-metrics"><div class="row-value"></div><div class="row-cost"></div></div></div><div class="bar"><div class="bar-fill"></div></div>';
+  if (platform) row.dataset.platform = platform;
+  row.innerHTML = '<div class="row-head"><div class="row-name"><span class="row-mark"></span><span></span></div><div class="row-metrics"><div class="row-value"></div><div class="row-cost"></div></div></div><div class="bar"><div class="bar-fill"></div></div>';
   row.querySelector('.row-name span:last-child').textContent = name;
   return row;
 }
 
-function updateRow(row, { name, value, cost, max, color, stale }) {
+function updateRow(row, { name, value, cost, max, color, stale, platform }) {
   const width = rowWidth(value, max);
   row.className = `row${stale ? ' stale' : ''}`;
-  row.querySelector('.dot').style.background = color;
+  if (platform !== undefined) row.dataset.platform = platform || '';
+  const mark = row.querySelector('.row-mark');
+  const kind = iconKindFor({ key: row.dataset.key, platform: row.dataset.platform || '' }, state.breakdown);
+  if (kind.kind === 'icon') {
+    mark.className = `row-mark row-icon ${kind.iconClass}`;
+    mark.style.background = '';
+  } else {
+    mark.className = 'row-mark dot';
+    mark.style.background = color;
+  }
   row.querySelector('.row-name span:last-child').textContent = name;
   row.querySelector('.row-value').textContent = formatNumber(value);
   row.querySelector('.row-cost').textContent = formatCost(cost || 0);
@@ -133,17 +191,31 @@ function stableColor(value, colors) {
   return colors[Math.abs(hash) % colors.length];
 }
 
-function modelColor(model) {
+function modelVendorFor(model) {
   const name = String(model || '').toLowerCase();
-  if (/(claude|anthropic|sonnet|opus|haiku)/.test(name)) return clientColors.claude;
-  if (/(hermes)/.test(name)) return clientColors.hermes;
-  if (/(deepseek)/.test(name)) return clientColors.deepseek;
-  if (/(gemini|google)/.test(name)) return clientColors.gemini;
-  if (/(cursor)/.test(name)) return clientColors.cursor;
-  if (/(opencode)/.test(name)) return clientColors.opencode;
-  if (/(openclaw|clawd|moltbot|moldbot)/.test(name)) return clientColors.openclaw;
-  if (/(gpt|openai|codex|^o[134](?:-|$)|o[134]-(mini|pro|preview)|chatgpt)/.test(name)) return clientColors.codex;
-  return stableColor(name, fallbackModelColors);
+  if (/claude|anthropic|sonnet|opus|haiku/.test(name)) return 'claude';
+  if (/gpt|openai|codex|^o[134](?:-|$)|o[134]-(mini|pro|preview)|chatgpt/.test(name)) return 'codex';
+  if (/gemini|gemma|google/.test(name)) return 'gemini';
+  if (/grok|xai/.test(name)) return 'xai';
+  if (/deepseek/.test(name)) return 'deepseek';
+  if (/llama|meta/.test(name)) return 'meta';
+  if (/mistral|mixtral|codestral/.test(name)) return 'mistral';
+  if (/qwen|qwq|qvq/.test(name)) return 'qwen';
+  if (/kimi|moonshot/.test(name)) return 'moonshot';
+  if (/chatglm|\bglm-|\bzai\b|z\.ai|zhipu/.test(name)) return 'zai';
+  if (/cohere|command-r/.test(name)) return 'cohere';
+  if (/mimo|xiaomi/.test(name)) return 'xiaomi';
+  if (/minimax|\babab/.test(name)) return 'minimax';
+  return null;
+}
+
+function modelColor(model) {
+  const vendor = modelVendorFor(model);
+  if (vendor && clientColors[vendor]) return clientColors[vendor];
+  const name = String(model || '').toLowerCase();
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  return fallbackModelColors[Math.abs(hash) % fallbackModelColors.length];
 }
 
 function deviceRowsForPeriod() {
@@ -153,7 +225,8 @@ function deviceRowsForPeriod() {
     value: Number(device.periods?.[state.period]?.totalTokens || 0),
     cost: Number(device.periods?.[state.period]?.costUsd || 0),
     color: deviceColor(index, Boolean(device.stale)),
-    stale: Boolean(device.stale)
+    stale: Boolean(device.stale),
+    platform: device.platform || ''
   })).sort((a, b) => b.value - a.value);
 }
 
@@ -411,6 +484,7 @@ function applyAppearanceFromControls() {
   const patch = {
     systemGlass: Boolean(els.systemGlassInput.checked),
     showLiveDot: Boolean(els.liveDotInput.checked),
+    showToolIcons: Boolean(els.toolIconsInput.checked),
     glassOpacity: Number(els.glassInput.value === '' ? defaultAppearance.glassOpacity : els.glassInput.value),
     glassBlur: Number(els.blurInput.value === '' ? defaultAppearance.glassBlur : els.blurInput.value)
   };
@@ -422,6 +496,7 @@ async function saveAppearanceFromControls() {
   await saveSettings({
     systemGlass: Boolean(els.systemGlassInput.checked),
     showLiveDot: Boolean(els.liveDotInput.checked),
+    showToolIcons: Boolean(els.toolIconsInput.checked),
     glassOpacity: Number(els.glassInput.value === '' ? defaultAppearance.glassOpacity : els.glassInput.value),
     glassBlur: Number(els.blurInput.value === '' ? defaultAppearance.glassBlur : els.blurInput.value)
   });
@@ -435,6 +510,7 @@ function syncSettingsForm() {
   els.showLimitSourceInput.checked = Boolean(state.settings.showLimitSource);
   els.systemGlassInput.checked = state.settings.systemGlass !== false;
   els.liveDotInput.checked = state.settings.showLiveDot !== false;
+  els.toolIconsInput.checked = state.settings.showToolIcons !== false;
   els.glassInput.value = String(state.settings.glassOpacity ?? 68);
   els.blurInput.value = String(state.settings.glassBlur ?? 32);
   els.pinButton.classList.toggle('active', Boolean(state.settings.alwaysOnTop));
@@ -442,6 +518,7 @@ function syncSettingsForm() {
   renderLimitProviderCheckboxes();
   applyAppearanceSettings(state.settings);
   if (state.breakdown === 'limits') renderLimits();
+  else render();
 }
 
 function enabledClientSet() {
@@ -583,6 +660,7 @@ els.glassInput.addEventListener('input', applyAppearanceFromControls);
 els.blurInput.addEventListener('input', applyAppearanceFromControls);
 els.systemGlassInput.addEventListener('change', saveAppearanceFromControls);
 els.liveDotInput.addEventListener('change', saveAppearanceFromControls);
+els.toolIconsInput.addEventListener('change', saveAppearanceFromControls);
 els.glassInput.addEventListener('change', saveAppearanceFromControls);
 els.blurInput.addEventListener('change', saveAppearanceFromControls);
 els.openConfigButton.addEventListener('click', () => window.tokenMonitor.openUserData());
