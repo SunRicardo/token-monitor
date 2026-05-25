@@ -433,11 +433,15 @@ function limitProviderPlan(provider) {
   return provider?.status && provider.status !== 'ok' ? limitStatusLabel(provider.status, false) : '';
 }
 
-function enabledLimitProviderSet() {
-  if (state.settings?.limitsEnabled === false) return new Set();
+function configuredLimitProviderOrder() {
   const raw = state.settings?.limitProviders;
   const source = raw === undefined || raw === null ? 'claude,codex' : raw;
-  return new Set(String(source).split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
+  return String(source).split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+}
+
+function enabledLimitProviderSet() {
+  if (state.settings?.limitsEnabled === false) return new Set();
+  return new Set(configuredLimitProviderOrder());
 }
 
 function windowForKind(provider, kind) {
@@ -662,7 +666,7 @@ function syncSettingsForm() {
   els.toolIconsInput.checked = state.settings.showToolIcons !== false;
   els.discordRpcInput.checked = Boolean(state.settings.discordRpcEnabled);
   els.trayModeInput.checked = Boolean(state.settings.trayMode);
-  els.trayContentInput.value = ['cost', 'tokens', 'tokensAll', 'both', 'limit', 'bars', 'barsSession', 'icon'].includes(state.settings.trayContent) ? state.settings.trayContent : 'cost';
+  els.trayContentInput.value = ['tokens', 'cost', 'both', 'tokensAll', 'costAll', 'bothAll', 'bars', 'barsSession', 'barsAllSessions', 'icon'].includes(state.settings.trayContent) ? state.settings.trayContent : 'tokens';
   els.startupGroup?.classList.toggle('hidden', !state.appInfo?.loginItemSupported);
   if (els.startAtLoginInput) els.startAtLoginInput.checked = Boolean(state.settings.startAtLogin && state.appInfo?.loginItemSupported);
   if (els.startupNote) {
@@ -941,7 +945,7 @@ function roundedRectPath(ctx, x, y, w, h, r) {
 
 const trayProviderImages = {};
 
-function renderBarsIcon(stats, height = 36, picker = pickWorstProvider) {
+function renderBarsIcon(stats, height = 44, picker = pickWorstProvider) {
   const provider = picker(stats);
   if (!provider) return null;
   const session = (provider.windows || []).find((w) => w.kind === 'session');
@@ -976,12 +980,65 @@ function renderBarsIcon(stats, height = 36, picker = pickWorstProvider) {
   return canvas.toDataURL('image/png');
 }
 
+function pickConfiguredSessionProviders(stats, configOrder) {
+  const providers = stats?.limits?.providers || [];
+  const byId = new Map(providers.map((p) => [String(p.provider).toLowerCase(), p]));
+  const result = [];
+  for (const id of configOrder) {
+    const p = byId.get(id);
+    if (!p || p.status !== 'ok' || p.stale) continue;
+    const session = (p.windows || []).find((w) => w.kind === 'session');
+    if (!session || !Number.isFinite(Number(session.remainingPercent))) continue;
+    result.push({ provider: p, session });
+    if (result.length === 2) break;
+  }
+  return result;
+}
+
+function renderAllSessionsIcon(stats, height = 44, configOrder) {
+  const picks = pickConfiguredSessionProviders(stats, configOrder);
+  if (picks.length === 0) return null;
+  // Only one tool has session data → fall back to that tool's session+weekly view.
+  if (picks.length === 1) return renderBarsIcon(stats, height, () => picks[0].provider);
+
+  const { trayBarFillWidth, trayBarsLayout } = window.TokenMonitorTrayBars;
+  const layout = trayBarsLayout(height);
+  const canvas = document.createElement('canvas');
+  canvas.width = layout.width;
+  canvas.height = layout.height;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, layout.width, layout.height);
+
+  // No per-row icons — order in the dropdown identifies which row is which tool.
+  // Bars keep the same position/width as single-tool mode so the menubar item
+  // doesn't visually balloon when switching modes.
+  function drawBar(y, percent) {
+    roundedRectPath(ctx, layout.barsX, y, layout.barsWidth, layout.barHeight, layout.radius);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.32)';
+    ctx.fill();
+    const fillW = trayBarFillWidth(percent, layout.barsWidth);
+    if (!fillW) return;
+    roundedRectPath(ctx, layout.barsX, y, fillW, layout.barHeight, layout.radius);
+    ctx.fillStyle = 'rgba(0, 0, 0, 1)';
+    ctx.fill();
+  }
+
+  drawBar(layout.barsStartY, Number(picks[0].session.remainingPercent));
+  drawBar(layout.barsStartY + layout.barHeight + layout.barGap, Number(picks[1].session.remainingPercent));
+  return canvas.toDataURL('image/png');
+}
+
 async function maybeUpdateBarsIcon() {
   const mode = state.settings?.trayContent;
-  if (mode !== 'bars' && mode !== 'barsSession') return;
+  if (mode !== 'bars' && mode !== 'barsSession' && mode !== 'barsAllSessions') return;
   if (!window.tokenMonitor.setTrayIcons) return;
-  const picker = mode === 'barsSession' ? pickWorstSessionProvider : pickWorstProvider;
-  const dataUrl = renderBarsIcon(state.stats, 36, picker);
+  let dataUrl;
+  if (mode === 'barsAllSessions') {
+    dataUrl = renderAllSessionsIcon(state.stats, 44, configuredLimitProviderOrder());
+  } else {
+    const picker = mode === 'barsSession' ? pickWorstSessionProvider : pickWorstProvider;
+    dataUrl = renderBarsIcon(state.stats, 44, picker);
+  }
   if (!dataUrl) return;
   try { await window.tokenMonitor.setTrayIcons({ [mode]: dataUrl }); } catch (_) {}
 }
@@ -1012,7 +1069,7 @@ async function deliverTrayProviderIcons() {
     try {
       const img = await loadImage(path);
       trayProviderImages[id] = img;
-      icons[id] = imageToPngDataUrl(img, 36);
+      icons[id] = imageToPngDataUrl(img, 44);
     } catch (_) { /* skip missing */ }
   }
   if (Object.keys(icons).length) await window.tokenMonitor.setTrayIcons(icons);

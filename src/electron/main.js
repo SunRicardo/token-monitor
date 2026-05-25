@@ -15,7 +15,7 @@ const {
 } = require('../shared/tokscaleUpdater');
 const { aggregateDevices } = require('../shared/usage');
 const { startDiscordRpc, stopDiscordRpc, updateDiscordRpc } = require('./discordRpc');
-const { buildTrayIcon, createTray, formatTrayText, pickWorstLimit, popoverBounds } = require('./tray');
+const { buildTrayIcon, createTray, formatTrayText, popoverBounds } = require('./tray');
 
 if (!app.isPackaged) loadDotEnv();
 
@@ -25,7 +25,7 @@ const APP_ICON_PATH = path.join(__dirname, '..', '..', 'assets', 'icon.png');
 const DEFAULT_WINDOW = { width: 360, height: 500 };
 const WINDOW_LIMITS = { minWidth: 240, minHeight: 140, maxWidth: 1200, maxHeight: 1400 };
 const ZOOM_LIMITS = { min: 0.7, max: 1.6, step: 0.1 };
-const TRAY_CONTENT_VALUES = new Set(['cost', 'tokens', 'both', 'tokensAll', 'limit', 'bars', 'barsSession', 'icon']);
+const TRAY_CONTENT_VALUES = new Set(['tokens', 'cost', 'both', 'tokensAll', 'costAll', 'bothAll', 'bars', 'barsSession', 'barsAllSessions', 'icon']);
 
 let mainWindow = null;
 let settingsPath = null;
@@ -60,12 +60,12 @@ function defaultSettings() {
     windowBounds: null,
     zoomFactor: 1,
     trayMode: false,
-    trayContent: 'cost',
+    trayContent: 'tokens',
     startAtLogin: false
   };
 }
 
-function normalizeTrayContent(value, fallback = 'cost') {
+function normalizeTrayContent(value, fallback = 'tokens') {
   const v = String(value || '').trim();
   return TRAY_CONTENT_VALUES.has(v) ? v : fallback;
 }
@@ -329,18 +329,15 @@ function sendPush(payload) {
 
 function updateTrayDisplay() {
   if (!tray || tray.isDestroyed()) return;
-  const mode = settings?.trayContent || 'cost';
+  const mode = settings?.trayContent || 'tokens';
   const text = formatTrayText(latestStats, mode);
   if (process.platform === 'darwin') tray.setTitle(text);
   // Tooltip always shows a useful summary, even in icon-only mode where setTitle is blank.
   const tip = formatTrayText(latestStats, 'both');
   tray.setToolTip(`Token Monitor — ${tip}`);
-  // Icon: provider logo in limit mode (when we have one), otherwise the app icon.
+  // Icon: rendered bars image in bar modes, otherwise the app icon.
   let icon = null;
-  if (mode === 'limit') {
-    const worst = pickWorstLimit(latestStats);
-    if (worst && providerTrayIcons[worst.provider]) icon = providerTrayIcons[worst.provider];
-  } else if ((mode === 'bars' || mode === 'barsSession') && providerTrayIcons[mode]) {
+  if ((mode === 'bars' || mode === 'barsSession' || mode === 'barsAllSessions') && providerTrayIcons[mode]) {
     icon = providerTrayIcons[mode];
   }
   tray.setImage(icon || getDefaultTrayIcon());
@@ -832,8 +829,8 @@ app.whenReady().then(() => {
       const img = nativeImage.createFromDataURL(dataUrl);
       if (img.isEmpty()) continue;
       // Resize by height only; aspect ratio is preserved, so wide bar-style
-      // icons keep their width while square provider icons stay 18x18.
-      const sized = img.resize({ height: 18, quality: 'best' });
+      // icons keep their width while square provider icons stay 20x20.
+      const sized = img.resize({ height: 20, quality: 'best' });
       if (process.platform === 'darwin') sized.setTemplateImage(true);
       providerTrayIcons[id] = sized;
     }

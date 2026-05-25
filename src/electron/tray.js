@@ -7,12 +7,13 @@ const ICON_PATH = path.join(__dirname, '..', '..', 'assets', 'icon.png');
 
 function buildTrayIcon() {
   // macOS menu bar items render at 16–22pt; 18px is a good middle ground.
-  // Windows tray icons use 16px on standard DPI; resize handles HiDPI itself.
-  return nativeImage.createFromPath(ICON_PATH).resize({ width: 18, height: 18 });
+  // Resize handles HiDPI itself; 20px matches typical menubar item size.
+  return nativeImage.createFromPath(ICON_PATH).resize({ width: 20, height: 20 });
 }
 
 function formatCompactNumber(value) {
   const n = Math.round(Number(value) || 0);
+  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return String(n);
@@ -39,26 +40,20 @@ function pickWorstLimit(stats) {
   return worst;
 }
 
-function formatTrayText(stats, contentMode = 'cost') {
+function formatTrayText(stats, contentMode = 'tokens') {
   if (contentMode === 'icon') return '';
-  if (contentMode === 'bars' || contentMode === 'barsSession') {
+  if (contentMode === 'bars' || contentMode === 'barsSession' || contentMode === 'barsAllSessions') {
     // Icon carries all the info; only show text if we have no limit data at all.
     if (pickWorstLimit(stats)) return '';
   }
-  if (contentMode === 'limit') {
-    const worst = pickWorstLimit(stats);
-    if (worst) return `${Math.round(worst.remaining)}%`;
-    // No limit data → fall through to cost so the tray never goes blank.
-  }
-  if (contentMode === 'tokensAll') {
-    return formatCompactNumber(stats?.periods?.allTime?.totalTokens);
-  }
   const today = stats?.periods?.today || {};
-  const costStr = formatCost(today.costUsd);
-  const tokenStr = formatCompactNumber(today.totalTokens);
-  if (contentMode === 'tokens') return tokenStr;
-  if (contentMode === 'both') return `${costStr} · ${tokenStr}`;
-  return costStr;
+  const allTime = stats?.periods?.allTime || {};
+  if (contentMode === 'cost') return formatCost(today.costUsd);
+  if (contentMode === 'costAll') return formatCost(allTime.costUsd);
+  if (contentMode === 'tokensAll') return formatCompactNumber(allTime.totalTokens);
+  if (contentMode === 'bothAll') return `${formatCompactNumber(allTime.totalTokens)} · ${formatCost(allTime.costUsd)}`;
+  if (contentMode === 'both') return `${formatCompactNumber(today.totalTokens)} · ${formatCost(today.costUsd)}`;
+  return formatCompactNumber(today.totalTokens);
 }
 
 function createTray({ onToggle, onQuit, onSwitchToWindowMode }) {
