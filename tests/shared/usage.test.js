@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { mergeDeviceRecord } = require('../../src/shared/usage');
+const { extractUsageFromTokscale, mergeDeviceRecord } = require('../../src/shared/usage');
 
 function recordWithLimits(extra = {}) {
   return {
@@ -81,4 +81,13 @@ test('mergeDeviceRecord supports limitsOnly updates without wiping usage periods
   const merged = mergeDeviceRecord(existing, incoming);
   assert.equal(merged.periods.today.totalTokens, 1);
   assert.equal(merged.limits.providers[0].status, 'unauthorized');
+});
+
+test('extractUsageFromTokscale normalizes Antigravity client names', () => {
+  const period = extractUsageFromTokscale([
+    { client: 'Google Antigravity', model: 'gemini-3-pro', totalTokens: 42, costUsd: 0.125 }
+  ]);
+
+  assert.equal(period.clients.antigravity, 42);
+  assert.equal(period.clientCosts.antigravity, 0.125);
 });
