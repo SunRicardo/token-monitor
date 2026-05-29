@@ -155,6 +155,21 @@
               <option value="hover" data-i18n="settings.floatingBubbleTrigger.hover">Hover (preview)</option>
             </select>
           </label>
+          <label id="floatingBubbleContentRow"><span data-i18n="settings.display.floatingBubbleContent">Bubble display</span>
+            <select id="floatingBubbleContentInput">
+              <option value="icon" data-i18n="settings.tray.iconOnly">Icon only</option>
+              <option value="tokens" data-i18n="settings.tray.tokensToday">Tokens Today (1.2M)</option>
+              <option value="cost" data-i18n="settings.tray.costToday">Cost Today ($1.23)</option>
+              <option value="both" data-i18n="settings.tray.bothToday">Tokens + Cost Today (1.2M - $1.23)</option>
+              <option value="tokensAll" data-i18n="settings.tray.tokensTotal">Tokens Total (1.36B)</option>
+              <option value="costAll" data-i18n="settings.tray.costTotal">Cost Total ($8.28)</option>
+              <option value="bothAll" data-i18n="settings.tray.bothTotal">Tokens + Cost Total (1.36B - $8.28)</option>
+              <option value="barsSession" data-i18n="settings.tray.barsSession">Limit bars: lowest session remaining</option>
+              <option value="barsWeekly" data-i18n="settings.tray.barsWeekly">Limit bars: lowest weekly remaining</option>
+              <option value="barsAllSessions" data-i18n="settings.tray.barsAllSessions">Limit bars: first two session limits</option>
+              <option value="bars" data-i18n="settings.tray.barsWindow">Limit bars: lowest remaining limit</option>
+            </select>
+          </label>
           <label class="checkbox-label"><input id="trayModeInput" type="checkbox" /><span data-i18n="settings.display.trayMode">Tray Mode</span></label>
           <p class="settings-note" data-i18n="settings.display.trayNote">Hide the floating window; show a popover from the macOS menu bar or Windows system tray.</p>
           <label><span data-i18n="settings.display.trayText">Tray text</span>
@@ -248,13 +263,14 @@
       </footer>
     </main>
     <button id="floatingBubbleTab" class="floating-bubble-tab" type="button" title="Show Token Monitor" aria-label="Show Token Monitor" data-i18n-title="floatingBubble.expand" data-i18n-aria-label="floatingBubble.expand">
-      <span aria-hidden="true">Σ</span>
+      <span id="floatingBubbleContent" aria-hidden="true">Σ</span>
     </button>
     <script src="trayBars.js"></script>
     <script src="trayProviderIcons.js"></script>
     <script src="limitProviderOrder.js"></script>
     <script src="i18n.js"></script>
     <script src="../../shared/currency.js"></script>
+    <script src="../../shared/trayText.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

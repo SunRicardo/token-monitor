@@ -317,3 +317,15 @@ test('floating bubble collapsed styles fill the mini window with app glass styli
   assert.match(css, /html\.floating-bubble-collapsed-left body \.floating-bubble-tab/);
   assert.match(css, /html\.floating-bubble-collapsed-left,\s*body\.floating-bubble-collapsed-left\s*\{[\s\S]*border-radius:\s*0;/);
 });
+
+test('floatingBubbleCollapsePlan honors a custom handle size', () => {
+  const settings = { floatingBubbleEnabled: true };
+  const workArea = { x: 0, y: 0, width: 1000, height: 800 };
+  const bounds = { x: 700, y: 300, width: 260, height: 360 };
+  const plan = floatingBubbleCollapsePlan(bounds, workArea, settings, {
+    handleWidth: 80,
+    handleHeight: 30
+  });
+  assert.equal(plan.collapsedBounds.width, 80);
+  assert.equal(plan.collapsedBounds.height, 32); // normalizeHandleSize floors height at 32
+});

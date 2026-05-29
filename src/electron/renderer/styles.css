@@ -97,6 +97,17 @@ input, textarea, [contenteditable="true"] {
   font-size: 13px;
   font-weight: 700;
   line-height: 1;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+  padding: 0 2px;
+}
+.floating-bubble-tab span.bars { padding: 0; }
+.floating-bubble-tab span.bars img {
+  display: block;
+  width: auto;
+  height: 100%;
 }
 .floating-bubble-tab.dragging { cursor: grabbing; }
 html.floating-bubble-collapsed-left,

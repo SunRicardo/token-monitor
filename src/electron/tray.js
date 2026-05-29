@@ -2,7 +2,7 @@
 
 const path = require('node:path');
 const { Tray, Menu, nativeImage, screen } = require('electron');
-const { formatCurrencyFromUsd } = require('../shared/currency');
+const { formatTrayText, pickWorstLimit } = require('../shared/trayText');
 
 const ICON_PATH = path.join(__dirname, '..', '..', 'assets', 'icon.png');
 
@@ -10,30 +10,6 @@ function buildTrayIcon() {
   // macOS menu bar items render at 16–22pt; 18px is a good middle ground.
   // Resize handles HiDPI itself; 20px matches typical menubar item size.
   return nativeImage.createFromPath(ICON_PATH).resize({ width: 20, height: 20 });
-}
-
-function formatCompactNumber(value) {
-  const n = Math.round(Number(value) || 0);
-  if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(2)}B`;
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
-  return String(n);
-}
-
-function pickWorstLimit(stats) {
-  const providers = stats?.limits?.providers || [];
-  let worst = null;
-  for (const provider of providers) {
-    if (provider.status !== 'ok' || provider.stale) continue;
-    for (const window of provider.windows || []) {
-      const remaining = Number(window.remainingPercent);
-      if (!Number.isFinite(remaining)) continue;
-      if (!worst || remaining < worst.remaining) {
-        worst = { remaining, provider: provider.provider };
-      }
-    }
-  }
-  return worst;
 }
 
 function trayUsagePeriod(contentMode) {
@@ -66,22 +42,6 @@ function pickUsageTrayIconId(stats, contentMode = 'tokens', availableIconIds = [
   if (!client) return null;
   const available = new Set(availableIconIds);
   return available.has(client) ? client : null;
-}
-
-function formatTrayText(stats, contentMode = 'tokens', currency = 'USD') {
-  if (contentMode === 'icon') return '';
-  if (contentMode === 'bars' || contentMode === 'barsSession' || contentMode === 'barsWeekly' || contentMode === 'barsAllSessions') {
-    // Icon carries all the info; only show text if we have no limit data at all.
-    if (pickWorstLimit(stats)) return '';
-  }
-  const today = stats?.periods?.today || {};
-  const allTime = stats?.periods?.allTime || {};
-  if (contentMode === 'cost') return formatCurrencyFromUsd(today.costUsd, currency);
-  if (contentMode === 'costAll') return formatCurrencyFromUsd(allTime.costUsd, currency);
-  if (contentMode === 'tokensAll') return formatCompactNumber(allTime.totalTokens);
-  if (contentMode === 'bothAll') return `${formatCompactNumber(allTime.totalTokens)} · ${formatCurrencyFromUsd(allTime.costUsd, currency)}`;
-  if (contentMode === 'both') return `${formatCompactNumber(today.totalTokens)} · ${formatCurrencyFromUsd(today.costUsd, currency)}`;
-  return formatCompactNumber(today.totalTokens);
 }
 
 function createTray({ onToggle, onQuit, onSwitchToWindowMode }) {

@@ -27,6 +27,7 @@ const {
   FLOATING_BUBBLE_HANDLE_HEIGHT,
   FLOATING_BUBBLE_HANDLE_WIDTH,
   canUseFloatingBubble,
+  collapsedFloatingBubbleBounds,
   dragFloatingBubbleBounds,
   expandedFloatingBubbleBounds,
   floatingBubbleCollapsedArea,
@@ -98,6 +99,7 @@ function defaultSettings() {
     titleIconOnly: false,
     floatingBubbleEnabled: false,
     floatingBubbleTrigger: 'click',
+    floatingBubbleContent: 'icon',
     floatingBubbleBounds: null,
     discordRpcEnabled: false,
     deviceId: process.env.TOKEN_MONITOR_DEVICE_ID || defaultDeviceId(),
@@ -199,7 +201,7 @@ function restoredBounds() {
 
 let persistBoundsTimer = null;
 let floatingBubbleAutoCollapseTimer = null;
-const floatingBubbleState = { collapsed: false, side: null, collapsedBounds: null, expandedBounds: null, suppressNextCollapse: false };
+const floatingBubbleState = { collapsed: false, side: null, collapsedBounds: null, expandedBounds: null, suppressNextCollapse: false, contentSize: null };
 let mainWindowChrome = { collapsedFloatingBubble: false };
 
 function stopPersistBoundsTimer() {
@@ -300,7 +302,11 @@ function collapseFloatingBubble(plan) {
   applyNativeMaterial();
   if (process.platform === 'win32') {
     persistWindowBounds(expandedBounds);
-    replaceMainWindow(collapsedBounds, { collapsedFloatingBubble: true, focus: false });
+    replaceMainWindow(collapsedBounds, {
+      collapsedFloatingBubble: true,
+      focus: false,
+      waitForContent: settings.floatingBubbleContent !== 'icon'
+    });
     sendFloatingBubbleState();
     return true;
   }
@@ -320,7 +326,9 @@ function maybeCollapseFloatingBubble(bounds) {
     suppressNextCollapse: floatingBubbleState.suppressNextCollapse,
     collapsedArea,
     collapsedMargin: collapsedMargin(),
-    collapsedBounds: settings?.floatingBubbleBounds || floatingBubbleState.collapsedBounds
+    collapsedBounds: settings?.floatingBubbleBounds || floatingBubbleState.collapsedBounds,
+    handleWidth: floatingBubbleState.contentSize?.width,
+    handleHeight: floatingBubbleState.contentSize?.height
   });
   floatingBubbleState.suppressNextCollapse = false;
   if (!plan) return false;
@@ -476,6 +484,7 @@ function readSettings() {
     merged.floatingBubbleEnabled = parseBoolean(merged.floatingBubbleEnabled ?? merged.edgeDrawerEnabled, false);
     delete merged.edgeDrawerEnabled;
     merged.floatingBubbleTrigger = merged.floatingBubbleTrigger === 'hover' ? 'hover' : 'click';
+    merged.floatingBubbleContent = normalizeTrayContent(merged.floatingBubbleContent, 'icon');
     return normalizeWindowBehaviorSettings(merged);
   }
   catch (_error) { return normalizeWindowBehaviorSettings(defaultSettings()); }
@@ -1460,6 +1469,7 @@ app.whenReady().then(() => {
       zoomFactor: clampZoom(patch.zoomFactor ?? settings.zoomFactor),
       trayMode: parseBoolean(patch.trayMode ?? settings.trayMode, false),
       trayContent: normalizeTrayContent(patch.trayContent ?? settings.trayContent),
+      floatingBubbleContent: normalizeTrayContent(patch.floatingBubbleContent ?? settings.floatingBubbleContent, 'icon'),
       currency: normalizedCurrency,
       language: patch.language !== undefined ? normalizeLanguageSetting(patch.language, settings.language) : normalizeLanguageSetting(settings.language),
       startAtLogin: loginItemEnabledHere() ? parseBoolean(patch.startAtLogin ?? settings.startAtLogin, false) : false
@@ -1531,6 +1541,34 @@ app.whenReady().then(() => {
     // must not be allowed to wedge it open.
     floatingBubbleState.suppressNextCollapse = false;
     return maybeCollapseFloatingBubble(bounds);
+  });
+  ipcMain.handle('floatingBubble:setCollapsedSize', (_event, size) => {
+    if (!size || !canUseFloatingBubble(settings)) return false;
+    const width = Math.round(Number(size.width));
+    const height = Math.round(Number(size.height));
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return false;
+    floatingBubbleState.contentSize = { width, height }; // used by the next collapse
+    if (!floatingBubbleState.collapsed || !mainWindow || mainWindow.isDestroyed()) return true;
+    const current = mainWindow.getBounds();
+    if (current.width === width && current.height === height) return true;
+    const display = displayForBounds(current);
+    if (!display) return true;
+    const collapsedArea = collapsedAreaForDisplay(display);
+    // Keep the docked edge fixed while resizing: collapsedFloatingBubbleBounds re-clamps the
+    // current x/y against the new size (right-docked snaps flush to the edge).
+    const target = collapsedFloatingBubbleBounds(current, collapsedArea, {
+      margin: collapsedMargin(),
+      collapsedBounds: current,
+      handleWidth: width,
+      handleHeight: height
+    });
+    if (!target) return true;
+    applyCollapsedFloatingBubbleLimits(target);
+    mainWindow.setBounds(target);
+    floatingBubbleState.collapsedBounds = target;
+    settings.floatingBubbleBounds = target;
+    saveSettings();
+    return true;
   });
   ipcMain.handle('floatingBubble:move', (_event, delta) => {
     if (!mainWindow || mainWindow.isDestroyed() || !floatingBubbleState.collapsed) return false;

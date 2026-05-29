@@ -45,6 +45,7 @@ contextBridge.exposeInMainWorld('tokenMonitor', {
   signalContentReady: () => ipcRenderer.send('window:contentReady'),
   peekFloatingBubble: () => ipcRenderer.invoke('floatingBubble:peek'),
   collapseFloatingBubbleIfIdle: () => ipcRenderer.invoke('floatingBubble:collapseIfIdle'),
+  setFloatingBubbleCollapsedSize: (size) => ipcRenderer.invoke('floatingBubble:setCollapsedSize', size),
   onFloatingBubbleState: (callback) => {
     const listener = (_event, payload) => { try { callback(payload); } catch (_) {} };
     ipcRenderer.on('floatingBubble:state', listener);

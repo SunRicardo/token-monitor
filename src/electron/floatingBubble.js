@@ -129,7 +129,9 @@ function floatingBubbleCollapsePlan(bounds, workArea, settings = {}, options = {
   const collapsedArea = options.collapsedArea || workArea;
   const collapsedBounds = collapsedFloatingBubbleBounds(expandedBounds || bounds, collapsedArea, {
     margin: options.collapsedMargin,
-    collapsedBounds: options.collapsedBounds
+    collapsedBounds: options.collapsedBounds,
+    handleWidth: options.handleWidth,
+    handleHeight: options.handleHeight
   });
   if (!expandedBounds || !collapsedBounds) return null;
   return { side: floatingBubbleSide(collapsedBounds, collapsedArea), expandedBounds, collapsedBounds };
