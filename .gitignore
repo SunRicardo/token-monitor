@@ -2,6 +2,7 @@ node_modules/
 data/
 build/
 dist/
+_site/
 .claude/
 CLAUDE.md
 AGENTS.md
