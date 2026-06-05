@@ -132,6 +132,19 @@ App 狀態存在 OS 使用者資料目錄——解除安裝時一併刪除該資
 | macOS | `~/Library/Application Support/Token Monitor/` |
 | Windows | `%APPDATA%/Token Monitor/` |
 
+## 從原始碼建置
+
+Release 都未簽章，你可能會想自己從原始碼打包安裝檔——同一份程式碼、在你自己的機器上建置。需要 Node.js 18.17+ 與**對應的**作業系統（electron-builder 無法在 Windows 上交叉建置 macOS 的 `.dmg`，反之亦然）。
+
+```bash
+npm install
+npm run dist:mac   # macOS arm64 .dmg → dist/
+npm run dist:win   # Windows x64 安裝檔 .exe → dist/
+npm run pack       # 未封裝的 app 目錄（無安裝檔），方便本機快速測試
+```
+
+產物會放在 `dist/`。建置出來一樣未簽章，所以首次啟動的解鎖步驟照舊。Linux 與 Intel Mac 沒有打包目標——直接用 `npm start` 啟動。
+
 ## 運作原理
 
 ```text

@@ -132,6 +132,19 @@ App state lives in the OS user-data dir — delete it along with the app to full
 | macOS | `~/Library/Application Support/Token Monitor/` |
 | Windows | `%APPDATA%/Token Monitor/` |
 
+## Build from source
+
+Releases are unsigned, so you may prefer to build your own installer — same code, your machine. Needs Node.js 18.17+ and the **target** OS (electron-builder can't cross-build a macOS `.dmg` on Windows, or vice-versa).
+
+```bash
+npm install
+npm run dist:mac   # macOS arm64 .dmg          → dist/
+npm run dist:win   # Windows x64 installer .exe → dist/
+npm run pack       # unpacked app dir (no installer), for quick local testing
+```
+
+Output lands in `dist/`. Builds are unsigned, so the same first-launch unlock steps apply. Linux and Intel Macs have no packaging target — run directly with `npm start`.
+
 ## How it works
 
 ```text
