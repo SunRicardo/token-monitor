@@ -792,13 +792,21 @@ function renderLimits() {
         windows.append(node);
       }
     } else if (provider.provider === 'opencode') {
-      // Go reports session/weekly windows; Zen reports a prepaid balance (and, when the account is
-      // active, rolling/weekly). Show only the windows that exist — no empty `--` placeholders — and
+      // Go reports session/weekly/monthly windows ($12/$30/$60); Zen reports a prepaid balance (and,
+      // when the account is active, rolling/weekly). The monthly window normalizes to kind 'billing'
+      // (see normalizeWindowKind). Show only the windows that exist — no empty `--` placeholders — and
       // surface the Zen balance as a full-width, no-meter note when present.
       const session = windowForKind(provider, 'session');
       const weekly = windowForKind(provider, 'weekly');
+      const monthly = windowForKind(provider, 'billing');
       if (session) windows.append(limitWindowNode('Session', session, color, 0.95));
       if (weekly) windows.append(limitWindowNode('Weekly', weekly, color, 0.68));
+      // Monthly spans the full row (like Balance) so it never leaves a half-empty grid cell.
+      if (monthly) {
+        const node = limitWindowNode('Monthly', monthly, color, 0.5);
+        node.classList.add('limit-window-wide');
+        windows.append(node);
+      }
       // A signed-in Zen account (source 'web') always gets a Balance line — `$X.XX` when funded,
       // `—` until then — so the card never collapses to an empty window area. `source` survives hub
       // aggregation, unlike `accountLabel` which `publicLimits` strips. Go (source 'local') has no
