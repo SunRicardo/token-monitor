@@ -41,10 +41,13 @@ body.flat { background: #16181b; }
 
 .dash-controls { flex: none; }
 .dash-control-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.dash-select {
-  background: rgba(255, 255, 255, 0.06); color: inherit; border: 1px solid var(--line, rgba(232, 238, 244, 0.14));
-  border-radius: 7px; padding: 5px 8px; font-size: 12px;
+.dash-range-group { display: flex; align-items: center; gap: 4px; margin-left: auto; }
+.range-btn {
+  background: none; border: 1px solid transparent; color: inherit; opacity: 0.65; cursor: pointer;
+  font-size: 12px; padding: 3px 10px; border-radius: 6px; font-family: inherit; transition: 0.2s;
 }
+.range-btn:hover { opacity: 1; }
+.range-btn.active { opacity: 1; border-color: transparent; color: #fff; background: rgba(255, 255, 255, 0.12); }
 .seg { display: inline-flex; background: rgba(255, 255, 255, 0.05); border-radius: 7px; padding: 2px; }
 .seg-btn { background: none; border: none; color: inherit; opacity: 0.6; cursor: pointer; font-size: 11px; padding: 5px 10px; border-radius: 5px; }
 .seg-btn.active { opacity: 1; background: rgba(255, 255, 255, 0.12); }

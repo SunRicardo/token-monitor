@@ -80,8 +80,14 @@ function chartSize() {
 }
 
 function populateRangeSelect() {
-  els.rangeSelect.innerHTML = RANGES.map((r) => `<option value="${r}">${t(`dashboard.range.${r}`)}</option>`).join('');
-  els.rangeSelect.value = state.range;
+  els.rangeSelect.innerHTML = RANGES.map((r) => `<button class="range-btn${r === state.range ? ' active' : ''}" data-val="${r}">${t(`dashboard.range.${r}`)}</button>`).join('');
+  els.rangeSelect.querySelectorAll('.range-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      state.range = e.target.dataset.val;
+      els.rangeSelect.querySelectorAll('.range-btn').forEach(b => b.classList.toggle('active', b === e.target));
+      render();
+    });
+  });
 }
 
 function displayColor(hex) {
@@ -126,14 +132,11 @@ function renderLegend(model) {
 function renderTrends() {
   const daily = charts.clampDaily(state.history?.daily || [], state.range === 'all' ? 0 : Number(state.range));
   if (daily.length === 0) { els.chart.innerHTML = ''; els.legend.innerHTML = ''; state.chartModel = null; return; }
-  const { w, h } = chartSize();
   const pad = { padTop: 10, padRight: 14, padBottom: 24, padLeft: 52 };
+  
   if (state.mode === 'kline') {
-    // Authentic OHLC candles at every range. Aim for one candle per ~24px of plot width
-    // (a wide window shows more, a narrow one fewer — like a real trading chart) but never
-    // thinner than a 3-day bucket, the minimum span for a high/low to protrude as a wick.
-    // Long ranges (1y/all) only look sparse when there's little history — they show every
-    // day that exists; they fill in as more data accrues.
+    els.legend.innerHTML = ''; // Clear legend first to let chart expand
+    const { w, h } = chartSize(); // Now measure correct expanded size
     const span = daysBetween(daily[0].date, daily[daily.length - 1].date) + 1;
     const target = Math.max(8, Math.round((w - pad.padLeft - pad.padRight) / 24));
     const bucketDays = span <= 10 ? 2 : Math.max(3, Math.round(span / target));
@@ -141,14 +144,21 @@ function renderTrends() {
     state.chartModel = model; state.chartKind = 'candle';
     const every = axisEvery(model.candles);
     els.chart.innerHTML = charts.candleChartSvg(model, { yTicks: 4, formatTick: formatCompact, axisLabel: (c, i) => (i % every === 0 ? shortDate(c.key) : '') });
-    els.legend.innerHTML = '';
     return;
   }
+  
+  // For bars, the legend occupies vertical space which shrinks the chart.
+  // Generate a dummy model to render the legend first and force a layout reflow.
+  const tempModel = charts.dailyBarsChart(daily, { width: 100, height: 100, gap: 0.3, stackBy: state.stackBy, metric: 'tokens', ...pad });
+  renderLegend(tempModel);
+  
+  // Now that the legend is in the DOM, measuring chartSize() forces a synchronous 
+  // reflow and returns the correct squished height for the chart wrapper.
+  const { w, h } = chartSize();
   const model = charts.dailyBarsChart(daily, { width: w, height: h, gap: 0.3, stackBy: state.stackBy, metric: 'tokens', ...pad });
   state.chartModel = model; state.chartKind = 'bars';
   const every = axisEvery(model.bars);
   els.chart.innerHTML = charts.barsChartSvg(model, { colorFor, yTicks: 4, formatTick: formatCompact, axisLabel: (bar, i) => (i % every === 0 ? shortDate(bar.label) : '') });
-  renderLegend(model);
 }
 
 function renderActivity() {
@@ -260,7 +270,6 @@ async function boot() {
 }
 
 els.tabs.forEach((tab) => tab.addEventListener('click', () => { state.tab = tab.dataset.tab; els.tabs.forEach((x) => x.classList.toggle('active', x === tab)); render(); }));
-els.rangeSelect.addEventListener('change', () => { state.range = els.rangeSelect.value; render(); });
 els.stackBtns.forEach((b) => b.addEventListener('click', () => { state.stackBy = b.dataset.stack; render(); }));
 els.modeBtns.forEach((b) => b.addEventListener('click', () => { state.mode = b.dataset.mode; render(); }));
 els.themeToggle.addEventListener('click', () => { state.flat = !state.flat; els.body.classList.toggle('flat', state.flat); window.tokenMonitor.updateSettings({ dashboardFlat: state.flat }); });

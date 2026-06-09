@@ -26,7 +26,6 @@
     <section id="trendsPane" class="dash-pane hidden">
       <div class="dash-controls">
         <div class="dash-control-row">
-          <select id="rangeSelect" class="dash-select"></select>
           <div class="seg" data-control="stack">
             <button class="seg-btn active" data-stack="client" data-i18n="dashboard.stack.client">By tool</button>
             <button class="seg-btn" data-stack="model" data-i18n="dashboard.stack.model">By model</button>
@@ -35,6 +34,7 @@
             <button class="seg-btn active" data-mode="bars" data-i18n="dashboard.mode.bars">Bars</button>
             <button class="seg-btn" data-mode="kline" data-i18n="dashboard.mode.kline">K-line</button>
           </div>
+          <div id="rangeSelect" class="dash-range-group"></div>
         </div>
       </div>
       <div id="dashChart" class="dash-chart-wrap"></div>
