@@ -16,7 +16,8 @@ const {
   floatingBubbleInitialRendererQuery,
   floatingBubbleNativeGlassEnabled,
   floatingBubbleWindowChrome,
-  moveFloatingBubbleBounds
+  moveFloatingBubbleBounds,
+  normalizeInitialRendererViewState
 } = require('../../src/electron/floatingBubble');
 
 const workArea = { x: 0, y: 24, width: 1440, height: 876 };
@@ -81,27 +82,58 @@ test('floatingBubbleWindowChrome removes Windows native frame only for collapsed
   assert.deepEqual(floatingBubbleWindowChrome('darwin', true), {});
 });
 
+test('normalizeInitialRendererViewState restores a persisted last-used view', () => {
+  // All seven main views (incl. trends) must round-trip so a cold start can
+  // reopen exactly where the user left off.
+  assert.deepEqual(
+    normalizeInitialRendererViewState({ period: 'month', breakdown: 'trends' }),
+    { period: 'month', breakdown: 'trends' }
+  );
+  // A bogus saved snapshot collapses onto the provided fallback rather than the
+  // hard default, so a partial/corrupt value can't wipe the live state.
+  assert.deepEqual(
+    normalizeInitialRendererViewState({ period: 'bad', breakdown: 'bad' }, { period: 'allTime', breakdown: 'session' }),
+    { period: 'allTime', breakdown: 'session' }
+  );
+  // Empty snapshot (fresh install) falls back to the today/tool defaults.
+  assert.deepEqual(
+    normalizeInitialRendererViewState(undefined),
+    { period: 'today', breakdown: 'tool' }
+  );
+});
+
 test('floatingBubbleInitialRendererQuery primes the first collapsed mini-window paint', () => {
+  // The view state always rides along (default today/tool when none is given)
+  // so a persisted last view of tool/today is never mistaken for "no view".
   assert.deepEqual(
     floatingBubbleInitialRendererQuery({ collapsed: true, side: 'right' }, true),
-    { floatingBubbleSide: 'right' }
+    { period: 'today', breakdown: 'tool', floatingBubbleSide: 'right' }
   );
-  assert.equal(floatingBubbleInitialRendererQuery({ collapsed: true, side: 'top' }, true), null);
-  assert.equal(floatingBubbleInitialRendererQuery({ collapsed: false, side: 'right' }, true), null);
-  assert.equal(floatingBubbleInitialRendererQuery({ collapsed: true, side: 'right' }, false), null);
+  assert.deepEqual(
+    floatingBubbleInitialRendererQuery({ collapsed: true, side: 'top' }, true),
+    { period: 'today', breakdown: 'tool' }
+  );
+  assert.deepEqual(
+    floatingBubbleInitialRendererQuery({ collapsed: false, side: 'right' }, true),
+    { period: 'today', breakdown: 'tool' }
+  );
+  assert.deepEqual(
+    floatingBubbleInitialRendererQuery({ collapsed: true, side: 'right' }, false),
+    { period: 'today', breakdown: 'tool' }
+  );
   assert.deepEqual(
     floatingBubbleInitialRendererQuery(
       { collapsed: false, side: null },
       { suppressInitialNumberAnimation: true }
     ),
-    { suppressInitialNumberAnimation: '1' }
+    { period: 'today', breakdown: 'tool', suppressInitialNumberAnimation: '1' }
   );
   assert.deepEqual(
     floatingBubbleInitialRendererQuery(
       { collapsed: true, side: 'left' },
       { collapsedWindow: true, suppressInitialNumberAnimation: true }
     ),
-    { floatingBubbleSide: 'left', suppressInitialNumberAnimation: '1' }
+    { period: 'today', breakdown: 'tool', floatingBubbleSide: 'left', suppressInitialNumberAnimation: '1' }
   );
 });
 
@@ -116,6 +148,15 @@ test('floatingBubbleInitialRendererQuery preserves renderer view state across wi
     ),
     { suppressInitialNumberAnimation: '1', period: 'month', breakdown: 'limits' }
   );
+  // A last view of trends must survive the round-trip too (was dropped before).
+  assert.deepEqual(
+    floatingBubbleInitialRendererQuery(
+      { collapsed: false, side: null },
+      { viewState: { period: 'allTime', breakdown: 'trends' } }
+    ),
+    { period: 'allTime', breakdown: 'trends' }
+  );
+  // A default last view of today/tool is carried explicitly, not omitted.
   assert.deepEqual(
     floatingBubbleInitialRendererQuery(
       { collapsed: false, side: null },
@@ -123,8 +164,9 @@ test('floatingBubbleInitialRendererQuery preserves renderer view state across wi
         viewState: { period: 'today', breakdown: 'status' }
       }
     ),
-    { breakdown: 'status' }
+    { period: 'today', breakdown: 'status' }
   );
+  // A corrupt snapshot collapses to today/tool, still carried explicitly.
   assert.deepEqual(
     floatingBubbleInitialRendererQuery(
       { collapsed: true, side: 'left' },
@@ -133,7 +175,7 @@ test('floatingBubbleInitialRendererQuery preserves renderer view state across wi
         viewState: { period: 'bad', breakdown: 'bad' }
       }
     ),
-    { floatingBubbleSide: 'left' }
+    { period: 'today', breakdown: 'tool', floatingBubbleSide: 'left' }
   );
 });
 

@@ -138,6 +138,7 @@ function defaultSettings() {
     floatingBubbleTrigger: 'click',
     floatingBubbleContent: 'icon',
     floatingBubbleBounds: null,
+    lastViewState: { period: 'today', breakdown: 'tool' },
     discordRpcEnabled: false,
     deviceId: process.env.TOKEN_MONITOR_DEVICE_ID || defaultDeviceId(),
     lastPostedDeviceId: '',
@@ -297,11 +298,27 @@ function floatingBubblePayload() {
   };
 }
 
+// Load settings once and, on that first load, seed the in-memory view state
+// from the persisted snapshot so a cold start reopens the last-used view.
+function ensureSettingsLoaded() {
+  if (settings) return settings;
+  settings = readSettings();
+  rendererViewState = normalizeInitialRendererViewState(settings.lastViewState, rendererViewState);
+  return settings;
+}
+
 function updateRendererViewState(patch) {
+  const previous = rendererViewState;
   rendererViewState = normalizeInitialRendererViewState({
     ...rendererViewState,
     ...(patch || {})
   }, rendererViewState);
+  const changed = previous.period !== rendererViewState.period
+    || previous.breakdown !== rendererViewState.breakdown;
+  if (changed && settings) {
+    settings.lastViewState = { ...rendererViewState };
+    saveSettings();
+  }
   return rendererViewState;
 }
 
@@ -590,6 +607,9 @@ function readSettings() {
     }
     if (saved.windowBehavior === undefined && saved.alwaysOnTop !== undefined) {
       merged.windowBehavior = saved.alwaysOnTop ? 'floating' : 'normal';
+    }
+    if (saved.lastViewState !== undefined) {
+      merged.lastViewState = normalizeInitialRendererViewState(saved.lastViewState);
     }
     merged.hubMode = normalizeHubMode(merged.hubMode);
     merged.language = normalizeLanguageSetting(merged.language);
@@ -1515,7 +1535,7 @@ function loadWindowFile(target, options = {}) {
 }
 
 function createWindow(boundsOverride, options = {}) {
-  if (!settings) settings = readSettings();
+  ensureSettingsLoaded();
   const collapsedFloatingBubble = options.collapsedFloatingBubble === true;
   const glass = nativeBlurEnabled();
   const bounds = boundsOverride || restoredBounds() || DEFAULT_WINDOW;
@@ -1746,7 +1766,7 @@ function rebuildWindow() {
 
 app.whenReady().then(() => {
   if (process.platform === 'darwin' && app.dock) app.dock.setIcon(APP_ICON_PATH);
-  if (!settings) settings = readSettings();
+  ensureSettingsLoaded();
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
