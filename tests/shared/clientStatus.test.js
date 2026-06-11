@@ -41,6 +41,25 @@ test('clientDataDirPresence reflects whether a data directory exists', () => {
   }
 });
 
+test('clientDataDirPresence detects Cline VS Code task storage', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'client-status-cline-'));
+  const clineTasks = path.join(base, '.config', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'tasks');
+  const clineServerTasks = path.join(base, '.vscode-server', 'data', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'tasks');
+  const originalHome = os.homedir;
+  try {
+    os.homedir = () => base;
+    assert.equal(clientDataDirPresence('cline').cline, false);
+    fs.mkdirSync(clineTasks, { recursive: true });
+    assert.equal(clientDataDirPresence('cline').cline, true);
+    fs.rmSync(clineTasks, { recursive: true, force: true });
+    fs.mkdirSync(clineServerTasks, { recursive: true });
+    assert.equal(clientDataDirPresence('cline').cline, true);
+  } finally {
+    os.homedir = originalHome;
+    fs.rmSync(base, { recursive: true, force: true });
+  }
+});
+
 test('deriveClientStatus reads dir presence and usage together', () => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'client-status-'));
   const present = path.join(base, 'hermes-home');

@@ -1,9 +1,9 @@
 'use strict';
 
-const clientLabels = { claude: 'Claude Code', codex: 'Codex', hermes: 'Hermes', gemini: 'Gemini', cursor: 'Cursor', opencode: 'OpenCode', openclaw: 'OpenClaw', antigravity: 'Antigravity' };
+const clientLabels = { claude: 'Claude Code', codex: 'Codex', hermes: 'Hermes', gemini: 'Gemini', cursor: 'Cursor', opencode: 'OpenCode', openclaw: 'OpenClaw', antigravity: 'Antigravity', cline: 'Cline' };
 const { clientColors, fallbackModelColors, modelVendorFor, modelColor } = window.TokenMonitorUsageCharts;
 const clientsWithIcon = new Set([
-  'claude', 'codex', 'gemini', 'cursor', 'opencode', 'openclaw', 'hermes', 'antigravity',
+  'claude', 'codex', 'gemini', 'cursor', 'opencode', 'openclaw', 'hermes', 'antigravity', 'cline',
   'xai', 'deepseek', 'meta', 'mistral', 'qwen', 'moonshot', 'zai', 'cohere', 'xiaomi', 'minimax'
 ]);
 
@@ -44,7 +44,8 @@ const KNOWN_CLIENTS = [
   { id: 'opencode', label: 'OpenCode' },
   { id: 'openclaw', label: 'OpenClaw' },
   { id: 'cursor', label: 'Cursor' },
-  { id: 'antigravity', label: 'Antigravity' }
+  { id: 'antigravity', label: 'Antigravity' },
+  { id: 'cline', label: 'Cline' }
 ];
 const LIMIT_PROVIDERS = [
   { id: 'claude', label: 'Claude', settingsLabel: 'Claude Code' },

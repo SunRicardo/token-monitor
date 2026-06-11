@@ -399,6 +399,13 @@ function clientWatchCandidates(clientsCsv) {
   add('openclaw', path.join(home, '.openclaw', 'agents'));
   add('cursor', path.join(home, '.config', 'tokscale', 'cursor-cache'));
   add('antigravity', path.join(home, '.config', 'tokscale', 'antigravity-cache'));
+  add(
+    'cline',
+    path.join(home, '.config', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'tasks'),
+    path.join(home, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'tasks'),
+    path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'tasks'),
+    path.join(home, '.vscode-server', 'data', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'tasks')
+  );
   return byClient;
 }
 

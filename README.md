@@ -26,7 +26,7 @@
 
 ## What is Token Monitor?
 
-A desktop widget that shows live token usage and AI Tool Limits across various AI coding tools (Claude Code, Codex, Hermes Agent, OpenCode, OpenClaw, Cursor, Antigravity, and more) with real-time multi-device sync, historical usage trends, and breakdowns by tool, device, model, or session.
+A desktop widget that shows live token usage and AI Tool Limits across various AI coding tools (Claude Code, Codex, Hermes Agent, OpenCode, OpenClaw, Cursor, Antigravity, Cline, and more) with real-time multi-device sync, historical usage trends, and breakdowns by tool, device, model, or session.
 
 ## Supported Tools
 
@@ -41,6 +41,7 @@ Token Monitor supports token usage, account-limit checks, and session details se
 | <img src=".github/assets/tools-icon/openclaw.png" width="28" alt="OpenClaw" /> | OpenClaw | `~/.openclaw/agents/` | ✅ | — | — |
 | <img src=".github/assets/tools-icon/cursor.png" width="28" alt="Cursor" /> | Cursor | `~/.config/tokscale/cursor-cache/` (kept fresh by Cursor sync) | ✅ | ✅ | — |
 | <img src=".github/assets/tools-icon/antigravity.png" width="28" alt="Antigravity" /> | Antigravity | `~/.config/tokscale/antigravity-cache/` (kept fresh by Antigravity sync) | ✅ | ✅ | — |
+| <img src=".github/assets/tools-icon/cline.png" width="28" alt="Cline" /> | Cline | VS Code globalStorage tasks (`.../saoudrizwan.claude-dev/tasks/`) | ✅ | — | — |
 | <img src=".github/assets/tools-icon/deepseek.png" width="28" alt="DeepSeek" /> | DeepSeek | DeepSeek API key (balance via DeepSeek API) | — | ✅ | — |
 
 ## Why Token Monitor?
@@ -49,7 +50,7 @@ Most usage monitors are useful on the machine they run on. Token Monitor is buil
 
 ## Features
 
-- **Live token tracking** for Claude Code, Codex, Hermes Agent, OpenCode, OpenClaw, Cursor, and Antigravity (UI updates within seconds of each turn)
+- **Live token tracking** for Claude Code, Codex, Hermes Agent, OpenCode, OpenClaw, Cursor, Antigravity, and Cline (UI updates within seconds of each turn)
 - **Real-time multi-device sync** over Server-Sent Events
 - **Breakdown views** grouped by tool, device, model, session, or account limits
 - **Per-session detail** — open a Claude Code, Codex, or OpenCode session to see tokens per prompt, expandable to each reply's exact token split and tools used (read on-demand from local transcripts or databases, never synced)

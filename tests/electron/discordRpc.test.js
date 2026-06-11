@@ -43,6 +43,23 @@ test('Discord Rich Presence uses Antigravity label and uploaded asset key', () =
   assert.equal(payload.smallImageText, 'Antigravity');
 });
 
+test('Discord Rich Presence uses Cline label and uploaded asset key', () => {
+  const buildPayload = loadBuildPayload();
+  const payload = buildPayload({
+    periods: {
+      today: {
+        totalTokens: 12_345,
+        costUsd: 0.125,
+        clients: { cline: 12_345 }
+      }
+    }
+  });
+
+  assert.equal(payload.details, 'Cline · 12.3K tokens');
+  assert.equal(payload.smallImageKey, 'cline');
+  assert.equal(payload.smallImageText, 'Cline');
+});
+
 test('Discord Rich Presence formats today cost with selected currency', () => {
   const buildPayload = loadBuildPayload();
   const payload = buildPayload({

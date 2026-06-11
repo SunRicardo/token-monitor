@@ -1,6 +1,6 @@
 'use strict';
 
-const DEFAULT_CLIENTS = 'claude,codex,hermes,opencode,openclaw,cursor,antigravity';
+const DEFAULT_CLIENTS = 'claude,codex,hermes,opencode,openclaw,cursor,antigravity,cline';
 
 function normalizeClientsCsv(value) {
   return String(value ?? '').split(',').map((client) => client.trim().toLowerCase()).filter(Boolean).join(',');

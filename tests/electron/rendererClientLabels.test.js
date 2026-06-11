@@ -28,3 +28,7 @@ test('renderer client labels cover every known client', () => {
 
   assert.deepEqual(missing, []);
 });
+
+test('renderer known clients include Cline', () => {
+  assert.ok(knownClientIds(rendererSource()).includes('cline'));
+});

@@ -17,6 +17,10 @@ test('clientsCsvForSetting uses defaults only for missing settings', () => {
   assert.equal(clientsCsvForSetting(null), DEFAULT_CLIENTS);
 });
 
+test('default tracked clients include Cline', () => {
+  assert.ok(DEFAULT_CLIENTS.split(',').includes('cline'));
+});
+
 test('clientsCsvForSetting preserves explicit empty tracked-tool selection', () => {
   assert.equal(clientsCsvForSetting(''), '');
   assert.equal(clientsCsvForSetting('  '), '');

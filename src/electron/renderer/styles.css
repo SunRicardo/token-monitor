@@ -1366,6 +1366,7 @@ body.floating-bubble-collapsed-right .floating-bubble-tab {
 .row-icon-gemini     { -webkit-mask-image: url(../../../assets/icons/gemini.svg);        mask-image: url(../../../assets/icons/gemini.svg); }
 .row-icon-cursor     { -webkit-mask-image: url(../../../assets/icons/cursor.svg);        mask-image: url(../../../assets/icons/cursor.svg); }
 .row-icon-antigravity { -webkit-mask-image: url(../../../assets/icons/antigravity.svg);   mask-image: url(../../../assets/icons/antigravity.svg); }
+.row-icon-cline      { -webkit-mask-image: url(../../../assets/icons/cline.svg);         mask-image: url(../../../assets/icons/cline.svg); }
 .row-icon-opencode   { -webkit-mask-image: url(../../../assets/icons/opencode.svg);      mask-image: url(../../../assets/icons/opencode.svg); }
 .row-icon-openclaw   { -webkit-mask-image: url(../../../assets/icons/openclaw.svg);      mask-image: url(../../../assets/icons/openclaw.svg); }
 .row-icon-deepseek   { -webkit-mask-image: url(../../../assets/icons/deepseek.svg);      mask-image: url(../../../assets/icons/deepseek.svg); }
