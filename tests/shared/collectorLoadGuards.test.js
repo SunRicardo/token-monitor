@@ -203,3 +203,94 @@ test('collector exposes no watch-cooldown knob (refresh cadence is debounce-only
   const collector = freshCollector();
   assert.equal(collector.watchDelayMs, undefined);
 });
+
+function waitForCondition(predicate, timeoutMs = 2000) {
+  if (predicate()) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now();
+    const interval = setInterval(() => {
+      if (predicate()) {
+        clearInterval(interval);
+        resolve();
+      } else if (Date.now() - startedAt > timeoutMs) {
+        clearInterval(interval);
+        reject(new Error('Timed out waiting for condition'));
+      }
+    }, 5);
+  });
+}
+
+test('a watch event during an in-flight tick re-arms the debounce instead of coalescing into a full rescan', async () => {
+  const tmp = withTmpHome([path.join('.claude', 'projects')]);
+  const originalHomedir = os.homedir;
+  os.homedir = () => tmp;
+
+  const chokidar = require('chokidar');
+  const originalWatch = chokidar.watch;
+  let watchHandler = null;
+  chokidar.watch = () => ({
+    on: (event, handler) => { if (event === 'all') watchHandler = handler; },
+    close: () => {}
+  });
+
+  const childProcess = require('node:child_process');
+  const originalSpawn = childProcess.spawn;
+  const calls = [];
+  let spawnDelayMs = 5;
+  childProcess.spawn = (_bin, args) => {
+    calls.push(args);
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.stdin = { end: () => {} };
+    child.kill = () => {};
+    setTimeout(() => {
+      child.stdout.emit('data', Buffer.from(JSON.stringify({ entries: [] })));
+      child.emit('close', 0);
+    }, spawnDelayMs);
+    return child;
+  };
+
+  let handle = null;
+  try {
+    const { startCollector } = freshCollector();
+    const updates = [];
+    handle = startCollector({
+      clients: 'claude',
+      allTimeSince: '2024-01-01',
+      commandTimeoutMs: 5000,
+      deviceId: 'test-device',
+      agentVersion: 'test',
+      intervalMs: 60 * 60 * 1000,
+      watchEnabled: true,
+      watchDebounceMs: 10,
+      limitsEnabled: false,
+      historyEnabled: false,
+      onUpdate: (_summary, reason) => updates.push(reason)
+    });
+
+    // Initial interval tick: full serial scan (3 spawns).
+    await waitForCondition(() => updates.length === 1);
+    assert.equal(calls.length, 3);
+    assert.ok(watchHandler, 'watcher handler captured');
+
+    // Slow ticks down so the second watch event lands while one is in flight.
+    spawnDelayMs = 150;
+    watchHandler('change', '/fake/session.jsonl');
+    await waitForCondition(() => calls.length === 4);
+    watchHandler('change', '/fake/session.jsonl');
+
+    await waitForCondition(() => updates.length === 3);
+    // Re-armed tick stays a today-only single scan; the old coalesce path
+    // would have run a full 3-scan tick with reason 'coalesced'.
+    assert.equal(calls.length, 5);
+    assert.ok(!updates.includes('coalesced'), `unexpected coalesced tick in: ${updates.join(', ')}`);
+  } finally {
+    if (handle) handle.stop();
+    childProcess.spawn = originalSpawn;
+    chokidar.watch = originalWatch;
+    os.homedir = originalHomedir;
+    delete require.cache[collectorPath];
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
