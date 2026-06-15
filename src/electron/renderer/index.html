@@ -257,6 +257,44 @@
               </div>
               <div id="clientDisplayList" class="tool-preference-list"></div>
             </div>
+            <div id="customPricingAccountGroup" class="settings-group cursor-account-group">
+              <button id="customPricingSettingsToggle" class="settings-group-header cursor-settings-toggle" type="button" aria-expanded="false" aria-controls="customPricingSettingsDetails">
+                <span data-i18n="settings.customPricing.title">Custom model pricing</span>
+                <span class="cursor-settings-summary">
+                  <span id="customPricingStatus" class="cursor-status-pill"></span>
+                  <span class="cursor-disclosure-icon" aria-hidden="true"></span>
+                </span>
+              </button>
+              <div id="customPricingSettingsDetails" class="cursor-settings-details hidden">
+                <p class="settings-note" data-i18n="settings.customPricing.note">Override a model's price (USD per 1M tokens) when its auto-detected price is wrong. Applies to all providers of that model.</p>
+                <div id="customPricingList" class="managed-account-list"></div>
+                <div class="settings-actions">
+                  <button id="customPricingAddButton" type="button" data-i18n="settings.customPricing.add">Add override</button>
+                </div>
+                <div id="customPricingForm" class="custom-pricing-form hidden">
+                  <label><span data-i18n="settings.customPricing.model">Model</span>
+                    <select id="customPricingModelSelect"></select>
+                    <input id="customPricingModelInput" class="hidden" type="text" />
+                  </label>
+                  <label><span data-i18n="settings.customPricing.cacheRead">Input (cache hit)</span>
+                    <input id="customPricingCacheRead" type="number" min="0" step="any" /><span id="customPricingCacheReadApprox" class="custom-pricing-approx"></span>
+                  </label>
+                  <label><span data-i18n="settings.customPricing.input">Input (cache miss)</span>
+                    <input id="customPricingInput" type="number" min="0" step="any" /><span id="customPricingInputApprox" class="custom-pricing-approx"></span>
+                  </label>
+                  <label><span data-i18n="settings.customPricing.output">Output</span>
+                    <input id="customPricingOutput" type="number" min="0" step="any" /><span id="customPricingOutputApprox" class="custom-pricing-approx"></span>
+                  </label>
+                  <p class="settings-note" data-i18n="settings.customPricing.perMillion">USD / 1M tokens</p>
+                  <p id="customPricingHint" class="settings-note"></p>
+                  <div id="customPricingError" class="settings-note error hidden"></div>
+                  <div class="settings-actions">
+                    <button id="customPricingSaveButton" type="button" data-i18n="settings.customPricing.save">Save</button>
+                    <button id="customPricingCancelButton" type="button" data-i18n="settings.customPricing.cancel">Cancel</button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -478,6 +516,7 @@
     <script src="i18n.js"></script>
     <script src="sessionRows.js"></script>
     <script src="sessionDetail.js"></script>
+    <script src="customPricingForm.js"></script>
     <script src="../windowShortcut.js"></script>
     <script src="../../shared/currency.js"></script>
     <script src="../../shared/trayText.js"></script>

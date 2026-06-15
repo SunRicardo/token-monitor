@@ -65,6 +65,7 @@ const limitProviderPresentationApi = window.TokenMonitorLimitProviderPresentatio
 const clientStatusPresentationApi = window.TokenMonitorClientStatusPresentation;
 const serviceStatusPresentationApi = window.TokenMonitorServiceStatusPresentation;
 const clientDisplayPreferencesApi = window.TokenMonitorClientDisplayPreferences;
+const customPricingFormApi = window.TokenMonitorCustomPricingForm;
 const viewDisplayPreferencesApi = window.TokenMonitorViewDisplayPreferences;
 const preferenceDragSortApi = window.TokenMonitorPreferenceDragSort;
 const i18n = window.TokenMonitorI18n;
@@ -137,7 +138,7 @@ function normalizeInitialViewValue(value, allowed, fallback) {
   return allowed.has(raw) ? raw : fallback;
 }
 
-const state = { period: normalizeInitialViewValue(initialViewState.period, viewPeriodValues, 'today'), appUpdate: null, breakdown: normalizeInitialViewValue(initialViewState.breakdown, viewBreakdownValues, 'tool'), settings: null, stats: null, serviceStatus: null, serviceStatusBusy: false, serviceProvidersExpanded: false, trendSettingsExpanded: false, serviceStatusTicker: null, refreshTimer: null, refreshBusy: false, refreshFeedbackTimer: null, currentTotal: 0, rowSignature: '', streamConnected: false, mode: 'idle', appInfo: null, tokscaleStatus: null, tokscaleCheck: null, tokscaleBusy: false, hubInfo: null, cursorAccount: { status: null, error: '' }, cursorAccountExpanded: false, codexAccountExpanded: false, codexAccountError: '', opencodeAccount: { status: null, error: '' }, opencodeCookieExpanded: false, deepseekAccountExpanded: false, deepseekPendingCheckSince: 0, floatingBubble: initialFloatingBubble, suppressInitialNumberAnimation: window.__TOKEN_MONITOR_SUPPRESS_INITIAL_NUMBER_ANIMATION__ === true, openSession: null, detailSort: 'time', recordingWindowShortcut: false, windowShortcutInvalid: false };
+const state = { period: normalizeInitialViewValue(initialViewState.period, viewPeriodValues, 'today'), appUpdate: null, breakdown: normalizeInitialViewValue(initialViewState.breakdown, viewBreakdownValues, 'tool'), settings: null, stats: null, serviceStatus: null, serviceStatusBusy: false, serviceProvidersExpanded: false, trendSettingsExpanded: false, serviceStatusTicker: null, refreshTimer: null, refreshBusy: false, refreshFeedbackTimer: null, currentTotal: 0, rowSignature: '', streamConnected: false, mode: 'idle', appInfo: null, tokscaleStatus: null, tokscaleCheck: null, tokscaleBusy: false, hubInfo: null, cursorAccount: { status: null, error: '' }, cursorAccountExpanded: false, codexAccountExpanded: false, codexAccountError: '', customPricingExpanded: false, opencodeAccount: { status: null, error: '' }, opencodeCookieExpanded: false, deepseekAccountExpanded: false, deepseekPendingCheckSince: 0, floatingBubble: initialFloatingBubble, suppressInitialNumberAnimation: window.__TOKEN_MONITOR_SUPPRESS_INITIAL_NUMBER_ANIMATION__ === true, openSession: null, detailSort: 'time', recordingWindowShortcut: false, windowShortcutInvalid: false };
 state.settingsSections = Object.fromEntries(SETTINGS_SECTION_IDS.map((id) => [id, false]));
 const defaultAppearance = { glassOpacity: 68, glassBlur: 32, zoomFactor: 1, systemGlass: true, showLiveDot: true, showToolIcons: true, titleIconOnly: false, settingsInTitlebar: false };
 let preferenceDrag = null;
@@ -2543,6 +2544,7 @@ function syncSettingsForm() {
   renderTokscaleStatus();
   renderSettingsAppUpdateRow();
   renderCodexAccounts();
+  renderCustomPricing();
   renderCursorStatus();
   applyFloatingBubbleState(state.floatingBubble);
   if (state.breakdown === 'limits') renderLimits();
@@ -4189,6 +4191,197 @@ function setCursorCheckboxesEnabled(enabled) {
   }
 }
 
+let openCustomPricingForm = null;
+
+function customPricingMeta(ov) {
+  const parts = [];
+  if (typeof ov.cacheReadPerM === 'number') parts.push(`${t('settings.customPricing.cacheRead')} $${ov.cacheReadPerM}`);
+  if (typeof ov.inputPerM === 'number') parts.push(`${t('settings.customPricing.input')} $${ov.inputPerM}`);
+  if (typeof ov.outputPerM === 'number') parts.push(`${t('settings.customPricing.output')} $${ov.outputPerM}`);
+  return parts.length ? `${parts.join(' · ')} / 1M` : '';
+}
+
+function renderCustomPricing() {
+  const listEl = document.getElementById('customPricingList');
+  const statusEl = document.getElementById('customPricingStatus');
+  if (!listEl) return;
+  const overrides = state.settings?.customModelPricing || [];
+  if (statusEl) {
+    statusEl.textContent = overrides.length
+      ? t('settings.customPricing.count', { count: overrides.length })
+      : t('settings.customPricing.none');
+  }
+  listEl.replaceChildren();
+  if (overrides.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'settings-note';
+    empty.textContent = t('settings.customPricing.empty');
+    listEl.append(empty);
+    return;
+  }
+  for (const ov of overrides) {
+    const row = document.createElement('div');
+    row.className = 'managed-account-row';
+    const main = document.createElement('div');
+    main.className = 'managed-account-main custom-pricing-edit';
+    main.title = t('settings.customPricing.edit');
+    main.addEventListener('click', () => { if (openCustomPricingForm) openCustomPricingForm(ov); });
+    const name = document.createElement('div');
+    name.className = 'managed-account-email';
+    name.textContent = ov.modelId;
+    const meta = document.createElement('div');
+    meta.className = 'managed-account-meta';
+    meta.textContent = customPricingMeta(ov);
+    main.append(name, meta);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'managed-account-remove';
+    remove.textContent = t('settings.customPricing.remove');
+    remove.addEventListener('click', async () => {
+      const next = customPricingFormApi.removeOverride(state.settings?.customModelPricing || [], ov.modelId);
+      await saveSettings({ customModelPricing: next });
+      renderCustomPricing();
+    });
+    row.append(main, remove);
+    listEl.append(row);
+  }
+}
+
+function setupCustomPricingUI() {
+  const toggle = document.getElementById('customPricingSettingsToggle');
+  if (!toggle) return;
+  toggle.addEventListener('click', () => setAccountGroupExpanded('customPricing', !state.customPricingExpanded, 'customPricingExpanded'));
+  setAccountGroupExpanded('customPricing', false, 'customPricingExpanded');
+
+  const form = document.getElementById('customPricingForm');
+  const addButton = document.getElementById('customPricingAddButton');
+  const select = document.getElementById('customPricingModelSelect');
+  const manualInput = document.getElementById('customPricingModelInput');
+  const inputEl = document.getElementById('customPricingInput');
+  const outputEl = document.getElementById('customPricingOutput');
+  const cacheReadEl = document.getElementById('customPricingCacheRead');
+  const hintEl = document.getElementById('customPricingHint');
+  const errorEl = document.getElementById('customPricingError');
+  const saveButton = document.getElementById('customPricingSaveButton');
+  const cancelButton = document.getElementById('customPricingCancelButton');
+  manualInput.placeholder = t('settings.customPricing.modelPlaceholder');
+
+  const showHint = (text) => { hintEl.textContent = text || ''; };
+  const showError = (text) => { errorEl.textContent = text || ''; errorEl.classList.toggle('hidden', !text); };
+  const selectedModelId = () => (select.value === '__manual__' ? manualInput.value.trim() : select.value);
+
+  const resetForm = () => {
+    inputEl.value = ''; outputEl.value = ''; cacheReadEl.value = '';
+    manualInput.value = ''; manualInput.classList.add('hidden');
+    for (const id of ['customPricingInputApprox', 'customPricingOutputApprox', 'customPricingCacheReadApprox']) {
+      const span = document.getElementById(id);
+      if (span) span.textContent = '';
+    }
+    showHint(''); showError('');
+  };
+
+  const populateModels = () => {
+    const ids = customPricingFormApi.inUseModelIds(state.stats);
+    select.replaceChildren();
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = t('settings.customPricing.selectModel');
+    select.append(placeholder);
+    for (const id of ids) {
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = id;
+      select.append(opt);
+    }
+    const manual = document.createElement('option');
+    manual.value = '__manual__';
+    manual.textContent = t('settings.customPricing.manualEntry');
+    select.append(manual);
+  };
+
+  const closeForm = () => {
+    form.classList.add('hidden');
+    addButton.classList.remove('hidden');
+    resetForm();
+  };
+  openCustomPricingForm = (prefill) => {
+    resetForm();
+    populateModels();
+    if (prefill && prefill.modelId) {
+      const hasOption = [...select.options].some((o) => o.value === prefill.modelId);
+      if (hasOption) {
+        select.value = prefill.modelId;
+      } else {
+        select.value = '__manual__';
+        manualInput.classList.remove('hidden');
+        manualInput.value = prefill.modelId;
+      }
+      inputEl.value = prefill.inputPerM ?? '';
+      outputEl.value = prefill.outputPerM ?? '';
+      cacheReadEl.value = prefill.cacheReadPerM ?? '';
+      for (const el of [inputEl, outputEl, cacheReadEl]) el.dispatchEvent(new Event('input'));
+    }
+    form.classList.remove('hidden');
+    addButton.classList.add('hidden');
+  };
+
+  addButton.addEventListener('click', () => openCustomPricingForm());
+  cancelButton.addEventListener('click', closeForm);
+
+  select.addEventListener('change', async () => {
+    showError('');
+    manualInput.classList.toggle('hidden', select.value !== '__manual__');
+    if (!select.value || select.value === '__manual__') { showHint(''); return; }
+    const id = select.value;
+    showHint(t('settings.customPricing.lookingUp'));
+    try {
+      const res = await window.tokenMonitor.lookupModelPricing(id);
+      if (res?.ok && res.result?.pricing) {
+        const p = customPricingFormApi.perMillionFromPricing(res.result);
+        if (p.inputPerM !== undefined) inputEl.value = p.inputPerM;
+        if (p.outputPerM !== undefined) outputEl.value = p.outputPerM;
+        if (p.cacheReadPerM !== undefined) cacheReadEl.value = p.cacheReadPerM;
+        for (const el of [inputEl, outputEl, cacheReadEl]) el.dispatchEvent(new Event('input'));
+        showHint(t('settings.customPricing.currentPrice', { key: res.result.matchedKey || id, source: res.result.source || '' }));
+      } else {
+        showHint(t('settings.customPricing.noCurrentPrice'));
+      }
+    } catch (_) {
+      showHint(t('settings.customPricing.noCurrentPrice'));
+    }
+  });
+
+  for (const el of [inputEl, outputEl, cacheReadEl]) {
+    el.addEventListener('input', () => {
+      const span = document.getElementById(el.id + 'Approx');
+      if (!span) return;
+      const v = Number(el.value);
+      span.textContent = (el.value !== '' && Number.isFinite(v)) ? `≈ ${formatCost(v)} / 1M` : '';
+    });
+  }
+
+  saveButton.addEventListener('click', async () => {
+    showError('');
+    const modelId = selectedModelId();
+    if (!modelId) { showError(t('settings.customPricing.errorNoModel')); return; }
+    const entry = {
+      modelId,
+      inputPerM: inputEl.value === '' ? undefined : Number(inputEl.value),
+      outputPerM: outputEl.value === '' ? undefined : Number(outputEl.value),
+      cacheReadPerM: cacheReadEl.value === '' ? undefined : Number(cacheReadEl.value)
+    };
+    const hasInput = typeof entry.inputPerM === 'number' && entry.inputPerM > 0;
+    const hasOutput = typeof entry.outputPerM === 'number' && entry.outputPerM > 0;
+    if (!hasInput && !hasOutput) { showError(t('settings.customPricing.errorNoPrice')); return; }
+    const next = customPricingFormApi.upsertOverride(state.settings?.customModelPricing || [], entry);
+    await saveSettings({ customModelPricing: next });
+    closeForm();
+    renderCustomPricing();
+  });
+
+  renderCustomPricing();
+}
+
 function setupCursorAccountUI() {
   const codexToggle = document.getElementById('codexSettingsToggle');
   if (codexToggle) {
@@ -4421,5 +4614,6 @@ function initSettingsAnimationWrappers() {
 initSettingsAnimationWrappers();
 setupSettingsSections();
 setupCursorAccountUI();
+setupCustomPricingUI();
 deliverTrayProviderIcons();
 init();
