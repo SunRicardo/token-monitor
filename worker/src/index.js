@@ -144,6 +144,12 @@ export class HubDO {
       }, { 'cache-control': 'public, max-age=15, s-maxage=15' });
     }
 
+    // A Worker is an internet-facing URL with no trusted-LAN fallback, so it must
+    // never serve data unauthenticated. Without a secret every data route is refused
+    // (health and the opt-in, already-scrubbed /api/public/stats are handled above).
+    if (!this.secret) {
+      return jsonResponse(503, { error: 'secret_required', message: 'TOKEN_MONITOR_SECRET must be set on the worker; unauthenticated access is refused.' });
+    }
     if (!isAuthorized(request, this.secret)) return jsonResponse(401, { error: 'unauthorized' });
 
     if ((request.method === 'GET' || request.method === 'HEAD') && url.pathname === '/api/stats') {

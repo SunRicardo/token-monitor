@@ -8,6 +8,18 @@ const { historyPreview } = require('../shared/history');
 const { isAuthorized, readJsonBody, sendJson, sendText } = require('../shared/http');
 const { loadDotEnv, parseArgs, projectRoot, readJson, writeJsonAtomic } = require('../shared/config');
 
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
+
+// Without a secret the hub cannot tell its own widget from any other caller, so it
+// must not expose account identity (email/plan/key) to the network. Binding to
+// loopback keeps an unauthenticated hub usable locally while refusing LAN/remote
+// reach; set a secret to bind a non-loopback address and accept other devices.
+function resolveBindHost(host, secret) {
+  const requested = String(host || '').trim() || '0.0.0.0';
+  if (secret) return requested;
+  return LOOPBACK_HOSTS.has(requested.toLowerCase()) ? requested : '127.0.0.1';
+}
+
 function createHub({
   port = 17321,
   host = '0.0.0.0',
@@ -18,6 +30,7 @@ function createHub({
 } = {}) {
   const store = readJson(dataFile, { version: 1, devices: {} }) || { version: 1, devices: {} };
   if (!store.devices || typeof store.devices !== 'object') store.devices = {};
+  const bindHost = resolveBindHost(host, secret);
 
   function persist() {
     store.version = 1;
@@ -121,7 +134,7 @@ function createHub({
       const onListening = () => { server.off('error', onError); resolve(); };
       server.once('error', onError);
       server.once('listening', onListening);
-      server.listen(port, host);
+      server.listen(port, bindHost);
     });
   }
 
@@ -133,7 +146,7 @@ function createHub({
     });
   }
 
-  return { start, stop, server, getStats };
+  return { start, stop, server, getStats, bindHost };
 }
 
 if (require.main === module) {
@@ -147,13 +160,15 @@ if (require.main === module) {
 
   const hub = createHub({ port, host, secret, staleAfterMs, dataFile });
   hub.start().then(() => {
-    console.log(`Token Monitor hub listening on http://${host}:${port}`);
+    console.log(`Token Monitor hub listening on http://${hub.bindHost}:${port}`);
     console.log(`Data file: ${dataFile}`);
-    if (!secret) console.warn('Warning: TOKEN_MONITOR_SECRET is not set. The hub API accepts unauthenticated requests.');
+    if (!secret) {
+      console.warn(`Warning: TOKEN_MONITOR_SECRET is not set, so the hub is bound to ${hub.bindHost} (localhost only) to keep account identity off the network. Set a secret to accept connections from other devices.`);
+    }
   }).catch((err) => {
     console.error(`Hub failed to start: ${err.message}`);
     process.exit(1);
   });
 }
 
-module.exports = { createHub };
+module.exports = { createHub, resolveBindHost };

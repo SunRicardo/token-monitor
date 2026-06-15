@@ -256,8 +256,9 @@ The secret is accepted three ways (any one works):
    `Authorization` header. Only use this from clients where the URL stays
    local to the device.
 
-When the secret is unset the API is open — do not deploy that way to the
-public internet.
+The secret is required. When `TOKEN_MONITOR_SECRET` is unset, every data route
+returns `503 secret_required` — only `/api/health` and the opt-in
+`/api/public/stats` respond. Set it before (or during) deploy.
 
 ## Storage and cost
 
