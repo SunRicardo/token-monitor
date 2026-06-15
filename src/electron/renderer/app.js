@@ -141,7 +141,7 @@ state.settingsSections = Object.fromEntries(SETTINGS_SECTION_IDS.map((id) => [id
 const defaultAppearance = { glassOpacity: 68, glassBlur: 32, zoomFactor: 1, systemGlass: true, showLiveDot: true, showToolIcons: true, titleIconOnly: false, settingsInTitlebar: false };
 let preferenceDrag = null;
 const els = {
-  shell: document.querySelector('.shell'), status: document.getElementById('status'), liveDot: document.getElementById('liveDot'), totalTokens: document.getElementById('totalTokens'), cost: document.getElementById('cost'), breakdown: document.getElementById('breakdown'), serviceStatusPanel: document.getElementById('serviceStatusPanel'), limitsPanel: document.getElementById('limitsPanel'), trendsPanel: document.getElementById('trendsPanel'), breakdownToggle: document.getElementById('breakdownToggle'), pinButton: document.getElementById('pinButton'), settingsButton: document.getElementById('settingsButton'), settingsPanel: document.getElementById('settingsPanel'), languageInput: document.getElementById('languageInput'), currencyInput: document.getElementById('currencyInput'), hubUrlInput: document.getElementById('hubUrlInput'), secretInput: document.getElementById('secretInput'), deviceIdInput: document.getElementById('deviceIdInput'), limitProviderCheckboxes: document.getElementById('limitProviderCheckboxes'), limitsRefreshInput: document.getElementById('limitsRefreshInput'), showLimitSourceInput: document.getElementById('showLimitSourceInput'), systemGlassInput: document.getElementById('systemGlassInput'), liveDotInput: document.getElementById('liveDotInput'), toolIconsInput: document.getElementById('toolIconsInput'), floatingBubbleInput: document.getElementById('floatingBubbleInput'), floatingBubbleTriggerInput: document.getElementById('floatingBubbleTriggerInput'), floatingBubbleTriggerRow: document.getElementById('floatingBubbleTriggerRow'), floatingBubbleContentInput: document.getElementById('floatingBubbleContentInput'), floatingBubbleContentRow: document.getElementById('floatingBubbleContentRow'), floatingBubbleContent: document.getElementById('floatingBubbleContent'), discordRpcInput: document.getElementById('discordRpcInput'), windowBehaviorInput: document.getElementById('windowBehaviorInput'), showTrayIconInput: document.getElementById('showTrayIconInput'), trayModeInput: document.getElementById('trayModeInput'), trayContentInput: document.getElementById('trayContentInput'), windowToggleShortcutValue: document.getElementById('windowToggleShortcutValue'), windowToggleShortcutRecordButton: document.getElementById('windowToggleShortcutRecordButton'), windowToggleShortcutClearButton: document.getElementById('windowToggleShortcutClearButton'), windowToggleShortcutNote: document.getElementById('windowToggleShortcutNote'), glassInput: document.getElementById('glassInput'), blurInput: document.getElementById('blurInput'), zoomInput: document.getElementById('zoomInput'), resetGlassButton: document.getElementById('resetGlassButton'), resetDepthButton: document.getElementById('resetDepthButton'), resetZoomButton: document.getElementById('resetZoomButton'), saveSettingsButton: document.getElementById('saveSettingsButton'), clientDisplayList: document.getElementById('clientDisplayList'), openConfigButton: document.getElementById('openConfigButton'), refreshButton: document.getElementById('refreshButton'), minButton: document.getElementById('minButton'), closeButton: document.getElementById('closeButton'), floatingBubbleTab: document.getElementById('floatingBubbleTab')
+  shell: document.querySelector('.shell'), status: document.getElementById('status'), liveDot: document.getElementById('liveDot'), totalTokens: document.getElementById('totalTokens'), cost: document.getElementById('cost'), breakdown: document.getElementById('breakdown'), serviceStatusPanel: document.getElementById('serviceStatusPanel'), limitsPanel: document.getElementById('limitsPanel'), trendsPanel: document.getElementById('trendsPanel'), breakdownToggle: document.getElementById('breakdownToggle'), pinButton: document.getElementById('pinButton'), settingsButton: document.getElementById('settingsButton'), settingsPanel: document.getElementById('settingsPanel'), languageInput: document.getElementById('languageInput'), currencyInput: document.getElementById('currencyInput'), hubUrlInput: document.getElementById('hubUrlInput'), secretInput: document.getElementById('secretInput'), deviceIdInput: document.getElementById('deviceIdInput'), limitProviderCheckboxes: document.getElementById('limitProviderCheckboxes'), limitsRefreshInput: document.getElementById('limitsRefreshInput'), showLimitSourceInput: document.getElementById('showLimitSourceInput'), showActiveAccountInput: document.getElementById('showActiveAccountInput'), systemGlassInput: document.getElementById('systemGlassInput'), liveDotInput: document.getElementById('liveDotInput'), toolIconsInput: document.getElementById('toolIconsInput'), floatingBubbleInput: document.getElementById('floatingBubbleInput'), floatingBubbleTriggerInput: document.getElementById('floatingBubbleTriggerInput'), floatingBubbleTriggerRow: document.getElementById('floatingBubbleTriggerRow'), floatingBubbleContentInput: document.getElementById('floatingBubbleContentInput'), floatingBubbleContentRow: document.getElementById('floatingBubbleContentRow'), floatingBubbleContent: document.getElementById('floatingBubbleContent'), discordRpcInput: document.getElementById('discordRpcInput'), windowBehaviorInput: document.getElementById('windowBehaviorInput'), showTrayIconInput: document.getElementById('showTrayIconInput'), trayModeInput: document.getElementById('trayModeInput'), trayContentInput: document.getElementById('trayContentInput'), windowToggleShortcutValue: document.getElementById('windowToggleShortcutValue'), windowToggleShortcutRecordButton: document.getElementById('windowToggleShortcutRecordButton'), windowToggleShortcutClearButton: document.getElementById('windowToggleShortcutClearButton'), windowToggleShortcutNote: document.getElementById('windowToggleShortcutNote'), glassInput: document.getElementById('glassInput'), blurInput: document.getElementById('blurInput'), zoomInput: document.getElementById('zoomInput'), resetGlassButton: document.getElementById('resetGlassButton'), resetDepthButton: document.getElementById('resetDepthButton'), resetZoomButton: document.getElementById('resetZoomButton'), saveSettingsButton: document.getElementById('saveSettingsButton'), clientDisplayList: document.getElementById('clientDisplayList'), openConfigButton: document.getElementById('openConfigButton'), refreshButton: document.getElementById('refreshButton'), minButton: document.getElementById('minButton'), closeButton: document.getElementById('closeButton'), floatingBubbleTab: document.getElementById('floatingBubbleTab')
 };
 Object.assign(els, {
   floatingBubbleOptions: document.getElementById('floatingBubbleOptions'),
@@ -1013,8 +1013,23 @@ function renderLimitProviderHead(id, label, provider, color, options = {}) {
   name.className = 'limit-name';
   if (options.showIcon !== false) name.append(renderLimitProviderMark(id, color));
   const title = document.createElement('span');
+  title.className = 'limit-name-title';
   title.textContent = options.title || label;
   name.append(title);
+  const provenance = limitProviderProvenance(provider);
+  // Active-account marker — the local Codex login this device's app is signed
+  // into (only shown among several accounts). It hugs the email because "Active"
+  // describes the identity, not the "Updated" time; the email ellipsizes first
+  // so the badge never gets squeezed. Stays English like the panel's other
+  // labels (Session/Weekly/Updated). Off by default — gated on showActiveAccount.
+  if (state.settings?.showActiveAccount && options.accountTitle && limitProviderPresentationApi.isCodexLiveAccount(provider, provenance)) {
+    const badge = document.createElement('span');
+    badge.className = 'limit-live-badge';
+    badge.textContent = 'Active';
+    badge.title = 'Signed in to Codex on this device';
+    badge.setAttribute('aria-label', 'Signed in to Codex on this device');
+    name.append(badge);
+  }
   titleBlock.append(name);
   // The multi-account group header has no quota of its own, and its accounts can
   // update at different times (different devices too), so it omits the meta line
@@ -1022,7 +1037,6 @@ function renderLimitProviderHead(id, label, provider, color, options = {}) {
   if (!options.hideMeta) {
     const meta = document.createElement('div');
     meta.className = 'limit-meta';
-    const provenance = limitProviderProvenance(provider);
     const metaParts = [];
     // A single Codex account stays clean like every other provider (just the
     // "Updated" line). The email only matters when several accounts share the
@@ -1030,19 +1044,6 @@ function renderLimitProviderHead(id, label, provider, color, options = {}) {
     if (provider.status === 'ok' || provider.stale) metaParts.push(limitProviderMeta(provider, provenance));
     const metaText = metaParts.filter(Boolean).join(' · ');
     if (metaText) meta.append(document.createTextNode(metaText));
-    // Trailing active-account marker — the local Codex login this device's app
-    // is signed into (only shown among several accounts). It follows "Updated …"
-    // so the title row keeps the uniform "name … plan" rhythm, and stays English
-    // like the panel's other labels (Session/Weekly/Updated).
-    if (options.accountTitle && limitProviderPresentationApi.isCodexLiveAccount(provider, provenance)) {
-      if (meta.childNodes.length) meta.append(document.createTextNode(' · '));
-      const badge = document.createElement('span');
-      badge.className = 'limit-live-badge';
-      badge.textContent = 'Active';
-      badge.title = 'Signed in to Codex on this device';
-      badge.setAttribute('aria-label', 'Signed in to Codex on this device');
-      meta.append(badge);
-    }
     titleBlock.append(meta);
   }
   const plan = document.createElement('div');
@@ -2424,6 +2425,7 @@ function syncSettingsForm() {
   els.deviceIdInput.value = state.settings.deviceId || '';
   els.limitsRefreshInput.value = String(LIMIT_REFRESH_OPTIONS.includes(Number(state.settings.limitsRefreshMs)) ? state.settings.limitsRefreshMs : 300000);
   els.showLimitSourceInput.checked = Boolean(state.settings.showLimitSource);
+  els.showActiveAccountInput.checked = Boolean(state.settings.showActiveAccount);
   els.systemGlassInput.checked = state.settings.systemGlass !== false;
   els.liveDotInput.checked = state.settings.showLiveDot !== false;
   els.toolIconsInput.checked = state.settings.showToolIcons !== false;
@@ -3376,6 +3378,9 @@ els.limitsRefreshInput.addEventListener('change', async () => {
 });
 els.showLimitSourceInput.addEventListener('change', async () => {
   await saveSettings({ showLimitSource: els.showLimitSourceInput.checked });
+});
+els.showActiveAccountInput.addEventListener('change', async () => {
+  await saveSettings({ showActiveAccount: els.showActiveAccountInput.checked });
 });
 els.resetClientDisplayOrderButton?.addEventListener('click', resetClientDisplayOrder);
 els.showAllClientsButton?.addEventListener('click', showAllClients);

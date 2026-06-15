@@ -1710,7 +1710,7 @@ body.floating-bubble-collapsed-right .floating-bubble-tab {
   color: var(--text);
   font-size: 12px;
 }
-.limit-name span:last-child {
+.limit-name-title {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1752,7 +1752,10 @@ body.floating-bubble-collapsed-right .floating-bubble-tab {
   gap: 10px;
 }
 .limit-live-badge {
+  flex: 0 0 auto;
   color: var(--muted);
+  font-size: 10px;
+  white-space: nowrap;
 }
 .limit-live-badge::before {
   content: "\2713\00a0";
