@@ -68,6 +68,7 @@ const clientDisplayPreferencesApi = window.TokenMonitorClientDisplayPreferences;
 const customPricingFormApi = window.TokenMonitorCustomPricingForm;
 const viewDisplayPreferencesApi = window.TokenMonitorViewDisplayPreferences;
 const preferenceDragSortApi = window.TokenMonitorPreferenceDragSort;
+const homeOverviewApi = window.TokenMonitorHomeOverview;
 const i18n = window.TokenMonitorI18n;
 const currencyApi = window.TokenMonitorCurrency;
 const sessionRowsApi = window.TokenMonitorSessionRows;
@@ -109,6 +110,7 @@ const deviceAccent = '#73bdf5';
 const deviceStaleColor = '#8c97a7';
 const baseBreakdownOrder = ['tool', 'device', 'model', 'session'];
 const VIEW_DISPLAY_OPTIONS = [
+  { id: 'home', labelKey: 'views.home' },
   { id: 'tool', labelKey: 'views.tool' },
   { id: 'status', labelKey: 'views.status' },
   { id: 'device', labelKey: 'views.device' },
@@ -118,7 +120,20 @@ const VIEW_DISPLAY_OPTIONS = [
   { id: 'trends', labelKey: 'views.trends' }
 ];
 const viewPeriodValues = new Set(['today', 'month', 'allTime']);
-const viewBreakdownValues = new Set([...baseBreakdownOrder, 'status', 'limits', 'trends']);
+const viewBreakdownValues = new Set(['home', ...baseBreakdownOrder, 'status', 'limits', 'trends']);
+const HOME_MODULE_VIEW_IDS = new Set(['limits', 'model', 'trends']);
+const VIEW_SWITCHER_LONG_PRESS_MS = 420;
+const VIEW_SWITCHER_HOVER_CLOSE_MS = 160;
+const VIEW_ICON_CLASSES = {
+  home: 'view-icon-home',
+  tool: 'view-icon-tool',
+  status: 'view-icon-status',
+  device: 'view-icon-device',
+  model: 'view-icon-model',
+  session: 'view-icon-session',
+  limits: 'view-icon-limits',
+  trends: 'view-icon-trends'
+};
 const SERVICE_STATUS_PLACEHOLDERS = [
   { id: 'claude', label: 'Claude', pageUrl: 'https://status.claude.com' },
   { id: 'openai', label: 'OpenAI', pageUrl: 'https://status.openai.com' },
@@ -138,12 +153,15 @@ function normalizeInitialViewValue(value, allowed, fallback) {
   return allowed.has(raw) ? raw : fallback;
 }
 
-const state = { period: normalizeInitialViewValue(initialViewState.period, viewPeriodValues, 'today'), appUpdate: null, breakdown: normalizeInitialViewValue(initialViewState.breakdown, viewBreakdownValues, 'tool'), settings: null, stats: null, serviceStatus: null, serviceStatusBusy: false, serviceProvidersExpanded: false, trendSettingsExpanded: false, serviceStatusTicker: null, refreshTimer: null, refreshBusy: false, refreshFeedbackTimer: null, currentTotal: 0, rowSignature: '', streamConnected: false, streamFailure: null, mode: 'idle', appInfo: null, tokscaleStatus: null, tokscaleCheck: null, tokscaleBusy: false, hubInfo: null, cursorAccount: { status: null, error: '' }, cursorAccountExpanded: false, codexAccountExpanded: false, codexAccountError: '', customPricingExpanded: false, opencodeAccount: { status: null, error: '' }, opencodeCookieExpanded: false, deepseekAccountExpanded: false, deepseekPendingCheckSince: 0, floatingBubble: initialFloatingBubble, suppressInitialNumberAnimation: window.__TOKEN_MONITOR_SUPPRESS_INITIAL_NUMBER_ANIMATION__ === true, openSession: null, detailSort: 'time', recordingWindowShortcut: false, windowShortcutInvalid: false };
+const state = { period: normalizeInitialViewValue(initialViewState.period, viewPeriodValues, 'today'), appUpdate: null, breakdown: normalizeInitialViewValue(initialViewState.breakdown, viewBreakdownValues, 'home'), viewSwitcherOpen: false, settings: null, stats: null, homeHistory: null, homeHistoryBusy: false, homeHistoryRequested: false, homeActivityScrollLeft: null, serviceStatus: null, serviceStatusBusy: false, serviceProvidersExpanded: false, trendSettingsExpanded: false, homeSettingsExpanded: false, serviceStatusTicker: null, refreshTimer: null, refreshBusy: false, refreshFeedbackTimer: null, currentTotal: 0, rowSignature: '', streamConnected: false, streamFailure: null, mode: 'idle', appInfo: null, tokscaleStatus: null, tokscaleCheck: null, tokscaleBusy: false, hubInfo: null, cursorAccount: { status: null, error: '' }, cursorAccountExpanded: false, codexAccountExpanded: false, codexAccountError: '', customPricingExpanded: false, opencodeAccount: { status: null, error: '' }, opencodeCookieExpanded: false, deepseekAccountExpanded: false, deepseekPendingCheckSince: 0, floatingBubble: initialFloatingBubble, suppressInitialNumberAnimation: window.__TOKEN_MONITOR_SUPPRESS_INITIAL_NUMBER_ANIMATION__ === true, openSession: null, detailSort: 'time', recordingWindowShortcut: false, windowShortcutInvalid: false };
 state.settingsSections = Object.fromEntries(SETTINGS_SECTION_IDS.map((id) => [id, false]));
 const defaultAppearance = { glassOpacity: 68, glassBlur: 32, zoomFactor: 1, systemGlass: true, showLiveDot: true, showToolIcons: true, titleIconOnly: false, settingsInTitlebar: false };
 let preferenceDrag = null;
+let viewSwitcherLongPressTimer = null;
+let viewSwitcherLongPressTriggered = false;
+let viewSwitcherHoverCloseTimer = null;
 const els = {
-  shell: document.querySelector('.shell'), status: document.getElementById('status'), liveDot: document.getElementById('liveDot'), totalTokens: document.getElementById('totalTokens'), cost: document.getElementById('cost'), breakdown: document.getElementById('breakdown'), serviceStatusPanel: document.getElementById('serviceStatusPanel'), limitsPanel: document.getElementById('limitsPanel'), trendsPanel: document.getElementById('trendsPanel'), breakdownToggle: document.getElementById('breakdownToggle'), pinButton: document.getElementById('pinButton'), settingsButton: document.getElementById('settingsButton'), settingsPanel: document.getElementById('settingsPanel'), languageInput: document.getElementById('languageInput'), currencyInput: document.getElementById('currencyInput'), hubUrlInput: document.getElementById('hubUrlInput'), secretInput: document.getElementById('secretInput'), deviceIdInput: document.getElementById('deviceIdInput'), limitProviderCheckboxes: document.getElementById('limitProviderCheckboxes'), limitsRefreshInput: document.getElementById('limitsRefreshInput'), showLimitSourceInput: document.getElementById('showLimitSourceInput'), showActiveAccountInput: document.getElementById('showActiveAccountInput'), systemGlassInput: document.getElementById('systemGlassInput'), liveDotInput: document.getElementById('liveDotInput'), toolIconsInput: document.getElementById('toolIconsInput'), floatingBubbleInput: document.getElementById('floatingBubbleInput'), floatingBubbleTriggerInput: document.getElementById('floatingBubbleTriggerInput'), floatingBubbleTriggerRow: document.getElementById('floatingBubbleTriggerRow'), floatingBubbleContentInput: document.getElementById('floatingBubbleContentInput'), floatingBubbleContentRow: document.getElementById('floatingBubbleContentRow'), floatingBubbleContent: document.getElementById('floatingBubbleContent'), discordRpcInput: document.getElementById('discordRpcInput'), windowBehaviorInput: document.getElementById('windowBehaviorInput'), showTrayIconInput: document.getElementById('showTrayIconInput'), trayModeInput: document.getElementById('trayModeInput'), trayContentInput: document.getElementById('trayContentInput'), windowToggleShortcutValue: document.getElementById('windowToggleShortcutValue'), windowToggleShortcutRecordButton: document.getElementById('windowToggleShortcutRecordButton'), windowToggleShortcutClearButton: document.getElementById('windowToggleShortcutClearButton'), windowToggleShortcutNote: document.getElementById('windowToggleShortcutNote'), glassInput: document.getElementById('glassInput'), blurInput: document.getElementById('blurInput'), zoomInput: document.getElementById('zoomInput'), resetGlassButton: document.getElementById('resetGlassButton'), resetDepthButton: document.getElementById('resetDepthButton'), resetZoomButton: document.getElementById('resetZoomButton'), saveSettingsButton: document.getElementById('saveSettingsButton'), clientDisplayList: document.getElementById('clientDisplayList'), openConfigButton: document.getElementById('openConfigButton'), refreshButton: document.getElementById('refreshButton'), minButton: document.getElementById('minButton'), closeButton: document.getElementById('closeButton'), floatingBubbleTab: document.getElementById('floatingBubbleTab')
+  shell: document.querySelector('.shell'), status: document.getElementById('status'), liveDot: document.getElementById('liveDot'), totalTokens: document.getElementById('totalTokens'), cost: document.getElementById('cost'), homePanel: document.getElementById('homePanel'), breakdown: document.getElementById('breakdown'), serviceStatusPanel: document.getElementById('serviceStatusPanel'), limitsPanel: document.getElementById('limitsPanel'), trendsPanel: document.getElementById('trendsPanel'), viewSwitcher: document.getElementById('viewSwitcher'), pinButton: document.getElementById('pinButton'), settingsButton: document.getElementById('settingsButton'), settingsPanel: document.getElementById('settingsPanel'), languageInput: document.getElementById('languageInput'), currencyInput: document.getElementById('currencyInput'), hubUrlInput: document.getElementById('hubUrlInput'), secretInput: document.getElementById('secretInput'), deviceIdInput: document.getElementById('deviceIdInput'), limitProviderCheckboxes: document.getElementById('limitProviderCheckboxes'), limitsRefreshInput: document.getElementById('limitsRefreshInput'), showLimitSourceInput: document.getElementById('showLimitSourceInput'), showActiveAccountInput: document.getElementById('showActiveAccountInput'), systemGlassInput: document.getElementById('systemGlassInput'), liveDotInput: document.getElementById('liveDotInput'), toolIconsInput: document.getElementById('toolIconsInput'), floatingBubbleInput: document.getElementById('floatingBubbleInput'), floatingBubbleTriggerInput: document.getElementById('floatingBubbleTriggerInput'), floatingBubbleTriggerRow: document.getElementById('floatingBubbleTriggerRow'), floatingBubbleContentInput: document.getElementById('floatingBubbleContentInput'), floatingBubbleContentRow: document.getElementById('floatingBubbleContentRow'), floatingBubbleContent: document.getElementById('floatingBubbleContent'), discordRpcInput: document.getElementById('discordRpcInput'), windowBehaviorInput: document.getElementById('windowBehaviorInput'), showTrayIconInput: document.getElementById('showTrayIconInput'), trayModeInput: document.getElementById('trayModeInput'), trayContentInput: document.getElementById('trayContentInput'), windowToggleShortcutValue: document.getElementById('windowToggleShortcutValue'), windowToggleShortcutRecordButton: document.getElementById('windowToggleShortcutRecordButton'), windowToggleShortcutClearButton: document.getElementById('windowToggleShortcutClearButton'), windowToggleShortcutNote: document.getElementById('windowToggleShortcutNote'), glassInput: document.getElementById('glassInput'), blurInput: document.getElementById('blurInput'), zoomInput: document.getElementById('zoomInput'), resetGlassButton: document.getElementById('resetGlassButton'), resetDepthButton: document.getElementById('resetDepthButton'), resetZoomButton: document.getElementById('resetZoomButton'), saveSettingsButton: document.getElementById('saveSettingsButton'), clientDisplayList: document.getElementById('clientDisplayList'), openConfigButton: document.getElementById('openConfigButton'), refreshButton: document.getElementById('refreshButton'), minButton: document.getElementById('minButton'), closeButton: document.getElementById('closeButton'), floatingBubbleTab: document.getElementById('floatingBubbleTab')
 };
 Object.assign(els, {
   floatingBubbleOptions: document.getElementById('floatingBubbleOptions'),
@@ -214,6 +232,24 @@ document.addEventListener('click', (e) => {
       row.classList.add('expanded');
     }
   }
+});
+
+document.addEventListener('pointerdown', (event) => {
+  if (state.viewSwitcherOpen && !event.target.closest('#viewSwitcher')) {
+    setViewSwitcherOpen(false);
+  }
+});
+
+document.addEventListener('pointerup', () => {
+  clearViewSwitcherLongPress();
+  if (viewSwitcherLongPressTriggered) {
+    setTimeout(() => { viewSwitcherLongPressTriggered = false; }, 0);
+  }
+});
+
+document.addEventListener('pointercancel', () => {
+  clearViewSwitcherLongPress();
+  viewSwitcherLongPressTriggered = false;
 });
 
 function preferredLanguages() {
@@ -363,6 +399,12 @@ function trendShortLabel(label, labelKey) {
   if (labelKey === 'month') return value.slice(0, 7);
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value);
   return m ? `${Number(m[2])}/${Number(m[3])}` : value;
+}
+function compactMonthLabel(label) {
+  const match = /^(\d{4})-(\d{2})/.exec(String(label || ''));
+  if (!match) return String(label || '');
+  return new Intl.DateTimeFormat(currentLocale(), { month: 'short', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, 1)));
 }
 function currentCurrency() { return currencyApi.normalizeCurrency(state.settings?.currency); }
 function formatCost(value) { return currencyApi.formatCurrencyFromUsd(value, currentCurrency()); }
@@ -705,6 +747,16 @@ function updateRow(row, { name, subtitle, detail, value, cost, max, color, stale
   }
 }
 
+function applyHomeListMark(mark, iconKind, color) {
+  if (iconKind.kind === 'icon') {
+    mark.className = `home-list-mark row-icon ${iconKind.iconClass}`;
+    mark.style.background = '';
+    return;
+  }
+  mark.className = 'home-list-mark';
+  mark.style.background = color;
+}
+
 function renderRows(rows) {
   if (rows.length === 0) {
     els.breakdown.replaceChildren();
@@ -804,8 +856,18 @@ function limitViewAvailable() {
   return enabledLimitProviderSet().size > 0;
 }
 
+function effectiveViewDisplayOrderValue() {
+  const raw = state.settings?.viewDisplayOrder;
+  const rawIds = String(raw || '').split(',').map((item) => item.trim().toLowerCase()).filter(Boolean);
+  if (rawIds.length > 0 && !rawIds.includes('home')) {
+    const normalized = viewDisplayPreferencesApi.normalizeViewDisplayOrder(raw, VIEW_DISPLAY_OPTIONS);
+    return ['home', ...normalized.filter((id) => id !== 'home')].join(',');
+  }
+  return raw;
+}
+
 function availableBreakdownIds() {
-  const order = [baseBreakdownOrder[0], 'status', 'trends', ...baseBreakdownOrder.slice(1)];
+  const order = ['home', baseBreakdownOrder[0], 'status', 'trends', ...baseBreakdownOrder.slice(1)];
   const available = state.settings?.historyEnabled === false ? order.filter((id) => id !== 'trends') : order;
   return limitViewAvailable() ? [...available, 'limits'] : available;
 }
@@ -813,7 +875,7 @@ function availableBreakdownIds() {
 function visibleBreakdownOrder() {
   return viewDisplayPreferencesApi.visibleViewOrder({
     views: VIEW_DISPLAY_OPTIONS,
-    orderValue: state.settings?.viewDisplayOrder,
+    orderValue: effectiveViewDisplayOrderValue(),
     hiddenValue: state.settings?.hiddenViews,
     availableIds: availableBreakdownIds()
   });
@@ -822,7 +884,7 @@ function visibleBreakdownOrder() {
 function ensureBreakdownVisible() {
   const next = viewDisplayPreferencesApi.preferredViewId({
     views: VIEW_DISPLAY_OPTIONS,
-    orderValue: state.settings?.viewDisplayOrder,
+    orderValue: effectiveViewDisplayOrderValue(),
     hiddenValue: state.settings?.hiddenViews,
     availableIds: availableBreakdownIds(),
     currentId: state.breakdown
@@ -1398,22 +1460,6 @@ function stopServiceStatusTicker() {
   state.serviceStatusTicker = null;
 }
 
-function nextBreakdown(value) {
-  const order = visibleBreakdownOrder();
-  const index = order.indexOf(value);
-  return order[(index + 1) % order.length] || order[0] || 'tool';
-}
-
-function breakdownLabel(deviceText) {
-  if (state.breakdown === 'device') return deviceText;
-  if (state.breakdown === 'status') return t('views.status') || 'Status';
-  if (state.breakdown === 'model') return t('views.model') || 'Model';
-  if (state.breakdown === 'session') return t('views.session') || 'Sessions';
-  if (state.breakdown === 'limits') return t('views.limits') || 'Limits';
-  if (state.breakdown === 'trends') return t('views.trends') || 'Trends';
-  return t('views.tool') || 'Tools';
-}
-
 async function openSessionDetail({ client, sessionId, sessionCost, title }) {
   state.openSession = { client, sessionId, sessionCost, title, detail: null };
   renderSessionDetail({ loading: true });
@@ -1574,9 +1620,507 @@ function renderTrends() {
     + `<div class="trends-stats">${statsHtml}</div>`;
 }
 
+function viewLabelById(id) {
+  const view = VIEW_DISPLAY_OPTIONS.find((option) => option.id === id);
+  return view ? viewLabel(view) : id;
+}
+
+function openHomeSettings() {
+  if (!els.settingsPanel) return;
+  els.settingsPanel.classList.remove('hidden');
+  els.shell.classList.add('settings-open');
+  els.shell.style.transform = 'translateZ(0)';
+  setSettingsSectionExpanded('main', true);
+  state.homeSettingsExpanded = true;
+  syncSettingsForm();
+  requestAnimationFrame(() => {
+    document.getElementById('homeSettingsContainer')?.scrollIntoView({ block: 'nearest' });
+  });
+}
+
+async function loadHomeHistory() {
+  if (state.homeHistoryRequested || state.homeHistoryBusy || !window.tokenMonitor.getDashboardHistory) return;
+  state.homeHistoryRequested = true;
+  state.homeHistoryBusy = true;
+  try {
+    state.homeHistory = await window.tokenMonitor.getDashboardHistory();
+  } catch (error) {
+    console.log(`[home] history failed: ${error.message}`);
+  } finally {
+    state.homeHistoryBusy = false;
+    if (state.breakdown === 'home') render();
+  }
+}
+
+function homeModuleIds() {
+  const hidden = hiddenViewSet();
+  const available = new Set(availableBreakdownIds());
+  return viewDisplayPreferencesApi
+    .orderedViews(VIEW_DISPLAY_OPTIONS, effectiveViewDisplayOrderValue())
+    .map((view) => view.id)
+    .filter((id) => HOME_MODULE_VIEW_IDS.has(id) && !hidden.has(id) && available.has(id));
+}
+
+function nextBreakdown(value) {
+  const order = visibleBreakdownOrder();
+  if (order.length === 0) return 'home';
+  const index = order.indexOf(value);
+  return order[(index + 1) % order.length] || order[0];
+}
+
+function viewSwitcherIcon(id) {
+  const icon = document.createElement('span');
+  icon.className = `view-switcher-icon ${VIEW_ICON_CLASSES[id] || 'view-icon-home'}`;
+  icon.setAttribute('aria-hidden', 'true');
+  return icon;
+}
+
+function clearViewSwitcherLongPress() {
+  if (viewSwitcherLongPressTimer) clearTimeout(viewSwitcherLongPressTimer);
+  viewSwitcherLongPressTimer = null;
+}
+
+function clearViewSwitcherHoverClose() {
+  if (viewSwitcherHoverCloseTimer) clearTimeout(viewSwitcherHoverCloseTimer);
+  viewSwitcherHoverCloseTimer = null;
+}
+
+function scheduleViewSwitcherHoverClose() {
+  clearViewSwitcherHoverClose();
+  viewSwitcherHoverCloseTimer = setTimeout(() => {
+    viewSwitcherHoverCloseTimer = null;
+    if (state.viewSwitcherOpen) setViewSwitcherOpen(false);
+  }, VIEW_SWITCHER_HOVER_CLOSE_MS);
+}
+
+function setViewSwitcherOpen(open, { focusMenu = false, focusDisclosure = false } = {}) {
+  const nextOpen = Boolean(open);
+  if (state.viewSwitcherOpen === nextOpen && !focusMenu && !focusDisclosure) return;
+  state.viewSwitcherOpen = nextOpen;
+  renderViewSwitcher({ focusMenu, focusDisclosure });
+}
+
+function renderViewSwitcher({ focusMenu = false, focusDisclosure = false } = {}) {
+  if (!els.viewSwitcher) return;
+  const order = visibleBreakdownOrder();
+  const currentId = order.includes(state.breakdown) ? state.breakdown : (order[0] || 'home');
+  const currentLabel = viewLabelById(currentId);
+  const nextId = nextBreakdown(currentId);
+  const nextLabel = viewLabelById(nextId);
+
+  const current = document.createElement('button');
+  current.type = 'button';
+  current.className = 'view-switcher-current';
+  current.title = t('views.switcher.next', { view: nextLabel });
+  current.setAttribute('aria-label', current.title);
+  current.append(viewSwitcherIcon(currentId));
+  const label = document.createElement('span');
+  label.className = 'view-switcher-label';
+  label.textContent = currentLabel;
+  current.append(label);
+  current.addEventListener('click', () => {
+    if (viewSwitcherLongPressTriggered) {
+      viewSwitcherLongPressTriggered = false;
+      return;
+    }
+    state.viewSwitcherOpen = false;
+    if (setBreakdown(nextBreakdown(state.breakdown))) render();
+  });
+  current.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    clearViewSwitcherLongPress();
+    viewSwitcherLongPressTriggered = false;
+    viewSwitcherLongPressTimer = setTimeout(() => {
+      viewSwitcherLongPressTimer = null;
+      viewSwitcherLongPressTriggered = true;
+      setViewSwitcherOpen(true, { focusMenu: true });
+    }, VIEW_SWITCHER_LONG_PRESS_MS);
+  });
+  current.addEventListener('pointerleave', clearViewSwitcherLongPress);
+  current.addEventListener('contextmenu', (event) => {
+    event.preventDefault();
+    clearViewSwitcherLongPress();
+    setViewSwitcherOpen(true, { focusMenu: true });
+  });
+
+  const disclosure = document.createElement('button');
+  disclosure.type = 'button';
+  disclosure.className = 'view-switcher-disclosure';
+  disclosure.title = t('views.switcher.choose');
+  disclosure.setAttribute('aria-label', disclosure.title);
+  disclosure.setAttribute('aria-haspopup', 'menu');
+  disclosure.setAttribute('aria-controls', 'viewSwitcherMenu');
+  disclosure.setAttribute('aria-expanded', String(state.viewSwitcherOpen));
+  disclosure.addEventListener('pointerenter', (event) => {
+    if (event.pointerType && event.pointerType !== 'mouse') return;
+    clearViewSwitcherHoverClose();
+    if (!state.viewSwitcherOpen) setViewSwitcherOpen(true);
+  });
+  disclosure.addEventListener('click', (event) => {
+    if (event.detail > 0 && state.viewSwitcherOpen) return;
+    const open = !state.viewSwitcherOpen;
+    setViewSwitcherOpen(open, { focusMenu: open });
+  });
+
+  const menu = document.createElement('div');
+  menu.id = 'viewSwitcherMenu';
+  menu.className = `view-switcher-menu${state.viewSwitcherOpen ? '' : ' hidden'}`;
+  menu.setAttribute('role', 'menu');
+  menu.setAttribute('aria-label', t('views.switcher.choose'));
+  for (const id of order) {
+    const item = document.createElement('button');
+    const active = id === currentId;
+    item.type = 'button';
+    item.className = `view-switcher-menu-item${active ? ' is-current' : ''}`;
+    item.dataset.view = id;
+    item.setAttribute('role', 'menuitemradio');
+    item.setAttribute('aria-checked', String(active));
+    if (active) item.setAttribute('aria-current', 'page');
+    item.tabIndex = active ? 0 : -1;
+    item.append(viewSwitcherIcon(id));
+    const itemLabel = document.createElement('span');
+    itemLabel.className = 'view-switcher-menu-label';
+    itemLabel.textContent = viewLabelById(id);
+    item.append(itemLabel);
+    item.addEventListener('click', () => {
+      state.viewSwitcherOpen = false;
+      if (setBreakdown(id)) render();
+      else renderViewSwitcher({ focusDisclosure: true });
+    });
+    menu.append(item);
+  }
+  menu.addEventListener('keydown', (event) => {
+    const items = Array.from(menu.querySelectorAll('.view-switcher-menu-item'));
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setViewSwitcherOpen(false, { focusDisclosure: true });
+      return;
+    }
+    const direction = event.key === 'ArrowDown' || event.key === 'ArrowRight'
+      ? 1
+      : (event.key === 'ArrowUp' || event.key === 'ArrowLeft' ? -1 : 0);
+    if (!direction && event.key !== 'Home' && event.key !== 'End') return;
+    event.preventDefault();
+    const currentIndex = Math.max(0, items.indexOf(document.activeElement));
+    const nextIndex = event.key === 'Home'
+      ? 0
+      : (event.key === 'End' ? items.length - 1 : (currentIndex + direction + items.length) % items.length);
+    items[nextIndex]?.focus();
+  });
+
+  els.viewSwitcher.classList.toggle('is-open', state.viewSwitcherOpen);
+  els.viewSwitcher.replaceChildren(current, disclosure, menu);
+  if (focusMenu) requestAnimationFrame(() => menu.querySelector('.is-current')?.focus());
+  if (focusDisclosure) requestAnimationFrame(() => disclosure.focus());
+}
+
+function homeModuleShell(kind, title, viewId, meta = '') {
+  const module = document.createElement('section');
+  module.className = `home-module home-module-${kind}`;
+  module.tabIndex = 0;
+  module.setAttribute('role', 'button');
+  module.setAttribute('aria-label', title);
+  module.addEventListener('click', (event) => {
+    if (event.target.closest('.home-activity-scroll')) return;
+    if (setBreakdown(viewId)) render();
+  });
+  module.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    if (setBreakdown(viewId)) render();
+  });
+  const head = document.createElement('div');
+  head.className = 'home-module-head';
+  const titleWrap = document.createElement('div');
+  titleWrap.className = 'home-module-title-wrap';
+  const label = document.createElement('span');
+  label.className = 'home-module-label';
+  label.textContent = title;
+  titleWrap.append(label);
+  const end = document.createElement('div');
+  end.className = 'home-module-head-end';
+  if (meta) {
+    const metaText = document.createElement('span');
+    metaText.className = 'home-module-meta';
+    metaText.textContent = meta;
+    end.append(metaText);
+  }
+  const icon = document.createElement('span');
+  icon.className = `home-module-jump ${VIEW_ICON_CLASSES[viewId] || ''}`;
+  icon.setAttribute('aria-hidden', 'true');
+  end.append(icon);
+  head.append(titleWrap, end);
+  const body = document.createElement('div');
+  body.className = 'home-module-body';
+  module.append(head, body);
+  return { module, body };
+}
+
+function homeLimitRows() {
+  const enabled = enabledLimitProviderSet();
+  const providers = providersByLimitProviderId(state.stats?.limits?.providers || []);
+  const accounts = [];
+  for (const { id, label } of limitProviderOrderApi.orderedLimitProviders(LIMIT_PROVIDERS, state.settings?.limitProviderOrder)) {
+    if (!enabled.has(id)) continue;
+    const color = clientColors[id] || clientColors.default;
+    const providerEntries = providers.get(id) || [];
+    providerEntries.forEach((provider, index) => {
+      accounts.push({
+        key: `${id}:${index}`,
+        providerId: id,
+        name: id === 'codex' && providerEntries.length > 1 ? codexAccountTitle(provider, index) : label,
+        color,
+        windows: provider.windows || []
+      });
+    });
+  }
+  return homeOverviewApi.homeLimitAccounts(accounts, 3);
+}
+
+function homeLimitWindowLabel(window) {
+  const key = {
+    session: 'home.limit.session',
+    weekly: 'home.limit.weekly',
+    billing: 'home.limit.billing',
+    monthly: 'home.limit.monthly'
+  }[window.kind];
+  return key ? t(key) : window.label;
+}
+
+function renderHomeLimitModule() {
+  const { module, body } = homeModuleShell('limits', t('home.limits'), 'limits');
+  const rows = homeLimitRows();
+  if (rows.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'home-module-empty';
+    empty.textContent = t('home.noLimits');
+    body.append(empty);
+    return module;
+  }
+  for (const row of rows) {
+    const item = document.createElement('div');
+    item.className = 'home-limit-account';
+    const account = document.createElement('div');
+    account.className = 'home-limit-account-head';
+    const mark = document.createElement('span');
+    applyHomeListMark(mark, iconKindFor({ key: row.providerId || row.key }, 'limits'), row.color);
+    const name = document.createElement('span');
+    name.className = 'home-list-name';
+    name.textContent = row.name;
+    account.append(mark, name);
+    const windows = document.createElement('div');
+    windows.className = 'home-limit-windows';
+    for (const window of row.windows) {
+      const metric = document.createElement('div');
+      metric.className = 'home-limit-window';
+      const line = document.createElement('div');
+      line.className = 'home-limit-window-line';
+      const label = document.createElement('span');
+      label.className = 'home-limit-window-label';
+      label.textContent = homeLimitWindowLabel(window);
+      const value = document.createElement('span');
+      value.className = 'home-list-value';
+      value.textContent = `${formatPercent(window.remainingPercent)} left`;
+      line.append(label, value);
+      const resetAt = formatReset(window.resetsAt);
+      const resetText = document.createElement('span');
+      resetText.className = 'home-limit-reset';
+      resetText.textContent = resetAt || (window.resetDescription
+        ? t('home.reset', { value: window.resetDescription })
+        : '\u00a0');
+      metric.append(line, resetText);
+      windows.append(metric);
+    }
+    item.append(account, windows);
+    body.append(item);
+  }
+  return module;
+}
+
+function renderHomeModelModule(period) {
+  const { module, body } = homeModuleShell('model', t('home.models'), 'model');
+  const rows = homeOverviewApi.homeModelRows(modelRowsForPeriod(period), period?.totalTokens, 5);
+  if (rows.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'home-module-empty';
+    empty.textContent = t('home.noModels');
+    body.append(empty);
+    return module;
+  }
+  for (const row of rows) {
+    const item = document.createElement('div');
+    item.className = 'home-list-row home-model-row';
+    const mark = document.createElement('span');
+    applyHomeListMark(mark, iconKindFor({ key: row.key || row.name }, 'model'), row.color);
+    const name = document.createElement('span');
+    name.className = 'home-list-name';
+    name.textContent = row.name;
+    const value = document.createElement('span');
+    value.className = 'home-list-value';
+    value.textContent = formatCompact(row.value);
+    const share = document.createElement('span');
+    share.className = 'home-list-aux';
+    share.textContent = formatPercent(row.share * 100);
+    item.append(mark, name, value, share);
+    body.append(item);
+  }
+  return module;
+}
+
+function dailyWithHeatIntensity(daily) {
+  const points = Array.isArray(daily) ? daily : [];
+  if (points.some((point) => Number.isFinite(Number(point?.intensity)))) return points;
+  const metric = points.some((point) => Number(point?.cost || 0) > 0) ? 'cost' : 'tokens';
+  const max = Math.max(1, ...points.map((point) => Number(point?.[metric] || 0)));
+  return points.map((point) => {
+    const ratio = Number(point?.[metric] || 0) / max;
+    const intensity = ratio >= 0.75 ? 4 : ratio >= 0.5 ? 3 : ratio >= 0.25 ? 2 : ratio > 0 ? 1 : 0;
+    return { ...point, intensity };
+  });
+}
+
+function setupHomeActivityScroller(scroller) {
+  let drag = null;
+  const updatePosition = () => {
+    state.homeActivityScrollLeft = scroller.scrollLeft;
+    scroller.classList.toggle('is-scrolled', scroller.scrollLeft > 2);
+  };
+  scroller.addEventListener('scroll', updatePosition);
+  scroller.addEventListener('click', (event) => event.stopPropagation());
+  scroller.addEventListener('wheel', (event) => {
+    if (homeOverviewApi.homeActivityWheelRoute(event) !== 'home-vertical') return;
+    const homePanel = scroller.closest('.home-panel');
+    if (!homePanel) return;
+    const previousTop = homePanel.scrollTop;
+    homePanel.scrollTop += event.deltaY;
+    if (homePanel.scrollTop !== previousTop) event.preventDefault();
+  }, { passive: false });
+  scroller.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || event.pointerType === 'touch') return;
+    drag = { x: event.clientX, left: scroller.scrollLeft };
+    scroller.classList.add('is-dragging');
+    scroller.setPointerCapture?.(event.pointerId);
+  });
+  scroller.addEventListener('pointermove', (event) => {
+    if (!drag) return;
+    scroller.scrollLeft = drag.left - (event.clientX - drag.x);
+  });
+  const endDrag = (event) => {
+    if (!drag) return;
+    drag = null;
+    scroller.classList.remove('is-dragging');
+    if (scroller.hasPointerCapture?.(event.pointerId)) scroller.releasePointerCapture(event.pointerId);
+  };
+  scroller.addEventListener('pointerup', endDrag);
+  scroller.addEventListener('pointercancel', endDrag);
+}
+
+function restoreHomeActivityScroll() {
+  const scroller = els.homePanel?.querySelector('.home-activity-scroll');
+  if (!scroller) return;
+  const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+  const target = state.homeActivityScrollLeft == null ? max : Math.min(max, state.homeActivityScrollLeft);
+  scroller.scrollLeft = target;
+  scroller.classList.toggle('is-scrolled', target > 2);
+}
+
+function renderHomeTrendsModule() {
+  const charts = window.TokenMonitorUsageCharts;
+  const preview = state.stats?.historyPreview || { daily: [] };
+  const history = state.homeHistory || preview;
+  const points = history.daily || [];
+  if (points.length === 0) {
+    const { module, body } = homeModuleShell('trends', t('home.activity'), 'trends');
+    const empty = document.createElement('div');
+    empty.className = 'home-module-empty';
+    empty.textContent = t('home.noHistory');
+    body.append(empty);
+    return module;
+  }
+  const activity = charts.rollingYearHeatmap(dailyWithHeatIntensity(points), {
+    endDate: new Date().toISOString().slice(0, 10),
+    cell: 8,
+    gap: 3
+  });
+  const activeDays = activity.cells.filter((cell) => cell.intensity > 0).length;
+  const { module, body } = homeModuleShell('trends', t('home.activity'), 'trends', t('home.activeDays', { count: activeDays }));
+  const activityScroll = document.createElement('div');
+  activityScroll.className = 'home-activity-scroll';
+  activityScroll.tabIndex = 0;
+  activityScroll.setAttribute('role', 'region');
+  activityScroll.setAttribute('aria-label', t('home.activityScroll'));
+  const activityCanvas = document.createElement('div');
+  activityCanvas.className = 'home-activity-canvas';
+  activityCanvas.innerHTML = charts.heatmapSvg(activity, {
+    monthLabel: (month) => compactMonthLabel(month.label)
+  });
+  activityScroll.append(activityCanvas);
+  setupHomeActivityScroller(activityScroll);
+  const linePoints = charts.clampDaily(points, 45);
+  const summary = homeOverviewApi.homeTrendSummary(linePoints);
+  const trendHead = document.createElement('div');
+  trendHead.className = 'home-trend-head';
+  const trendTitle = document.createElement('span');
+  trendTitle.textContent = t('home.trend');
+  const trendMeta = document.createElement('span');
+  trendMeta.className = 'home-module-meta';
+  trendMeta.textContent = t('home.peakTokens', { value: formatCompact(summary.peak) });
+  trendHead.append(trendTitle, trendMeta);
+  const model = charts.areaLineChart(linePoints, { width: 300, height: 70, padTop: 4, padRight: 3, padBottom: 4, padLeft: 3, metric: 'tokens', curve: true });
+  const plot = document.createElement('div');
+  plot.className = 'home-trend-plot';
+  const chart = document.createElement('div');
+  chart.className = 'home-area-chart';
+  chart.innerHTML = charts.areaLineSvg(model);
+  plot.append(chart);
+  const dates = document.createElement('div');
+  dates.className = 'home-trend-dates';
+  for (const date of summary.dates) {
+    const label = document.createElement('span');
+    label.className = 'home-trend-date';
+    label.textContent = trendShortLabel(date, 'date');
+    dates.append(label);
+  }
+  body.append(activityScroll, trendHead, plot, dates);
+  return module;
+}
+
+function renderHome() {
+  if (!els.homePanel) return;
+  const period = state.stats.periods?.[state.period] || { totalTokens: 0, costUsd: 0, clients: {} };
+  const moduleIds = homeModuleIds();
+  if (moduleIds.includes('trends')) void loadHomeHistory();
+  if (moduleIds.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'home-empty';
+    const title = document.createElement('div');
+    title.className = 'home-empty-title';
+    title.textContent = t('home.emptyTitle');
+    const body = document.createElement('div');
+    body.className = 'home-empty-body';
+    body.textContent = t('home.emptyBody');
+    const action = document.createElement('button');
+    action.type = 'button';
+    action.className = 'home-empty-action';
+    action.textContent = t('home.customize');
+    action.addEventListener('click', openHomeSettings);
+    empty.append(title, body, action);
+    els.homePanel.replaceChildren(empty);
+    return;
+  }
+  const nodes = moduleIds.map((id) => {
+    if (id === 'limits') return renderHomeLimitModule();
+    if (id === 'model') return renderHomeModelModule(period);
+    return renderHomeTrendsModule();
+  });
+  els.homePanel.replaceChildren(...nodes);
+  requestAnimationFrame(restoreHomeActivityScroll);
+}
+
 function render() {
   if (!state.stats) return;
   ensureBreakdownVisible();
+  renderViewSwitcher();
   if (state.openSession && state.breakdown !== 'session') { state.openSession = null; els.sessionDetail.classList.add('hidden'); els.sessionDetail.replaceChildren(); els.sessionDetailHead.classList.add('hidden'); els.sessionDetailHead.replaceChildren(); }
   if (state.openSession) { els.sessionDetail.classList.remove('hidden'); els.sessionDetailHead.classList.remove('hidden'); } else { els.sessionDetail.classList.add('hidden'); els.sessionDetailHead.classList.add('hidden'); }
   const period = state.stats.periods?.[state.period] || { totalTokens: 0, costUsd: 0, clients: {} };
@@ -1596,29 +2140,32 @@ function render() {
   state.currentTotal = nextTotal;
   els.cost.textContent = formatCost(period.costUsd || 0);
   if (!state.refreshBusy && !state.refreshFeedbackTimer) setRefreshButtonState('idle');
-  const devices = state.stats.devices || [];
-  const staleCount = devices.filter((device) => device.stale).length;
-  const tDevice = t('views.device');
-  const deviceText = tDevice && tDevice !== 'Devices'
-    ? `${devices.length} ${tDevice}`
-    : `${devices.length} device${devices.length === 1 ? '' : 's'}`;
-  els.breakdownToggle.textContent = breakdownLabel(deviceText);
-  els.breakdownToggle.removeAttribute('title');
   els.shell.classList.toggle('session-mode', state.breakdown === 'session');
+  els.shell.classList.toggle('home-mode', state.breakdown === 'home');
   if (state.breakdown === 'status') ensureServiceStatusTicker(); else stopServiceStatusTicker();
-  if (state.breakdown === 'limits') {
+  if (state.breakdown === 'home') {
+    els.breakdown.classList.add('hidden');
+    els.serviceStatusPanel?.classList.add('hidden');
+    els.trendsPanel.classList.add('hidden');
+    els.limitsPanel.classList.add('hidden');
+    els.homePanel.classList.remove('hidden');
+    renderHome();
+  } else if (state.breakdown === 'limits') {
+    els.homePanel.classList.add('hidden');
     els.breakdown.classList.add('hidden');
     els.serviceStatusPanel?.classList.add('hidden');
     els.trendsPanel.classList.add('hidden');
     els.limitsPanel.classList.remove('hidden');
     renderLimits();
   } else if (state.breakdown === 'trends') {
+    els.homePanel.classList.add('hidden');
     els.breakdown.classList.add('hidden');
     els.limitsPanel.classList.add('hidden');
     els.serviceStatusPanel?.classList.add('hidden');
     els.trendsPanel.classList.remove('hidden');
     renderTrends();
   } else if (state.breakdown === 'status') {
+    els.homePanel.classList.add('hidden');
     els.breakdown.classList.add('hidden');
     els.limitsPanel.classList.add('hidden');
     els.trendsPanel.classList.add('hidden');
@@ -1630,8 +2177,10 @@ function render() {
     els.limitsPanel.classList.add('hidden');
     els.serviceStatusPanel?.classList.add('hidden');
     els.trendsPanel.classList.add('hidden');
+    els.homePanel.classList.add('hidden');
     els.breakdown.classList.add('hidden');
   } else {
+    els.homePanel.classList.add('hidden');
     els.limitsPanel.classList.add('hidden');
     els.serviceStatusPanel?.classList.add('hidden');
     els.trendsPanel.classList.add('hidden');
@@ -2524,7 +3073,7 @@ function applyInitialBreakdownPreference() {
   initialBreakdownPreferenceApplied = true;
   const next = viewDisplayPreferencesApi.preferredViewId({
     views: VIEW_DISPLAY_OPTIONS,
-    orderValue: state.settings?.viewDisplayOrder,
+    orderValue: effectiveViewDisplayOrderValue(),
     hiddenValue: state.settings?.hiddenViews,
     availableIds: availableBreakdownIds(),
     currentId: state.breakdown,
@@ -2786,7 +3335,8 @@ function createPreferenceOrderHandle({ kind, id, label, count }) {
 function renderViewPreferences() {
   if (!els.viewDisplayList) return;
   const hidden = hiddenViewSet();
-  const views = viewDisplayPreferencesApi.orderedViews(VIEW_DISPLAY_OPTIONS, state.settings?.viewDisplayOrder);
+  const orderValue = effectiveViewDisplayOrderValue();
+  const views = viewDisplayPreferencesApi.orderedViews(VIEW_DISPLAY_OPTIONS, orderValue);
   const hasCustomOrder = viewDisplayPreferencesApi.hasCustomViewDisplayOrder(state.settings?.viewDisplayOrder);
   const hasHiddenViews = hidden.size > 0;
   if (els.resetViewDisplayOrderButton) els.resetViewDisplayOrderButton.disabled = !hasCustomOrder;
@@ -2824,6 +3374,36 @@ function renderViewPreferences() {
     actions.append(visibility, handle);
     row.append(name, actions);
     els.viewDisplayList.appendChild(row);
+    if (id === 'home') {
+      row.classList.add('has-subgroup');
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = `view-subgroup-toggle${state.homeSettingsExpanded ? ' is-expanded' : ''}`;
+      toggle.title = t('settings.views.configureHome', { name: label });
+      toggle.setAttribute('aria-label', toggle.title);
+      toggle.setAttribute('aria-expanded', String(Boolean(state.homeSettingsExpanded)));
+      const toggleIcon = document.createElement('span');
+      toggleIcon.className = 'view-subgroup-icon';
+      toggleIcon.setAttribute('aria-hidden', 'true');
+      toggle.append(toggleIcon);
+      toggle.addEventListener('click', () => {
+        state.homeSettingsExpanded = !state.homeSettingsExpanded;
+        toggle.classList.toggle('is-expanded', state.homeSettingsExpanded);
+        toggle.setAttribute('aria-expanded', String(Boolean(state.homeSettingsExpanded)));
+        const container = document.getElementById('homeSettingsContainer');
+        if (container) container.classList.toggle('hidden', !state.homeSettingsExpanded);
+      });
+      actions.insertBefore(toggle, visibility);
+
+      const listContainer = document.createElement('div');
+      listContainer.id = 'homeSettingsContainer';
+      listContainer.className = `accordion-animated-container${state.homeSettingsExpanded ? '' : ' hidden'}`;
+      const inner = document.createElement('div');
+      inner.className = 'accordion-animation-inner';
+      inner.appendChild(renderHomeSettingsList());
+      listContainer.appendChild(inner);
+      els.viewDisplayList.appendChild(listContainer);
+    }
     if (id === 'trends') {
       row.classList.add('has-subgroup');
       const toggle = document.createElement('button');
@@ -2885,6 +3465,17 @@ function renderViewPreferences() {
       els.viewDisplayList.appendChild(listContainer);
     }
   }
+}
+
+function renderHomeSettingsList() {
+  const wrap = document.createElement('div');
+  wrap.id = 'homeSettingsList';
+  wrap.className = 'home-settings-list';
+  const note = document.createElement('p');
+  note.className = 'settings-note home-settings-note';
+  note.textContent = t('settings.views.homeSettingsNote');
+  wrap.append(note);
+  return wrap;
 }
 
 function renderTrendSettingsList() {
@@ -3218,13 +3809,14 @@ async function onClientDisplayReorder(clientId, targetIndex) {
 }
 
 async function onViewDisplayMove(viewId, direction) {
-  const next = viewDisplayPreferencesApi.moveViewDisplayOrder(state.settings?.viewDisplayOrder, VIEW_DISPLAY_OPTIONS, viewId, direction);
+  const next = viewDisplayPreferencesApi.moveViewDisplayOrder(effectiveViewDisplayOrderValue(), VIEW_DISPLAY_OPTIONS, viewId, direction);
   await saveSettings({ viewDisplayOrder: next });
 }
 
 async function onViewDisplayReorder(viewId, targetIndex) {
-  const current = viewDisplayPreferencesApi.normalizeViewDisplayOrder(state.settings?.viewDisplayOrder, VIEW_DISPLAY_OPTIONS).join(',');
-  const next = viewDisplayPreferencesApi.reorderViewDisplayOrder(state.settings?.viewDisplayOrder, VIEW_DISPLAY_OPTIONS, viewId, targetIndex);
+  const orderValue = effectiveViewDisplayOrderValue();
+  const current = viewDisplayPreferencesApi.normalizeViewDisplayOrder(orderValue, VIEW_DISPLAY_OPTIONS).join(',');
+  const next = viewDisplayPreferencesApi.reorderViewDisplayOrder(orderValue, VIEW_DISPLAY_OPTIONS, viewId, targetIndex);
   if (next === current) return;
   await saveSettings({ viewDisplayOrder: next });
 }
@@ -3286,7 +3878,7 @@ async function onPreferenceOrderCommit(kind, order, id) {
     return;
   }
   if (kind === 'view') {
-    const current = viewDisplayPreferencesApi.normalizeViewDisplayOrder(state.settings?.viewDisplayOrder, VIEW_DISPLAY_OPTIONS).join(',');
+    const current = viewDisplayPreferencesApi.normalizeViewDisplayOrder(effectiveViewDisplayOrderValue(), VIEW_DISPLAY_OPTIONS).join(',');
     if (value !== current) await saveSettings({ viewDisplayOrder: value });
     return;
   }
@@ -3373,6 +3965,16 @@ if (typeof ResizeObserver === 'function') {
   if (tb) new ResizeObserver(updateTitleFit).observe(tb);
 }
 
+els.viewSwitcher?.addEventListener('pointerenter', clearViewSwitcherHoverClose);
+els.viewSwitcher?.addEventListener('pointerleave', scheduleViewSwitcherHoverClose);
+
+window.addEventListener('blur', () => {
+  clearViewSwitcherLongPress();
+  clearViewSwitcherHoverClose();
+  viewSwitcherLongPressTriggered = false;
+  if (state.viewSwitcherOpen) setViewSwitcherOpen(false);
+});
+
 async function init() {
   try { state.appInfo = await window.tokenMonitor.getAppInfo?.(); } catch (_) {}
   state.settings = await window.tokenMonitor.getSettings();
@@ -3441,11 +4043,8 @@ els.breakdown.addEventListener('click', (event) => {
 els.pinButton.addEventListener('click', () => {
   saveSettings({ windowBehavior: nextWindowBehavior(currentWindowBehavior()) });
 });
-els.breakdownToggle.addEventListener('click', () => {
-  setBreakdown(nextBreakdown(state.breakdown));
-  render();
-});
 els.settingsButton.addEventListener('click', () => {
+  if (state.viewSwitcherOpen) setViewSwitcherOpen(false);
   els.settingsPanel.classList.toggle('hidden');
   const settingsOpen = !els.settingsPanel.classList.contains('hidden');
   if (!settingsOpen) stopWindowShortcutRecording();

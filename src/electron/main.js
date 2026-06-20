@@ -108,7 +108,7 @@ const HUB_MODE_VALUES = new Set(['local', 'client', 'host']);
 const LANGUAGE_VALUES = new Set(['auto', 'en', 'zh-TW', 'zh-CN']);
 const HUB_DEFAULT_PORT = 17321;
 const DEFAULT_CLIENT_LIST = DEFAULT_CLIENTS.split(',').map((id) => ({ id }));
-const DEFAULT_VIEW_LIST = ['tool', 'status', 'device', 'model', 'session', 'limits', 'trends'].map((id) => ({ id }));
+const DEFAULT_VIEW_LIST = ['home', 'tool', 'status', 'device', 'model', 'session', 'limits', 'trends'].map((id) => ({ id }));
 
 let mainWindow = null;
 let dashboardWindow = null;

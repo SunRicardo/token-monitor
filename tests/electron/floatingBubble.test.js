@@ -83,8 +83,12 @@ test('floatingBubbleWindowChrome removes Windows native frame only for collapsed
 });
 
 test('normalizeInitialRendererViewState restores a persisted last-used view', () => {
-  // All seven main views (incl. trends) must round-trip so a cold start can
+  // All main views (incl. Home and Trends) must round-trip so a cold start can
   // reopen exactly where the user left off.
+  assert.deepEqual(
+    normalizeInitialRendererViewState({ period: 'today', breakdown: 'home' }),
+    { period: 'today', breakdown: 'home' }
+  );
   assert.deepEqual(
     normalizeInitialRendererViewState({ period: 'month', breakdown: 'trends' }),
     { period: 'month', breakdown: 'trends' }

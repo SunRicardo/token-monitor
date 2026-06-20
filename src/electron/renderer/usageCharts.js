@@ -182,6 +182,14 @@
     };
   }
 
+  function rollingYearHeatmap(daily, options) {
+    const o = Object.assign({ endDate: new Date().toISOString().slice(0, 10), cell: 8, gap: 3 }, options || {});
+    const endDate = String(o.endDate).slice(0, 10);
+    const end = new Date(`${endDate}T00:00:00Z`);
+    const startDate = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - 11, 1)).toISOString().slice(0, 10);
+    return contribHeatmap(daily, { cell: o.cell, gap: o.gap, startDate, endDate });
+  }
+
   const STAT_CARDS = [
     { key: 'totalTokens', kind: 'tokens' },
     { key: 'totalCost', kind: 'cost' },
@@ -215,6 +223,66 @@
       return { value, x: i * slot + (slot - barWidth) / 2, width: barWidth, y: o.height - height, height, last: i === arr.length - 1 };
     });
     return { width: o.width, height: o.height, maxVal, bars };
+  }
+
+  function areaLineChart(daily, options) {
+    const o = Object.assign(
+      { width: 300, height: 120, padTop: 6, padRight: 6, padBottom: 8, padLeft: 6, metric: 'tokens', labelKey: 'date', curve: false },
+      options || {}
+    );
+    const arr = (Array.isArray(daily) ? daily : []).map((d) => ({
+      label: d && d[o.labelKey],
+      value: n(d && d[o.metric])
+    }));
+    const maxVal = Math.max(1, ...arr.map((p) => p.value));
+    const innerW = Math.max(0, o.width - o.padLeft - o.padRight);
+    const innerH = Math.max(0, o.height - o.padTop - o.padBottom);
+    const xOf = (i) => o.padLeft + (arr.length <= 1 ? innerW / 2 : innerW * i / (arr.length - 1));
+    const yOf = (value) => o.padTop + innerH - innerH * value / maxVal;
+    const points = arr.map((p, i) => ({
+      label: p.label,
+      value: p.value,
+      x: xOf(i),
+      y: yOf(p.value)
+    }));
+    const baseline = o.padTop + innerH;
+    const linePath = o.curve ? smoothLinePath(points) : straightLinePath(points);
+    const areaPath = points.length
+      ? `${linePath} L${svgRound(points[points.length - 1].x)},${svgRound(baseline)} L${svgRound(points[0].x)},${svgRound(baseline)} Z`
+      : '';
+    return {
+      width: o.width,
+      height: o.height,
+      plot: { x: o.padLeft, y: o.padTop, w: innerW, h: innerH },
+      maxVal,
+      points,
+      linePath,
+      areaPath
+    };
+  }
+
+  function straightLinePath(points) {
+    return points.length
+      ? points.map((p, i) => `${i === 0 ? 'M' : 'L'}${svgRound(p.x)},${svgRound(p.y)}`).join(' ')
+      : '';
+  }
+
+  function smoothLinePath(points) {
+    if (!points.length) return '';
+    if (points.length < 3) return straightLinePath(points);
+    let path = `M${svgRound(points[0].x)},${svgRound(points[0].y)}`;
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = points[Math.max(0, i - 1)];
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const p3 = points[Math.min(points.length - 1, i + 2)];
+      const c1x = p1.x + (p2.x - p0.x) / 6;
+      const c1y = p1.y + (p2.y - p0.y) / 6;
+      const c2x = p2.x - (p3.x - p1.x) / 6;
+      const c2y = p2.y - (p3.y - p1.y) / 6;
+      path += ` C${svgRound(c1x)},${svgRound(c1y)} ${svgRound(c2x)},${svgRound(c2y)} ${svgRound(p2.x)},${svgRound(p2.y)}`;
+    }
+    return path;
   }
 
   function selectPreviewSeries(preview, period) {
@@ -296,6 +364,12 @@
       return `<rect x="${svgRound(b.x)}" y="${svgRound(b.y)}" width="${svgRound(b.width)}" height="${svgRound(Math.max(0, b.height))}" rx="${o.radius}" class="spark-bar${b.last ? ' spark-bar--last' : ''}">${tip}</rect>`;
     }).join('');
     return `<svg class="sparkline" viewBox="0 0 ${model.width} ${model.height}" preserveAspectRatio="none" width="100%" height="${model.height}" aria-hidden="true">${rects}</svg>`;
+  }
+
+  function areaLineSvg(model) {
+    const fill = model.areaPath ? `<path class="area-line-fill" d="${model.areaPath}"></path>` : '';
+    const line = model.linePath ? `<path class="area-line-stroke" d="${model.linePath}"></path>` : '';
+    return `<svg class="area-line" viewBox="0 0 ${model.width} ${model.height}" preserveAspectRatio="none" width="100%" height="100%" aria-hidden="true">${fill}${line}</svg>`;
   }
 
   function axisText(label, x, y) {
@@ -387,7 +461,8 @@
   }
 
   return {
-    weekStartKey, dailyBarsChart, candleChart, contribHeatmap, statsCards, sparklinePreview,
+    weekStartKey, dailyBarsChart, candleChart, contribHeatmap, rollingYearHeatmap, statsCards, sparklinePreview,
+    areaLineChart, areaLineSvg,
     selectPreviewSeries, patchTodayBar, sparklineSvg,
     clientColors, fallbackModelColors, modelVendorFor, modelColor, clampDaily,
     barsChartSvg, candleChartSvg, heatmapSvg, statsCardsHtml

@@ -145,3 +145,11 @@ test('status refresh interval labels exist in Chinese', () => {
   assert.equal(translate('zh-TW', 'serviceStatus.refreshManual'), '手動');
   assert.equal(translate('zh-TW', 'serviceStatus.refreshMinutes', { n: 5 }), '5 分鐘');
 });
+
+test('view switcher actions are localized', () => {
+  assert.equal(translate('en', 'views.switcher.next', { view: 'Models' }), 'Next: Models');
+  assert.equal(translate('zh-TW', 'views.switcher.next', { view: '模型' }), '下一個：模型');
+  assert.equal(translate('zh-TW', 'views.switcher.choose'), '選擇視圖');
+  assert.equal(translate('zh-CN', 'views.switcher.next', { view: '模型' }), '下一个：模型');
+  assert.equal(translate('zh-CN', 'views.switcher.choose'), '选择视图');
+});

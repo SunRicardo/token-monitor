@@ -24,6 +24,12 @@ function functionBody(source, name, nextName) {
   return source.slice(start, end);
 }
 
+function cssRule(source, selector) {
+  const match = new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]+)\\}`).exec(source);
+  assert.ok(match, `${selector} rule should exist`);
+  return match[1];
+}
+
 test('renderer includes a dedicated service status panel and Status view option', () => {
   const html = readRendererFile('index.html');
   const app = readRendererFile('app.js');
@@ -31,7 +37,7 @@ test('renderer includes a dedicated service status panel and Status view option'
   assert.match(html, /<section id="serviceStatusPanel" class="service-status-panel hidden"><\/section>/);
   assert.match(html, /<script src="serviceStatusPresentation\.js"><\/script>/);
   assert.match(app, /\{ id: 'status', labelKey: 'views\.status' \}/);
-  assert.match(app, /viewBreakdownValues = new Set\(\[\.\.\.baseBreakdownOrder, 'status', 'limits', 'trends'\]\)/);
+  assert.match(app, /viewBreakdownValues = new Set\(\['home', \.\.\.baseBreakdownOrder, 'status', 'limits', 'trends'\]\)/);
   // Placeholders cover every provider so the rows render before the first fetch.
   assert.match(app, /label: 'Cursor'/);
   assert.match(app, /label: 'DeepSeek'/);
@@ -150,4 +156,78 @@ test('status rows can show provider icons gated by showToolIcons', () => {
   const app = readRendererFile('app.js');
   assert.match(app, /function serviceStatusIconId/);
   assert.match(app, /showToolIcons/);
+});
+
+test('Home overview list markers use the shared tool icon path when enabled', () => {
+  const app = readRendererFile('app.js');
+  assert.match(app, /function applyHomeListMark/);
+  assert.match(app, /iconKindFor\(\{ key: row\.providerId \|\| row\.key \}, 'limits'\)/);
+  assert.match(app, /iconKindFor\(\{ key: row\.key \|\| row\.name \}, 'model'\)/);
+  assert.match(app, /home-list-mark row-icon/);
+});
+
+test('Home activity heatmap lets vertical wheel gestures scroll the Home panel', () => {
+  const app = readRendererFile('app.js');
+  const setupBody = functionBody(app, 'setupHomeActivityScroller', 'restoreHomeActivityScroll');
+  assert.match(setupBody, /homeActivityWheelRoute\(event\)/);
+  assert.match(setupBody, /closest\('\.home-panel'\)/);
+  assert.match(setupBody, /homePanel\.scrollTop \+= event\.deltaY/);
+  assert.doesNotMatch(setupBody, /scrollLeft \+= event\.deltaY/);
+});
+
+test('Home model rows align icon spacing with the limit account rows', () => {
+  const css = readRendererFile('styles.css');
+  assert.match(cssRule(css, '.home-limit-account-head'), /gap:\s*8px/);
+  assert.match(cssRule(css, '.home-model-row'), /column-gap:\s*8px/);
+});
+
+test('Home module jump icons align optically with their titles', () => {
+  const css = readRendererFile('styles.css');
+  assert.match(cssRule(css, '.home-module-head'), /align-items:\s*center/);
+  assert.match(cssRule(css, '.home-module-jump'), /margin-top:\s*0/);
+  assert.match(cssRule(css, '.home-module-jump'), /transform:\s*translateY\(-1px\)/);
+});
+
+test('Home limit percentages use the compact Limits view typography', () => {
+  const css = readRendererFile('styles.css');
+  assert.match(cssRule(css, '.home-limit-window .home-list-value'), /font-size:\s*10px/);
+  assert.match(cssRule(css, '.home-limit-window .home-list-value'), /line-height:\s*1\.1/);
+});
+
+test('view switcher preserves click-to-cycle and direct selection without crowding settings', () => {
+  const html = readRendererFile('index.html');
+  const app = readRendererFile('app.js');
+  const css = readRendererFile('styles.css');
+  assert.match(html, /id="viewSwitcher" class="view-switcher"/);
+  assert.doesNotMatch(html, /id="viewDock"/);
+  assert.match(app, /function nextBreakdown/);
+  assert.match(app, /function renderViewSwitcher/);
+  assert.match(app, /view-switcher-current/);
+  assert.match(app, /view-switcher-disclosure/);
+  assert.match(app, /view-switcher-menu-item/);
+  assert.match(app, /contextmenu/);
+  assert.match(app, /event\.key === 'Escape'/);
+  assert.match(app, /disclosure\.addEventListener\('pointerenter'/);
+  assert.match(app, /event\.pointerType !== 'mouse'/);
+  assert.match(app, /event\.detail > 0 && state\.viewSwitcherOpen/);
+  assert.match(app, /els\.viewSwitcher\?\.addEventListener\('pointerleave'/);
+  assert.doesNotMatch(app, /function viewDockIsCompact/);
+  assert.doesNotMatch(app, /VIEW_DOCK_METRICS/);
+  assert.match(cssRule(css, '.view-switcher'), /flex:\s*0 1 auto/);
+  assert.match(cssRule(css, '.view-switcher-current'), /min-width:\s*0/);
+  assert.match(cssRule(css, '.view-switcher-current'), /color:\s*var\(--muted\)/);
+  assert.doesNotMatch(cssRule(css, '.view-switcher-current'), /color:\s*var\(--green\)/);
+  assert.match(cssRule(css, '.view-switcher-disclosure'), /flex:\s*0 0 24px/);
+  assert.match(cssRule(css, '.view-switcher-menu'), /position:\s*absolute/);
+  assert.match(cssRule(css, '.view-switcher-menu'), /width:\s*100%/);
+  assert.doesNotMatch(cssRule(css, '.view-switcher-menu'), /width:\s*154px/);
+  assert.match(cssRule(css, '.view-switcher-menu'), /background:[\s\S]*var\(--glass-rgb\)/);
+  assert.doesNotMatch(cssRule(css, '.view-switcher-menu'), /var\(--panel-rgb\)/);
+  assert.match(cssRule(css, '.view-switcher-menu-item'), /grid-template-columns:\s*16px minmax\(0, 1fr\)/);
+  assert.doesNotMatch(css, /\.view-switcher-menu-item\.is-current::after/);
+  assert.match(cssRule(css, '#footerActionSlot .icon-button'), /flex:\s*0 0 34px/);
+  assert.match(cssRule(css, '#footerActionSlot .refresh-button'), /flex:\s*0 0 34px/);
+  assert.doesNotMatch(css, /@media \(max-width: 280px\)[\s\S]*\.view-switcher-current > \.view-switcher-icon/);
+  assert.match(cssRule(css, '.view-switcher-icon'), /flex:\s*0 0 auto/);
+  assert.doesNotMatch(css, /\.view-dock/);
 });

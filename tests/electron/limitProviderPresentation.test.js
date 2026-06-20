@@ -217,7 +217,7 @@ test('single local synced provider tags identify local provenance without main p
 test('capability tags are settings-only and do not alter the main Limits panel', () => {
   const app = readRendererFile('app.js');
   const styles = readRendererFile('styles.css');
-  const renderLimits = functionBody(app, 'renderLimits', 'nextBreakdown');
+  const renderLimits = functionBody(app, 'renderLimits', 'serviceStatusLabel');
   const renderHead = functionBody(app, 'renderLimitProviderHead', 'renderProviderWindows');
   const renderMeta = functionBody(app, 'limitProviderMeta', 'limitProviderPlan');
   const renderSettings = functionBody(app, 'renderLimitProviderCheckboxes', 'onToolTrackingToggle');
@@ -235,7 +235,7 @@ test('capability tags are settings-only and do not alter the main Limits panel',
 test('Codex limits render as one provider group with account subrows', () => {
   const app = readRendererFile('app.js');
   const styles = readRendererFile('styles.css');
-  const renderLimits = functionBody(app, 'renderLimits', 'nextBreakdown');
+  const renderLimits = functionBody(app, 'renderLimits', 'serviceStatusLabel');
 
   assert.match(renderLimits, /providersByLimitProviderId\(state\.stats\?\.limits\?\.providers \|\| \[\]\)/);
   assert.match(renderLimits, /renderCodexAccountGroup\(/);

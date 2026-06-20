@@ -25,6 +25,20 @@ const views = [
   { id: 'limits', label: 'Limits' }
 ];
 
+function extractViewIds(source, constantName) {
+  const mappedMatch = source.match(new RegExp(`const ${constantName} = \\[([^\\]]+)\\]\\.map`));
+  if (mappedMatch) {
+    return [...mappedMatch[1].matchAll(/'([^']+)'/g)].map((match) => match[1]);
+  }
+
+  const literalMatch = source.match(new RegExp(`const ${constantName} = \\[([\\s\\S]*?)\\];`));
+  if (literalMatch) {
+    return [...literalMatch[1].matchAll(/id:\s*'([^']+)'/g)].map((match) => match[1]);
+  }
+
+  assert.fail(`Could not find ${constantName}`);
+}
+
 test('defaultViewDisplayPreferences hides the Status view by default', () => {
   assert.deepEqual(defaultViewDisplayPreferences(), {
     viewDisplayOrder: '',
@@ -36,6 +50,16 @@ test('main default settings use the default view display preferences', () => {
   const mainSource = fs.readFileSync(path.join(__dirname, '../../src/electron/main.js'), 'utf8');
   assert.match(mainSource, /defaultViewDisplayPreferences/);
   assert.match(mainSource, /hiddenViews:\s*defaultViewDisplayPreferences\(\)\.hiddenViews/);
+});
+
+test('main and renderer keep their view display options in sync', () => {
+  const mainSource = fs.readFileSync(path.join(__dirname, '../../src/electron/main.js'), 'utf8');
+  const rendererSource = fs.readFileSync(path.join(__dirname, '../../src/electron/renderer/app.js'), 'utf8');
+
+  assert.deepEqual(
+    extractViewIds(mainSource, 'DEFAULT_VIEW_LIST'),
+    extractViewIds(rendererSource, 'VIEW_DISPLAY_OPTIONS')
+  );
 });
 
 test('normalizeViewDisplayOrder drops invalid entries and appends missing views', () => {

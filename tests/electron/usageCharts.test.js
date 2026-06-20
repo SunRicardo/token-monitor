@@ -4,7 +4,8 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 
 const {
-  weekStartKey, dailyBarsChart, candleChart, contribHeatmap, statsCards, sparklinePreview
+  weekStartKey, dailyBarsChart, candleChart, contribHeatmap, statsCards, sparklinePreview,
+  areaLineChart, areaLineSvg, rollingYearHeatmap
 } = require('../../src/electron/renderer/usageCharts');
 
 test('weekStartKey returns the Monday of the given date (UTC)', () => {
@@ -157,6 +158,54 @@ test('sparklinePreview tolerates empty input', () => {
   const s = sparklinePreview([], {});
   assert.deepEqual(s.bars, []);
   assert.equal(s.maxVal, 1);
+});
+
+test('areaLineChart maps daily values into bounded points and paths', () => {
+  const model = areaLineChart([
+    { date: '2026-06-01', tokens: 10 },
+    { date: '2026-06-02', tokens: 20 },
+    { date: '2026-06-03', tokens: 0 }
+  ], { width: 120, height: 60, padTop: 0, padRight: 0, padBottom: 0, padLeft: 0, metric: 'tokens' });
+
+  assert.equal(model.maxVal, 20);
+  assert.equal(model.points.length, 3);
+  assert.deepEqual(model.points.map((p) => p.value), [10, 20, 0]);
+  assert.ok(model.linePath.startsWith('M'));
+  assert.ok(model.areaPath.endsWith('Z'));
+  assert.ok(model.points.every((p) => p.y >= 0 && p.y <= 60));
+});
+
+test('areaLineSvg renders line and filled area paths', () => {
+  const model = areaLineChart([{ date: '2026-06-01', tokens: 5 }], { width: 80, height: 40 });
+  const svg = areaLineSvg(model);
+  assert.match(svg, /^<svg /);
+  assert.match(svg, /viewBox="0 0 80 40"/);
+  assert.match(svg, /class="area-line-fill"/);
+  assert.match(svg, /class="area-line-stroke"/);
+});
+
+test('areaLineChart can smooth a compact trend path', () => {
+  const model = areaLineChart([
+    { date: '2026-06-01', tokens: 10 },
+    { date: '2026-06-02', tokens: 30 },
+    { date: '2026-06-03', tokens: 15 }
+  ], { width: 120, height: 60, curve: true });
+
+  assert.match(model.linePath, / C/);
+  assert.match(model.areaPath, / C/);
+});
+
+test('rollingYearHeatmap keeps a full 12-month, seven-row grid at normal cell size', () => {
+  const model = rollingYearHeatmap([
+    { date: '2025-07-01', intensity: 1 },
+    { date: '2026-06-20', intensity: 4 }
+  ], { endDate: '2026-06-20', cell: 8, gap: 3 });
+
+  assert.equal(model.height, 74);
+  assert.ok(model.weeks >= 51 && model.weeks <= 54);
+  assert.ok(model.width > 500);
+  assert.equal(model.monthLabels.length, 12);
+  assert.ok(model.cells.every((cell) => cell.row >= 0 && cell.row < 7));
 });
 
 const { selectPreviewSeries, patchTodayBar, sparklineSvg } = require('../../src/electron/renderer/usageCharts');
