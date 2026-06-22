@@ -5,14 +5,14 @@
 ## What's changed
 
 ### Added
-- Settings -> Collection -> Custom model pricing now lets you override a model's USD-per-1M-token rates when the detected price is wrong.
-- Custom pricing can pre-fill the current detected model price and writes tokscale-compatible `custom-pricing.json` overrides for collection.
-
-### Improved
-- Multi-device Sync now shows clearer Hub stream status and offline reasons, including wrong secret, refused connection, timeout, DNS, unreachable network, and reconnecting states.
+- New **Home** view: a default overview that combines a limits alert, top models, a usage trend, and a 12-month activity heatmap on one screen.
+- A scrollable view switcher replaces the single cycle button, so you can jump straight to any view.
+- **Windows:** usage from running WSL distributions is now scanned and merged into your totals automatically (on by default).
+- **OpenCode multiple accounts:** add several OpenCode accounts as named profiles, each with its own rate-limit tracking. (#24)
+- Usage tracking for three more tools: **Pi, Zed, and Kilo Code**. (#25)
 
 ### Fixed
-- Host hub mode now serves this device's own usage in-process instead of relying on a loopback HTTP connection, so local host-mode stats keep working when loopback is blocked or unavailable.
+- OpenCode session cookies are no longer included in the renderer settings payload.
 
 ## Which file should I download?
 
@@ -47,14 +47,14 @@ open-source: https://github.com/junhoyeo/tokscale
 ## 更新内容
 
 ### 新增
-- 设置 -> 采集 -> 自定义模型单价 现在可以覆盖某个模型的 USD / 1M tokens 单价，用于修正自动检测价格不准确的情况。
-- 自定义单价可自动带入当前检测到的模型价格，并写入兼容 tokscale 的 `custom-pricing.json` 覆盖配置。
-
-### 改进
-- 多设备同步现在会显示更清楚的 Hub 串流状态和离线原因，包括密钥错误、连接被拒、连接超时、DNS、网络不可达和正在重连等状态。
+- 全新 **主页** 视图：将额度提醒、热门模型、用量趋势和近 12 个月的活动热力图整合到一个概览页面，并作为默认首页。
+- 用可横向滚动的视图切换器取代原本的单一循环按钮，可直接跳转到任意视图。
+- **Windows：** 现在会自动扫描正在运行的 WSL 发行版用量并合并进总计（默认开启）。
+- **OpenCode 多账号：** 可将多个 OpenCode 账号保存为命名设定档，每个账号都有独立的额度追踪。(#24)
+- 新增三个工具的用量追踪：**Pi、Zed 和 Kilo Code**。(#25)
 
 ### 修复
-- Host Hub 模式现在会在进程内提供本机用量，不再依赖回环 HTTP 连接；当 loopback 被阻止或不可用时，本机 host-mode 统计仍可正常工作。
+- OpenCode 的会话 cookie 不再出现在渲染层的设置数据中。
 
 ## 应该下载哪个文件？
 
