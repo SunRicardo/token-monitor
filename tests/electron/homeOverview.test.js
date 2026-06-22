@@ -1,14 +1,44 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 
 const {
+  homeActivityHeatmapLayout,
   homeLimitAccounts,
   homeModelRows,
   homeActivityWheelRoute,
   homeTrendSummary
 } = require('../../src/electron/renderer/homeOverview');
+
+test('Home activity heatmap is a scaled copy of the dashboard heatmap', () => {
+  assert.deepEqual(homeActivityHeatmapLayout(), { cell: 9, gap: 3, radius: 2 });
+
+  const rendererDir = path.join(__dirname, '../../src/electron/renderer');
+  const css = fs.readFileSync(path.join(rendererDir, 'styles.css'), 'utf8');
+  const dashboardCss = fs.readFileSync(path.join(rendererDir, 'dashboard.css'), 'utf8');
+  const rule = (source, selector) => {
+    const start = source.indexOf(`${selector} {`);
+    assert.notEqual(start, -1, `missing CSS rule: ${selector}`);
+    return source.slice(start, source.indexOf('}', start) + 1);
+  };
+  const fill = (source, selector) => /fill:\s*([^;]+);/.exec(rule(source, selector))?.[1];
+  const levels = [
+    ['.home-activity-canvas .heat', '.heat.lvl-0'],
+    ['.home-activity-canvas .heat.lvl-1', '.heat.lvl-1'],
+    ['.home-activity-canvas .heat.lvl-2', '.heat.lvl-2'],
+    ['.home-activity-canvas .heat.lvl-3', '.heat.lvl-3'],
+    ['.home-activity-canvas .heat.lvl-4', '.heat.lvl-4']
+  ];
+
+  for (const [homeSelector, dashboardSelector] of levels) {
+    assert.equal(fill(css, homeSelector), fill(dashboardCss, dashboardSelector));
+  }
+  assert.doesNotMatch(rule(css, '.home-activity-scroll'), /padding-block/);
+  assert.match(rule(css, '.home-activity-canvas .heat-month'), /fill:\s*rgba\(var\(--line-rgb\), 0\.5\)/);
+});
 
 test('homeLimitAccounts keeps account windows together and sorts lowest remaining first', () => {
   const rows = homeLimitAccounts([

@@ -2055,10 +2055,11 @@ function renderHomeTrendsModule() {
     body.append(empty);
     return module;
   }
+  const activityLayout = homeOverviewApi.homeActivityHeatmapLayout();
   const activity = charts.rollingYearHeatmap(dailyWithHeatIntensity(points), {
     endDate: new Date().toISOString().slice(0, 10),
-    cell: 8,
-    gap: 3
+    cell: activityLayout.cell,
+    gap: activityLayout.gap
   });
   const activeDays = activity.cells.filter((cell) => cell.intensity > 0).length;
   const { module, body } = homeModuleShell('trends', t('home.activity'), 'trends', t('home.activeDays', { count: activeDays }));
@@ -2070,7 +2071,8 @@ function renderHomeTrendsModule() {
   const activityCanvas = document.createElement('div');
   activityCanvas.className = 'home-activity-canvas';
   activityCanvas.innerHTML = charts.heatmapSvg(activity, {
-    monthLabel: (month) => compactMonthLabel(month.label)
+    monthLabel: (month) => compactMonthLabel(month.label),
+    radius: activityLayout.radius
   });
   activityScroll.append(activityCanvas);
   setupHomeActivityScroller(activityScroll);

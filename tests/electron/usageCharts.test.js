@@ -5,7 +5,7 @@ const test = require('node:test');
 
 const {
   weekStartKey, dailyBarsChart, candleChart, contribHeatmap, statsCards, sparklinePreview,
-  areaLineChart, areaLineSvg, rollingYearHeatmap
+  areaLineChart, areaLineSvg, heatmapSvg, rollingYearHeatmap
 } = require('../../src/electron/renderer/usageCharts');
 
 test('weekStartKey returns the Monday of the given date (UTC)', () => {
@@ -122,6 +122,19 @@ test('contribHeatmap tolerates empty input', () => {
   const h = contribHeatmap([], {});
   assert.deepEqual(h.cells, []);
   assert.equal(h.weeks, 0);
+});
+
+test('heatmapSvg scales its corner radius for compact variants', () => {
+  const svg = heatmapSvg({
+    width: 9,
+    height: 9,
+    cell: 9,
+    gap: 3,
+    cells: [{ date: '2026-06-22', intensity: 4, x: 0, y: 0, size: 9 }],
+    monthLabels: []
+  }, { radius: 2 });
+
+  assert.match(svg, /rx="2"/);
 });
 
 test('statsCards returns ordered descriptors with kinds and coerced values', () => {

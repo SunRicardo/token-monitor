@@ -1792,24 +1792,25 @@ body.floating-bubble-collapsed-right .floating-bubble-tab {
   display: block;
 }
 .home-activity-canvas .heat {
-  fill: rgba(var(--accent-rgb), 0.08);
+  fill: rgba(var(--overlay-rgb), 0.03);
+  stroke: none;
+  stroke-width: 0;
 }
 .home-activity-canvas .heat.lvl-1 {
-  fill: rgba(115, 189, 245, 0.18);
+  fill: rgba(90, 170, 255, 0.18);
 }
 .home-activity-canvas .heat.lvl-2 {
-  fill: rgba(115, 189, 245, 0.3);
+  fill: rgba(120, 190, 255, 0.45);
 }
 .home-activity-canvas .heat.lvl-3 {
-  fill: rgba(81, 166, 238, 0.48);
+  fill: rgba(150, 210, 255, 0.8);
 }
 .home-activity-canvas .heat.lvl-4 {
-  fill: rgba(34, 141, 235, 0.72);
+  fill: rgba(180, 230, 255, 1);
 }
 .home-activity-canvas .heat-month {
-  fill: var(--muted);
+  fill: rgba(var(--line-rgb), 0.5);
   font-size: 9px;
-  opacity: 0.74;
 }
 .home-module-empty {
   display: flex;

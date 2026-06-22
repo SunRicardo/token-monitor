@@ -97,6 +97,10 @@
     return { peak, dates };
   }
 
+  function homeActivityHeatmapLayout() {
+    return { cell: 9, gap: 3, radius: 2 };
+  }
+
   function homeActivityWheelRoute(event) {
     if (event?.shiftKey) return 'activity-horizontal';
     const deltaX = Math.abs(Number(event?.deltaX || 0));
@@ -104,5 +108,13 @@
     return deltaY > deltaX ? 'home-vertical' : 'activity-horizontal';
   }
 
-  return { homeLimitAccounts, homeModelRows, homeTrendSummary, homeActivityWheelRoute, remainingPercent, usedPercent };
+  return {
+    homeLimitAccounts,
+    homeModelRows,
+    homeTrendSummary,
+    homeActivityHeatmapLayout,
+    homeActivityWheelRoute,
+    remainingPercent,
+    usedPercent
+  };
 });
