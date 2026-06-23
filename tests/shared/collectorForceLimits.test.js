@@ -7,6 +7,12 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
+// Isolate the shared data dir so startCollector's persisted collector-anchor.json
+// does not write the real user data dir during the suite.
+const sharedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-force-limits-'));
+process.env.TOKEN_MONITOR_SHARED_DIR = sharedDir;
+process.on('exit', () => { try { fs.rmSync(sharedDir, { recursive: true, force: true }); } catch (_) {} });
+
 function fakeTokscaleSpawn() {
   return () => {
     const child = new EventEmitter();

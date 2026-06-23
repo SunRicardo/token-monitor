@@ -296,6 +296,67 @@ test('missing fullScanAt forces a full scan on first interval tick', async () =>
   }
 });
 
+test('unparseable fullScanAt forces a full scan on first interval tick', async () => {
+  const tmpShared = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-bad-ts-'));
+  const dateKey = localTodayKey();
+
+  fs.mkdirSync(path.join(tmpShared), { recursive: true });
+  // Valid anchor, but fullScanAt is not a parseable date: Date.parse -> NaN,
+  // Number.isFinite(NaN) is false, so lastFullScanAt stays 0 -> full scan.
+  const anchorData = {
+    dateKey,
+    today: mkPeriod(), month: mkPeriod(), allTime: mkPeriod(),
+    wslBundle: null,
+    configFingerprint: 'claude|2024-01-01',
+    fullScanAt: 'not-a-timestamp'
+  };
+  fs.writeFileSync(path.join(tmpShared, 'collector-anchor.json'), JSON.stringify(anchorData));
+
+  const childProcess = require('node:child_process');
+  const originalSpawn = childProcess.spawn;
+  const calls = [];
+  childProcess.spawn = () => {
+    calls.push('spawn');
+    const { EventEmitter } = require('node:events');
+    const child = new EventEmitter();
+    child.stdout = new EventEmitter();
+    child.stderr = new EventEmitter();
+    child.stdin = { end: () => {} };
+    child.kill = () => {};
+    setImmediate(() => {
+      child.stdout.emit('data', Buffer.from(JSON.stringify({ entries: [] })));
+      child.emit('close', 0);
+    });
+    return child;
+  };
+
+  const originalSharedDir = process.env.TOKEN_MONITOR_SHARED_DIR;
+  process.env.TOKEN_MONITOR_SHARED_DIR = tmpShared;
+  let handle;
+  try {
+    const { startCollector } = freshCollector();
+    const updates = [];
+    handle = startCollector({
+      ...baseOptions,
+      intervalMs: 60 * 60 * 1000,
+      watchEnabled: false,
+      onUpdate: () => updates.push(true)
+    });
+
+    await waitForCondition(() => updates.length === 1);
+    // Unparseable fullScanAt → lastFullScanAt = 0 → forces full scan
+    assert.equal(calls.length, 3, 'unparseable fullScanAt forces full scan — three spawns');
+    handle.stop();
+  } finally {
+    childProcess.spawn = originalSpawn;
+    if (originalSharedDir === undefined) delete process.env.TOKEN_MONITOR_SHARED_DIR;
+    else process.env.TOKEN_MONITOR_SHARED_DIR = originalSharedDir;
+    if (handle) try { handle.stop(); } catch (_) {}
+    delete require.cache[collectorPath];
+    fs.rmSync(tmpShared, { recursive: true, force: true });
+  }
+});
+
 test('cross-day anchor invalidation: stale dateKey triggers full scan', async () => {
   const childProcess = require('node:child_process');
   const originalSpawn = childProcess.spawn;

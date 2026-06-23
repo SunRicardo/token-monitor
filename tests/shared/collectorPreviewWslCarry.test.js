@@ -9,6 +9,16 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+// Isolate the shared data dir so startCollector's persisted collector-anchor.json
+// neither writes the real user data dir nor leaks a stale anchor into this test's
+// "cold" first tick (which would turn it into an anchored, preview-less tick).
+const sharedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tm-preview-wsl-'));
+process.env.TOKEN_MONITOR_SHARED_DIR = sharedDir;
+process.on('exit', () => { try { fs.rmSync(sharedDir, { recursive: true, force: true }); } catch (_) {} });
 
 const { startCollector, wslPeriodsForPreview } = require('../../src/shared/collector');
 const { emptyPeriod } = require('../../src/shared/usage');
