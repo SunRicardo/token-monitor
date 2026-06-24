@@ -135,3 +135,79 @@ test('collectLimitsOnce flattens multiple providers returned by a provider fetch
     new Set(['sha256:codex-a', 'sha256:codex-b'])
   );
 });
+
+// Regression guard for the renderer's localProviderStatus(): a sync-mode account
+// card (DeepSeek/Minimax/Grok) must read the local device's RAW limits from
+// stats.devices, not stats.limits.providers. This test pins the root cause:
+// aggregateLimits collapses a local `unauthorized` row out in favor of a remote
+// `ok`, so the local row is GONE from the aggregate. If the card read the
+// aggregate, an invalid local key would be validated by the remote ok and the
+// UI would falsely report "Linked".
+function apikeyProvider(name, accountKey, status, updatedAt) {
+  return {
+    provider: name,
+    accountKey,
+    accountLabel: 'Plan',
+    status,
+    source: 'api',
+    updatedAt,
+    windows: []
+  };
+}
+
+test('aggregateLimits drops a local unauthorized row when a remote device has ok (deepseek/minimax/grok collapse by name)', () => {
+  const aggregate = aggregateLimits([
+    {
+      deviceId: 'this-mac',
+      limits: {
+        updatedAt: '2026-06-24T10:00:00.000Z',
+        providers: [apikeyProvider('minimax', 'sha256:local-bad-key', 'unauthorized', '2026-06-24T10:00:00.000Z')]
+      }
+    },
+    {
+      deviceId: 'office-pc',
+      limits: {
+        updatedAt: '2026-06-24T10:01:00.000Z',
+        providers: [apikeyProvider('minimax', 'sha256:remote-good-key', 'ok', '2026-06-24T10:01:00.000Z')]
+      }
+    }
+  ], 0, Date.parse('2026-06-24T10:02:00.000Z'));
+
+  const minimaxRows = aggregate.providers.filter((provider) => provider.provider === 'minimax');
+  assert.equal(minimaxRows.length, 1);
+  // The local unauthorized row is gone; only the remote ok survives.
+  assert.equal(minimaxRows[0].status, 'ok');
+  assert.equal(minimaxRows[0].sourceDeviceId, 'office-pc');
+  assert.equal(minimaxRows[0].accountKey, 'sha256:remote-good-key');
+});
+
+test('the local device raw limits still carry the unauthorized row the aggregate dropped', () => {
+  // This is the data the renderer's localDeviceLimitsProviders() reads. It proves
+  // the local unauthorized survives in stats.devices[..].limits.providers even
+  // though aggregateLimits removed it from stats.limits.providers.
+  const thisMac = {
+    deviceId: 'this-mac',
+    limits: {
+      updatedAt: '2026-06-24T10:00:00.000Z',
+      providers: [apikeyProvider('grok', 'sha256:local-bad-key', 'unauthorized', '2026-06-24T10:00:00.000Z')]
+    }
+  };
+  const officePc = {
+    deviceId: 'office-pc',
+    limits: {
+      updatedAt: '2026-06-24T10:01:00.000Z',
+      providers: [apikeyProvider('grok', 'sha256:remote-good-key', 'ok', '2026-06-24T10:01:00.000Z')]
+    }
+  };
+
+  // Aggregate: only remote ok.
+  const aggregate = aggregateLimits([thisMac, officePc], 0, Date.parse('2026-06-24T10:02:00.000Z'));
+  assert.equal(aggregate.providers.filter((provider) => provider.provider === 'grok').length, 1);
+
+  // Raw local device limits: the unauthorized row is still here, so a card that
+  // reads stats.devices (not stats.limits.providers) will correctly surface
+  // 'unauthorized' for the local credential.
+  const localGrok = thisMac.limits.providers.find((provider) => provider.provider === 'grok');
+  assert.equal(localGrok.status, 'unauthorized');
+  assert.equal(localGrok.accountKey, 'sha256:local-bad-key');
+});

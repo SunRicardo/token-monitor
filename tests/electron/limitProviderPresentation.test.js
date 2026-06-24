@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
+const vm = require('node:vm');
 
 const {
   isCodexLiveAccount,
@@ -48,6 +49,15 @@ function functionBody(source, name, nextName) {
   const end = source.indexOf(`function ${nextName}(`, start);
   assert.notEqual(end, -1, `${nextName} function should follow ${name}`);
   return source.slice(start, end);
+}
+
+function runLocalProviderStatus(source, state, providerName) {
+  const localDeviceHelper = functionBody(source, 'localDeviceLimitsProviders', 'localProviderStatus');
+  const localProviderHelper = functionBody(source, 'localProviderStatus', 'deepseekAccountLinked');
+  return vm.runInNewContext(
+    `${localDeviceHelper}\n${localProviderHelper}\nlocalProviderStatus(${JSON.stringify(providerName)});`,
+    { state }
+  );
 }
 
 test('capability tags explain how each provider is collected in settings', () => {
@@ -298,10 +308,94 @@ test('settings provider status waits for stats and refreshes when stats arrive',
   const renderSettings = functionBody(app, 'renderLimitProviderCheckboxes', 'onToolTrackingToggle');
   const refreshStats = functionBody(app, 'refreshStats', 'publishViewState');
   const statsPush = app.match(/window\.tokenMonitor\.onStatsPush\?\.\(\(payload\) => \{[\s\S]*?\n\}\);/)?.[0] || '';
+  const settingsPush = app.match(/window\.tokenMonitor\.onSettingsPush\?\.\(\(next\) => \{[\s\S]*?\n\}\);/)?.[0] || '';
+  const syncSettings = functionBody(app, 'syncSettingsForm', 'enabledClientSet');
 
   assert.doesNotMatch(renderSettings, /state\.stats \? missingLimitProviderStatus\(\) : 'unavailable'/);
   assert.match(refreshStats, /renderLimitProviderCheckboxes\(\);/);
   assert.match(statsPush, /renderLimitProviderCheckboxes\(\);/);
+  // DeepSeek/Minimax/Grok account cards all read state.stats, so every path that
+  // refreshes stats must re-render all three — otherwise a card renders once at
+  // startup and never updates again. Settings pushes route through syncSettingsForm
+  // (which init() also calls), so the three cards are re-rendered there and
+  // onSettingsPush itself does not duplicate the calls.
+  for (const fn of ['renderDeepseekStatus', 'renderMinimaxStatus', 'renderGrokStatus']) {
+    assert.match(refreshStats, new RegExp(`${fn}\\(\\);`), `${fn} missing from refreshStats`);
+    assert.match(statsPush, new RegExp(`${fn}\\(\\);`), `${fn} missing from onStatsPush`);
+    assert.match(syncSettings, new RegExp(`${fn}\\(\\);`), `${fn} missing from syncSettingsForm`);
+  }
+  for (const fn of ['renderDeepseekStatus', 'renderMinimaxStatus', 'renderGrokStatus']) {
+    assert.doesNotMatch(settingsPush, new RegExp(`${fn}\\(\\);`), `${fn} should not be duplicated in onSettingsPush (syncSettingsForm covers it)`);
+  }
+});
+
+test('account validation reads the local device raw limits, not the collapsed aggregate', () => {
+  const app = readRendererFile('app.js');
+  const rawHelper = functionBody(app, 'localDeviceLimitsProviders', 'localProviderStatus');
+  const helper = functionBody(app, 'localProviderStatus', 'deepseekAccountLinked');
+  // Sync-mode aggregateLimits() collapses a local `unauthorized` row out in favor
+  // of a remote `ok` (providerCollapseKey for deepseek/minimax/grok is just the
+  // provider name; pickBetterProvider keeps the higher statusRank). So the account
+  // card must read the LOCAL device's RAW limits from state.stats.devices, where
+  // the local unauthorized row still lives — not state.stats.limits.providers,
+  // where it has already been dropped. Searching the aggregate would miss the
+  // local row and fall back to the remote `ok`, falsely reporting an invalid
+  // local key as Linked.
+  assert.match(rawHelper, /state\.stats\?\.devices/);
+  assert.match(rawHelper, /Array\.isArray\(devices\)/);
+  assert.match(rawHelper, /device\.deviceId === localId/);
+  assert.match(rawHelper, /limits\?\.providers/);
+  assert.match(helper, /localDeviceLimitsProviders\(\)/);
+  assert.match(helper, /localProviders !== null/);
+  // Falls back to the aggregate only for legacy/non-aggregated stats that do
+  // not expose raw device rows at all.
+  assert.match(helper, /state\.stats\?\.limits\?\.providers/);
+  assert.match(functionBody(app, 'deepseekProviderStatus', 'deepseekProviderForAccount'), /return localProviderStatus\('deepseek'\);/);
+  assert.match(functionBody(app, 'minimaxProviderStatus', 'minimaxAccountLinked'), /return localProviderStatus\('minimax'\);/);
+  assert.match(functionBody(app, 'grokProviderStatus', 'grokAccountLinked'), /return localProviderStatus\('grok'\);/);
+});
+
+test('account validation does not treat a sole remote synced device as local', () => {
+  const app = readRendererFile('app.js');
+  const remoteOk = { provider: 'grok', status: 'ok', sourceDeviceId: 'office-pc' };
+  const provider = runLocalProviderStatus(app, {
+    settings: { deviceId: 'this-mac', grokCookieConfigured: true },
+    stats: {
+      devices: [{ deviceId: 'office-pc', limits: { providers: [remoteOk] } }],
+      limits: { providers: [remoteOk] }
+    }
+  }, 'grok');
+
+  assert.equal(provider, null);
+});
+
+test('account validation does not use a remote aggregate when the local device lacks the provider', () => {
+  const app = readRendererFile('app.js');
+  const remoteOk = { provider: 'minimax', status: 'ok', sourceDeviceId: 'office-pc' };
+  const provider = runLocalProviderStatus(app, {
+    settings: { deviceId: 'this-mac', minimaxApiKeyConfigured: true },
+    stats: {
+      devices: [
+        { deviceId: 'this-mac', limits: { providers: [] } },
+        { deviceId: 'office-pc', limits: { providers: [remoteOk] } }
+      ],
+      limits: { providers: [remoteOk] }
+    }
+  }, 'minimax');
+
+  assert.equal(provider, null);
+});
+
+test('account validation keeps aggregate fallback for legacy stats without device rows', () => {
+  const app = readRendererFile('app.js');
+  const aggregateOk = { provider: 'deepseek', status: 'ok', sourceDeviceId: 'this-mac' };
+  const provider = runLocalProviderStatus(app, {
+    settings: { deviceId: 'this-mac', deepseekApiKeyConfigured: true },
+    stats: { limits: { providers: [aggregateOk] } }
+  }, 'deepseek');
+
+  assert.equal(provider.status, 'ok');
+  assert.equal(provider.sourceDeviceId, 'this-mac');
 });
 
 const presentation = require('../../src/electron/renderer/limitProviderPresentation');

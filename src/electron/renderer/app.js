@@ -2421,6 +2421,8 @@ async function refreshStats(options = {}) {
     renderLimitProviderCheckboxes();
     renderToolPreferences();
     renderDeepseekStatus();
+    renderMinimaxStatus();
+    renderGrokStatus();
     maybeUpdateBarsIcon();
     if (feedback) settleRefreshButtonState('refreshed');
   } catch (error) {
@@ -3234,6 +3236,8 @@ function syncSettingsForm() {
   els.blurInput.value = String(state.settings.glassBlur ?? 32);
   els.zoomInput.value = String(Math.round((Number(state.settings.zoomFactor) || 1) * 100));
   renderDeepseekStatus();
+  renderMinimaxStatus();
+  renderGrokStatus();
   renderViewPreferences();
   renderToolPreferences();
   renderLimitProviderCheckboxes();
@@ -4364,7 +4368,6 @@ window.tokenMonitor.onSettingsPush?.((next) => {
   state.settings = next;
   applyEffectiveCurrencyRates();
   syncSettingsForm();
-  renderDeepseekStatus();
   maybeUpdateBarsIcon();
 });
 
@@ -4415,6 +4418,8 @@ window.tokenMonitor.onStatsPush?.((payload) => {
     renderLimitProviderCheckboxes();
     renderToolPreferences();
     renderDeepseekStatus();
+    renderMinimaxStatus();
+    renderGrokStatus();
     maybeUpdateBarsIcon();
   }
   restartTimer();
@@ -4725,13 +4730,40 @@ async function refreshCodexAccounts() {
   renderCodexAccounts();
 }
 
+// Account cards reflect THIS machine's configured credential, so read the
+// local device's RAW limits from state.stats.devices — NOT the collapsed
+// state.stats.limits.providers. In sync mode, aggregateLimits() collapses a
+// local `unauthorized` row out in favor of a remote `ok` (providerCollapseKey
+// for deepseek/minimax/grok is just the provider name; pickBetterProvider keeps
+// the higher statusRank). Searching the aggregate would miss the local row and
+// fall back to the remote `ok`, falsely reporting an invalid local key as
+// Linked. Only legacy/non-aggregated stats without a `devices` array may fall
+// back to the aggregate; once raw device rows are present they are authoritative.
+function localDeviceLimitsProviders() {
+  const devices = state.stats?.devices;
+  if (!Array.isArray(devices)) return null;
+  const localId = state.settings?.deviceId || '';
+  const local = localId
+    ? devices.find((device) => device.deviceId === localId)
+    : (devices.length === 1 ? devices[0] : null);
+  return local?.limits?.providers || [];
+}
+
+function localProviderStatus(name) {
+  const localProviders = localDeviceLimitsProviders();
+  if (localProviders !== null) {
+    return localProviders.find((provider) => provider.provider === name) || null;
+  }
+  return (state.stats?.limits?.providers || []).find((provider) => provider.provider === name) || null;
+}
+
 function deepseekAccountLinked() {
   const provider = deepseekProviderForAccount();
   return Boolean(state.settings?.deepseekApiKeyConfigured) && provider?.status === 'ok';
 }
 
 function deepseekProviderStatus() {
-  return (state.stats?.limits?.providers || []).find((provider) => provider.provider === 'deepseek') || null;
+  return localProviderStatus('deepseek');
 }
 
 function deepseekProviderForAccount() {
@@ -4759,7 +4791,7 @@ function clearDeepseekProviderStatus() {
 }
 
 function minimaxProviderStatus() {
-  return (state.stats?.limits?.providers || []).find((provider) => provider.provider === 'minimax') || null;
+  return localProviderStatus('minimax');
 }
 
 function minimaxAccountLinked() {
@@ -4818,7 +4850,7 @@ function renderMinimaxStatus() {
 }
 
 function grokProviderStatus() {
-  return (state.stats?.limits?.providers || []).find((provider) => provider.provider === 'grok') || null;
+  return localProviderStatus('grok');
 }
 
 function grokAccountLinked() {
