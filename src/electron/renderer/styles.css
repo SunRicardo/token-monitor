@@ -1978,8 +1978,8 @@ body.floating-bubble-collapsed-right .floating-bubble-tab {
   mask-image: url(../../../assets/icons/deepseek.svg);
 }
 .limit-icon-grok {
-  -webkit-mask-image: url(../../../assets/icons/xai.svg);
-  mask-image: url(../../../assets/icons/xai.svg);
+  -webkit-mask-image: url(../../../assets/icons/grok.svg);
+  mask-image: url(../../../assets/icons/grok.svg);
 }
 .limit-icon-minimax {
   -webkit-mask-image: url(../../../assets/icons/minimax.svg);

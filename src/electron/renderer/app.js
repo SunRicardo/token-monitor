@@ -86,8 +86,8 @@ const LIMIT_SOURCE_LABELS = { oauth: 'OAuth', cli: 'CLI', web: 'Web', rpc: 'RPC'
 const LIMIT_CAPABILITY_TAG_KEYS = {
   Auto: 'settings.limits.capability.auto',
   'OAuth/CLI': 'settings.limits.capability.oauthCli',
-  'CLI auth': 'settings.limits.capability.cliAuth',
   'CLI RPC': 'settings.limits.capability.cliRpc',
+  'CLI/Web': 'settings.limits.capability.cliWeb',
   'App/CLI RPC': 'settings.limits.capability.appCliRpc',
   'Manual login': 'settings.limits.capability.manualLogin',
   Web: 'settings.limits.capability.web',
@@ -96,6 +96,7 @@ const LIMIT_CAPABILITY_TAG_KEYS = {
   'Local/Zen': 'settings.limits.capability.localZen',
   'Pay-as-you-go': 'settings.limits.capability.payg',
   Subscription: 'settings.limits.capability.subscription',
+  'Token Plan': 'settings.limits.capability.tokenPlan',
   'API key': 'settings.limits.capability.apiKey',
   'Add API key': 'settings.limits.status.addApiKey',
   'Update API key': 'settings.limits.status.updateApiKey',

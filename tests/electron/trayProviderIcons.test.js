@@ -7,7 +7,7 @@ const test = require('node:test');
 
 const { trayProviderIconSources } = require('../../src/electron/renderer/trayProviderIcons');
 
-const CURRENT_TOOLS = ['claude', 'codex', 'hermes', 'opencode', 'openclaw', 'cursor', 'antigravity', 'cline'];
+const CURRENT_TOOLS = ['claude', 'codex', 'hermes', 'opencode', 'openclaw', 'cursor', 'antigravity', 'cline', 'grok'];
 
 function assetPathFromRendererSource(source) {
   return path.resolve(__dirname, '..', '..', 'src', 'electron', 'renderer', source);
@@ -26,4 +26,5 @@ test('tray provider icon sources keep optimized menubar icons where available', 
   assert.equal(sources.claude, '../../../assets/icons/tray-claude.svg');
   assert.equal(sources.codex, '../../../assets/icons/tray-codex.svg');
   assert.equal(sources.hermes, '../../../assets/icons/hermes-agent.svg');
+  assert.equal(sources.grok, '../../../assets/icons/grok.svg');
 });

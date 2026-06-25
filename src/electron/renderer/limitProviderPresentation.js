@@ -22,7 +22,7 @@
     opencode: { local: 'Local', web: 'Web' },
     deepseek: { api: 'API' },
     minimax: { api: 'API' },
-    grok: { web: 'Web' }
+    grok: { rpc: 'CLI', web: 'Web' }
   };
 
   const CODEX_RPC_DETAIL_LABELS = {
@@ -39,8 +39,8 @@
     antigravity: ['App/CLI must be open', 'RPC'],
     opencode: ['Local/Web', 'Manual login'],
     deepseek: ['Pay-as-you-go', 'API key'],
-    minimax: ['Subscription', 'API key'],
-    grok: ['Auto', 'CLI auth']
+    minimax: ['Token Plan', 'API key'],
+    grok: ['Auto', 'CLI/Web']
   };
 
   // Capability hint -> the status label it would duplicate. When that status is

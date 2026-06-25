@@ -11,10 +11,12 @@
 const { normalizeLimitProvider } = require('./limits');
 const { hashKey } = require('./hashKey');
 
-const MINIMAX_KEY_NAMES = ['MINIMAX_TOKEN_PLAN_KEY', 'MINIMAX_API_KEY'];
+const MINIMAX_KEY_NAMES = ['MINIMAX_CODING_API_KEY'];
 
 const MINIMAX_REMAINS_URL_CN = 'https://api.minimaxi.com/v1/api/openplatform/coding_plan/remains';
 const MINIMAX_REMAINS_URL_EN = 'https://api.minimax.io/v1/api/openplatform/coding_plan/remains';
+const MINIMAX_TOKEN_PLAN_REMAINS_URL_CN = 'https://api.minimaxi.com/v1/token_plan/remains';
+const MINIMAX_TOKEN_PLAN_REMAINS_URL_EN = 'https://api.minimax.io/v1/token_plan/remains';
 
 const MINIMAX_WINDOW_MINUTES_5H = 5 * 60;
 const MINIMAX_WINDOW_MINUTES_WEEKLY = 7 * 24 * 60;
@@ -147,22 +149,39 @@ function parseMinimaxTiers(body) {
   return windows;
 }
 
-// Returns the list of base URLs to try, in order. Default order is global
-// first (api.minimax.io), then CN (api.minimaxi.com), so a global account
-// works without any setting and a CN account is picked up automatically
-// when the global endpoint rejects the token — the same fallback CodexBar
-// uses. Callers can pin a single region with `minimaxApiHost: 'cn'` /
-// `'minimax.io'` / `'en'`.
-function minimaxAttemptOrder(options = {}) {
+function minimaxRegionOrder(options = {}) {
   const pinned = options.minimaxApiHost;
-  if (pinned === 'cn') return [MINIMAX_REMAINS_URL_CN];
-  if (pinned === 'en' || pinned === 'minimax.io') return [MINIMAX_REMAINS_URL_EN];
-  return [MINIMAX_REMAINS_URL_EN, MINIMAX_REMAINS_URL_CN];
+  if (pinned === 'cn') return ['cn'];
+  if (pinned === 'en' || pinned === 'minimax.io') return ['en'];
+  return ['en', 'cn'];
+}
+
+function minimaxUrlsForRegion(region) {
+  return region === 'cn'
+    ? [
+      { url: MINIMAX_TOKEN_PLAN_REMAINS_URL_CN, region: 'cn', kind: 'tokenPlan' },
+      { url: MINIMAX_REMAINS_URL_CN, region: 'cn', kind: 'legacy' }
+    ]
+    : [
+      { url: MINIMAX_TOKEN_PLAN_REMAINS_URL_EN, region: 'en', kind: 'tokenPlan' },
+      { url: MINIMAX_REMAINS_URL_EN, region: 'en', kind: 'legacy' }
+    ];
+}
+
+function minimaxAttemptSpecs(options = {}) {
+  return minimaxRegionOrder(options).flatMap(minimaxUrlsForRegion);
+}
+
+// Returns the list of request URLs to try, in order. CodexBar currently probes
+// /v1/token_plan/remains first, then falls back to the legacy coding_plan
+// endpoint for the same region before trying the other region on auth errors.
+function minimaxAttemptOrder(options = {}) {
+  return minimaxAttemptSpecs(options).map((attempt) => attempt.url);
 }
 
 function minimaxRegionForUrl(url) {
-  if (url === MINIMAX_REMAINS_URL_EN) return 'en';
-  if (url === MINIMAX_REMAINS_URL_CN) return 'cn';
+  if (url === MINIMAX_REMAINS_URL_EN || url === MINIMAX_TOKEN_PLAN_REMAINS_URL_EN) return 'en';
+  if (url === MINIMAX_REMAINS_URL_CN || url === MINIMAX_TOKEN_PLAN_REMAINS_URL_CN) return 'cn';
   return '';
 }
 
@@ -173,6 +192,20 @@ function minimaxBaseUrl(options = {}) {
   const pinned = options.minimaxApiHost;
   if (pinned === 'cn') return MINIMAX_REMAINS_URL_CN;
   return MINIMAX_REMAINS_URL_EN;
+}
+
+function shouldTryLegacyMinimaxEndpoint(error) {
+  const code = Number(error && error.statusCode);
+  if (code === 401 || code === 403 || code === 404 || code === 405) return true;
+  if (Number.isFinite(code)) return false;
+  if (error && error.status === 'sourceRateLimited') return false;
+  if (error && error.status === 'unavailable') return true;
+  return false;
+}
+
+function shouldTryNextMinimaxRegion(error) {
+  const code = Number(error && error.statusCode);
+  return code === 401 || code === 403;
 }
 
 async function fetchMinimaxLimits(options = {}, deps = {}) {
@@ -212,11 +245,12 @@ async function fetchMinimaxLimits(options = {}, deps = {}) {
     Accept: 'application/json',
     'Content-Type': 'application/json'
   };
-  const attempts = minimaxAttemptOrder(options);
+  const attempts = minimaxAttemptSpecs(options);
   let lastError = null;
-  for (const url of attempts) {
+  for (let index = 0; index < attempts.length; index += 1) {
+    const attempt = attempts[index];
     try {
-      const data = await fetchJson(url, headers, deps);
+      const data = await fetchJson(attempt.url, headers, deps);
       if (!data || typeof data !== 'object') {
         throw Object.assign(new Error('unexpected remains response shape'), { status: 'unavailable' });
       }
@@ -247,6 +281,10 @@ async function fetchMinimaxLimits(options = {}, deps = {}) {
         }
       }
       const windows = parseMinimaxTiers(data);
+      const next = attempts[index + 1];
+      if (!windows.length && attempt.kind === 'tokenPlan' && next?.region === attempt.region) {
+        throw Object.assign(new Error('MiniMax token-plan response has no quota windows'), { status: 'unavailable' });
+      }
       const accountKey = hashKey('minimax', key);
       return normalizeLimitProvider({
         provider: 'minimax',
@@ -256,17 +294,16 @@ async function fetchMinimaxLimits(options = {}, deps = {}) {
         status: windows.length ? 'ok' : 'unavailable',
         updatedAt,
         windows,
-        region: minimaxRegionForUrl(url)
+        region: attempt.region
       });
     } catch (error) {
       lastError = error;
-      // Only retry when the token was rejected (401/403): that's the "wrong
-      // region" signal. Any other error (network, 5xx, malformed JSON) is
-      // surfaced immediately so the user sees the real failure.
-      const code = Number(error && error.statusCode);
-      if (code !== 401 && code !== 403) break;
-      // Already tried both regions? Stop.
-      if (attempts.indexOf(url) === attempts.length - 1) break;
+      const next = attempts[index + 1];
+      if (attempt.kind === 'tokenPlan' && next?.region === attempt.region && shouldTryLegacyMinimaxEndpoint(error)) continue;
+      if (next && next.region !== attempt.region && shouldTryNextMinimaxRegion(error)) continue;
+      // Non-auth failures (5xx, network, malformed JSON) are surfaced
+      // immediately so the user sees the real failure instead of region churn.
+      break;
     }
   }
   return normalizeLimitProvider({
@@ -288,6 +325,8 @@ module.exports = {
   MINIMAX_KEY_NAMES,
   MINIMAX_REMAINS_URL_CN,
   MINIMAX_REMAINS_URL_EN,
+  MINIMAX_TOKEN_PLAN_REMAINS_URL_CN,
+  MINIMAX_TOKEN_PLAN_REMAINS_URL_EN,
   minimaxToken,
   minimaxAttemptOrder,
   minimaxBaseUrl,

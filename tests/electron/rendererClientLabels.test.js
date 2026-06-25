@@ -44,4 +44,5 @@ test('renderer distinguishes Grok model and Grok Build tool icons', () => {
   const styles = rendererStyles();
   assert.match(styles, /\.row-icon-xai\s*\{[^}]*assets\/icons\/grok\.svg/s);
   assert.match(styles, /\.row-icon-grok\s*\{[^}]*assets\/icons\/xai\.svg/s);
+  assert.match(styles, /\.limit-icon-grok\s*\{[^}]*assets\/icons\/grok\.svg/s);
 });

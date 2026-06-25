@@ -10,7 +10,7 @@
     codex: '../../../assets/icons/tray-codex.svg',
     hermes: '../../../assets/icons/hermes-agent.svg',
     kimi: '../../../assets/icons/moonshot.svg',
-    grok: '../../../assets/icons/xai.svg'
+    grok: '../../../assets/icons/grok.svg'
   };
 
   function trayProviderIconSources(clientIds) {

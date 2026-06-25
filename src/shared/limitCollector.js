@@ -18,7 +18,15 @@ const { codexAuthIdentity } = require('./codexAuth');
 const minimaxLimits = require('./minimaxLimits');
 const { minimaxToken, minimaxBaseUrl, parseMinimaxTiers, fetchMinimaxLimits } = minimaxLimits;
 const grokLimits = require('./grokLimits');
-const { grokCredential, readAuthJson, parseGrokBilling, fetchGrokLimits } = grokLimits;
+const {
+  grokCredential,
+  readAuthJson,
+  parseGrokBilling,
+  parseGrokGrpcWebBilling,
+  fetchGrokRpcBilling,
+  fetchGrokWebGrpcBilling,
+  fetchGrokLimits
+} = grokLimits;
 
 const LIMIT_PROVIDER_IDS = ['claude', 'codex', 'cursor', 'antigravity', 'opencode', 'deepseek', 'minimax', 'grok'];
 const LIMIT_REFRESH_VALUES = new Set([60_000, 120_000, 300_000, 900_000, 1_800_000]);
@@ -2261,6 +2269,9 @@ module.exports = {
   grokCredential,
   readAuthJson,
   parseGrokBilling,
+  parseGrokGrpcWebBilling,
+  fetchGrokRpcBilling,
+  fetchGrokWebGrpcBilling,
   fetchGrokLimits,
   mapClaudeCliUsageToProvider,
   mapClaudeUsageToProvider,

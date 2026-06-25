@@ -9,6 +9,8 @@ const {
   fetchMinimaxLimits,
   minimaxAttemptOrder,
   minimaxRegionForUrl,
+  MINIMAX_TOKEN_PLAN_REMAINS_URL_CN,
+  MINIMAX_TOKEN_PLAN_REMAINS_URL_EN,
   MINIMAX_REMAINS_URL_CN,
   MINIMAX_REMAINS_URL_EN
 } = require('../../src/shared/minimaxLimits');
@@ -22,11 +24,12 @@ function unauthorized() {
   return { ok: false, status: 401, json: async () => ({}) };
 }
 
-test('minimaxToken reads MINIMAX_TOKEN_PLAN_KEY then MINIMAX_API_KEY, stripping quotes', () => {
-  assert.equal(minimaxToken({ MINIMAX_TOKEN_PLAN_KEY: '  "eyJabc"  ' }), 'eyJabc');
-  assert.equal(minimaxToken({ MINIMAX_API_KEY: 'eyJdef' }), 'eyJdef');
+test('minimaxToken reads the CodexBar-compatible Token Plan key and ignores unrelated keys', () => {
+  assert.equal(minimaxToken({ MINIMAX_CODING_API_KEY: '  "sk-cp-codexbar"  ' }), 'sk-cp-codexbar');
+  assert.equal(minimaxToken({ TOKEN_MONITOR_MINIMAX_KEY: 'sk-cp-unrelated' }), '');
+  assert.equal(minimaxToken({ MINIMAX_API_KEY: 'sk-api-payg' }), '');
   assert.equal(minimaxToken({}), '');
-  assert.equal(minimaxToken({ MINIMAX_TOKEN_PLAN_KEY: '' }, '  "sk-direct"  '), 'sk-direct');
+  assert.equal(minimaxToken({}, '  "sk-cp-direct"  '), 'sk-cp-direct');
 });
 
 test('parseLimitProviders includes minimax and grok in the default provider set', () => {
@@ -36,16 +39,32 @@ test('parseLimitProviders includes minimax and grok in the default provider set'
   );
 });
 
-test('minimaxAttemptOrder defaults to global-first so a global account works without a setting', () => {
-  assert.deepEqual(minimaxAttemptOrder(), [MINIMAX_REMAINS_URL_EN, MINIMAX_REMAINS_URL_CN]);
-  assert.deepEqual(minimaxAttemptOrder({ minimaxApiHost: 'cn' }), [MINIMAX_REMAINS_URL_CN]);
-  assert.deepEqual(minimaxAttemptOrder({ minimaxApiHost: 'en' }), [MINIMAX_REMAINS_URL_EN]);
-  assert.deepEqual(minimaxAttemptOrder({ minimaxApiHost: 'minimax.io' }), [MINIMAX_REMAINS_URL_EN]);
+test('minimaxAttemptOrder prefers token-plan endpoint before legacy coding-plan endpoint per region', () => {
+  assert.deepEqual(minimaxAttemptOrder(), [
+    MINIMAX_TOKEN_PLAN_REMAINS_URL_EN,
+    MINIMAX_REMAINS_URL_EN,
+    MINIMAX_TOKEN_PLAN_REMAINS_URL_CN,
+    MINIMAX_REMAINS_URL_CN
+  ]);
+  assert.deepEqual(minimaxAttemptOrder({ minimaxApiHost: 'cn' }), [
+    MINIMAX_TOKEN_PLAN_REMAINS_URL_CN,
+    MINIMAX_REMAINS_URL_CN
+  ]);
+  assert.deepEqual(minimaxAttemptOrder({ minimaxApiHost: 'en' }), [
+    MINIMAX_TOKEN_PLAN_REMAINS_URL_EN,
+    MINIMAX_REMAINS_URL_EN
+  ]);
+  assert.deepEqual(minimaxAttemptOrder({ minimaxApiHost: 'minimax.io' }), [
+    MINIMAX_TOKEN_PLAN_REMAINS_URL_EN,
+    MINIMAX_REMAINS_URL_EN
+  ]);
 });
 
 test('minimaxRegionForUrl maps endpoints to en/cn labels for the renderer', () => {
   assert.equal(minimaxRegionForUrl(MINIMAX_REMAINS_URL_EN), 'en');
   assert.equal(minimaxRegionForUrl(MINIMAX_REMAINS_URL_CN), 'cn');
+  assert.equal(minimaxRegionForUrl(MINIMAX_TOKEN_PLAN_REMAINS_URL_EN), 'en');
+  assert.equal(minimaxRegionForUrl(MINIMAX_TOKEN_PLAN_REMAINS_URL_CN), 'cn');
   assert.equal(minimaxRegionForUrl('https://example.com'), '');
 });
 
@@ -252,7 +271,7 @@ test('fetchMinimaxLimits returns notConfigured when no key is provided', async (
 });
 
 test('fetchMinimaxLimits returns ok with both windows from the nested shape and never leaks the key', async () => {
-  const env = { MINIMAX_TOKEN_PLAN_KEY: 'eyJhbGciOiJIUzI1NiJ9' };
+  const env = { MINIMAX_CODING_API_KEY: 'sk-cp-secret' };
   const body = {
     base_resp: { status_code: 0 },
     data: {
@@ -287,22 +306,22 @@ test('fetchMinimaxLimits returns ok with both windows from the nested shape and 
   assert.equal(r.accountLabel, 'Token Plan');
   assert.match(r.accountKey, /^sha256:/);
   assert.equal(r.region, 'en'); // global endpoint hit first
-  assert.equal(capturedUrl, MINIMAX_REMAINS_URL_EN);
+  assert.equal(capturedUrl, MINIMAX_TOKEN_PLAN_REMAINS_URL_EN);
   assert.equal(r.windows.length, 2);
   assert.equal(r.windows[0].kind, 'session');
   assert.equal(r.windows[0].usedPercent, 8);
   assert.equal(r.windows[1].kind, 'weekly');
   assert.equal(r.windows[1].usedPercent, 12);
-  assert.equal(capturedAuth, 'Bearer eyJhbGciOiJIUzI1NiJ9');
-  assert.ok(!JSON.stringify(r).includes('eyJhbGciOiJIUzI1NiJ9'));
+  assert.equal(capturedAuth, 'Bearer sk-cp-secret');
+  assert.ok(!JSON.stringify(r).includes('sk-cp-secret'));
 });
 
 test('fetchMinimaxLimits prefers the widget settings key over env fallback', async () => {
   let capturedAuth = '';
   const r = await fetchMinimaxLimits(
-    { minimaxApiKey: " 'eyJ-settings' " },
+    { minimaxApiKey: " 'sk-cp-settings' " },
     {
-      env: { MINIMAX_TOKEN_PLAN_KEY: 'eyJ-env' },
+      env: { MINIMAX_CODING_API_KEY: 'sk-cp-env' },
       now: () => 1_716_350_000_000,
       fetch: async (_url, init) => {
         capturedAuth = init.headers.Authorization;
@@ -310,15 +329,15 @@ test('fetchMinimaxLimits prefers the widget settings key over env fallback', asy
       }
     }
   );
-  assert.equal(capturedAuth, 'Bearer eyJ-settings');
+  assert.equal(capturedAuth, 'Bearer sk-cp-settings');
   assert.equal(r.status, 'unavailable'); // empty model_remains → no windows → unavailable
-  assert.ok(!JSON.stringify(r).includes('eyJ-settings'));
+  assert.ok(!JSON.stringify(r).includes('sk-cp-settings'));
 });
 
 test('fetchMinimaxLimits maps HTTP 401 to unauthorized', async () => {
   // Pinned to the CN host, single attempt, no retry → straightforward error.
   const r = await fetchMinimaxLimits({ minimaxApiHost: 'cn' }, {
-    env: { MINIMAX_TOKEN_PLAN_KEY: 'eyJ' },
+    env: { MINIMAX_CODING_API_KEY: 'sk-cp-test' },
     now: () => 1_716_350_000_000,
     fetch: async () => unauthorized()
   });
@@ -339,23 +358,71 @@ test('fetchMinimaxLimits maps HTTP 403 to unauthorized and retries the other reg
     }
   };
   const r = await fetchMinimaxLimits({}, {
-    env: { MINIMAX_TOKEN_PLAN_KEY: 'eyJ' },
+    env: { MINIMAX_CODING_API_KEY: 'sk-cp-test' },
     now: () => 1_716_350_000_000,
     fetch: async (url) => {
       calls.push(url);
+      if (url === MINIMAX_TOKEN_PLAN_REMAINS_URL_EN) return { ok: false, status: 403, json: async () => ({}) };
       if (url === MINIMAX_REMAINS_URL_EN) return { ok: false, status: 403, json: async () => ({}) };
       return okResponse(body);
     }
   });
-  assert.deepEqual(calls, [MINIMAX_REMAINS_URL_EN, MINIMAX_REMAINS_URL_CN]);
+  assert.deepEqual(calls, [MINIMAX_TOKEN_PLAN_REMAINS_URL_EN, MINIMAX_REMAINS_URL_EN, MINIMAX_TOKEN_PLAN_REMAINS_URL_CN]);
   assert.equal(r.status, 'ok');
   assert.equal(r.region, 'cn');
+});
+
+test('fetchMinimaxLimits falls back from token-plan remains to legacy coding-plan remains within a region', async () => {
+  const calls = [];
+  const body = {
+    data: {
+      model_remains: [
+        { model_name: 'general', current_interval_remaining_percent: 90, current_weekly_remaining_percent: 80 }
+      ]
+    }
+  };
+  const r = await fetchMinimaxLimits({ minimaxApiHost: 'en' }, {
+    env: { MINIMAX_CODING_API_KEY: 'sk-cp-codexbar' },
+    now: () => 1_716_350_000_000,
+    fetch: async (url) => {
+      calls.push(url);
+      if (url === MINIMAX_TOKEN_PLAN_REMAINS_URL_EN) return { ok: false, status: 404, json: async () => ({}) };
+      return okResponse(body);
+    }
+  });
+  assert.deepEqual(calls, [MINIMAX_TOKEN_PLAN_REMAINS_URL_EN, MINIMAX_REMAINS_URL_EN]);
+  assert.equal(r.status, 'ok');
+  assert.equal(r.region, 'en');
+});
+
+test('fetchMinimaxLimits falls back to legacy coding-plan when token-plan returns no parseable windows', async () => {
+  const calls = [];
+  const legacyBody = {
+    data: {
+      model_remains: [
+        { model_name: 'general', current_interval_remaining_percent: 91, current_weekly_remaining_percent: 82 }
+      ]
+    }
+  };
+  const r = await fetchMinimaxLimits({ minimaxApiHost: 'en' }, {
+    env: { MINIMAX_CODING_API_KEY: 'sk-cp-codexbar' },
+    now: () => 1_716_350_000_000,
+    fetch: async (url) => {
+      calls.push(url);
+      if (url === MINIMAX_TOKEN_PLAN_REMAINS_URL_EN) return okResponse({});
+      return okResponse(legacyBody);
+    }
+  });
+  assert.deepEqual(calls, [MINIMAX_TOKEN_PLAN_REMAINS_URL_EN, MINIMAX_REMAINS_URL_EN]);
+  assert.equal(r.status, 'ok');
+  assert.equal(r.region, 'en');
+  assert.equal(r.windows[0].usedPercent, 9);
 });
 
 test('fetchMinimaxLimits aborts and returns unavailable when the fetch exceeds the timeout', async () => {
   let receivedSignal = null;
   const r = await fetchMinimaxLimits({ minimaxApiHost: 'cn' }, {
-    env: { MINIMAX_TOKEN_PLAN_KEY: 'eyJ' },
+    env: { MINIMAX_CODING_API_KEY: 'sk-cp-test' },
     now: () => 1_716_350_000_000,
     fetchTimeoutMs: 10,
     fetch: async (_url, init) => {
@@ -384,15 +451,16 @@ test('fetchMinimaxLimits retries the CN host when the global host rejects the to
     }
   };
   const r = await fetchMinimaxLimits({}, {
-    env: { MINIMAX_TOKEN_PLAN_KEY: 'eyJ-cn-only' },
+    env: { MINIMAX_CODING_API_KEY: 'sk-cp-cn-only' },
     now: () => 1_716_350_000_000,
     fetch: async (url) => {
       calls.push(url);
+      if (url === MINIMAX_TOKEN_PLAN_REMAINS_URL_EN) return unauthorized();
       if (url === MINIMAX_REMAINS_URL_EN) return unauthorized();
       return okResponse(body);
     }
   });
-  assert.deepEqual(calls, [MINIMAX_REMAINS_URL_EN, MINIMAX_REMAINS_URL_CN]);
+  assert.deepEqual(calls, [MINIMAX_TOKEN_PLAN_REMAINS_URL_EN, MINIMAX_REMAINS_URL_EN, MINIMAX_TOKEN_PLAN_REMAINS_URL_CN]);
   assert.equal(r.status, 'ok');
   assert.equal(r.region, 'cn');
 });
@@ -416,17 +484,17 @@ test('fetchMinimaxLimits retries the CN host when the global host responds 200 +
     ]
   };
   const r = await fetchMinimaxLimits({}, {
-    env: { MINIMAX_TOKEN_PLAN_KEY: 'eyJ-cn-only' },
+    env: { MINIMAX_CODING_API_KEY: 'sk-cp-cn-only' },
     now: () => 1_716_350_000_000,
     fetch: async (url) => {
       calls.push(url);
-      if (url === MINIMAX_REMAINS_URL_EN) {
+      if (url === MINIMAX_TOKEN_PLAN_REMAINS_URL_EN || url === MINIMAX_REMAINS_URL_EN) {
         return okResponse({ base_resp: { status_code: 1004, status_msg: 'cookie is missing, log in again' } });
       }
       return okResponse(cnBody);
     }
   });
-  assert.deepEqual(calls, [MINIMAX_REMAINS_URL_EN, MINIMAX_REMAINS_URL_CN]);
+  assert.deepEqual(calls, [MINIMAX_TOKEN_PLAN_REMAINS_URL_EN, MINIMAX_REMAINS_URL_EN, MINIMAX_TOKEN_PLAN_REMAINS_URL_CN]);
   assert.equal(r.status, 'ok');
   assert.equal(r.region, 'cn');
   assert.equal(r.windows.length, 2);
@@ -436,20 +504,20 @@ test('fetchMinimaxLimits retries the CN host when the global host responds 200 +
 test('fetchMinimaxLimits does NOT retry on non-auth failures (5xx, network, etc.)', async () => {
   const calls = [];
   const r = await fetchMinimaxLimits({}, {
-    env: { MINIMAX_TOKEN_PLAN_KEY: 'eyJ' },
+    env: { MINIMAX_CODING_API_KEY: 'sk-cp-test' },
     now: () => 1_716_350_000_000,
     fetch: async (url) => {
       calls.push(url);
       return { ok: false, status: 503, json: async () => ({}) };
     }
   });
-  assert.deepEqual(calls, [MINIMAX_REMAINS_URL_EN]); // only the first attempt
+  assert.deepEqual(calls, [MINIMAX_TOKEN_PLAN_REMAINS_URL_EN]); // only the first attempt
   assert.equal(r.status, 'unavailable');
 });
 
 test('fetchMinimaxLimits maps base_resp.status_code != 0 to unavailable', async () => {
   const r = await fetchMinimaxLimits({ minimaxApiHost: 'cn' }, {
-    env: { MINIMAX_TOKEN_PLAN_KEY: 'eyJ' },
+    env: { MINIMAX_CODING_API_KEY: 'sk-cp-test' },
     now: () => 1_716_350_000_000,
     fetch: async () => okResponse({ base_resp: { status_code: 1001, status_msg: 'quota api disabled' } })
   });
@@ -462,7 +530,7 @@ test('fetchMinimaxLimits maps base_resp auth-shaped errors to unauthorized', asy
   // Without this mapping the UI would show generic 'Unavailable' for what is
   // actually a 're-enter the key' prompt.
   const r = await fetchMinimaxLimits({ minimaxApiHost: 'cn' }, {
-    env: { MINIMAX_TOKEN_PLAN_KEY: 'eyJ' },
+    env: { MINIMAX_CODING_API_KEY: 'sk-cp-test' },
     now: () => 1_716_350_000_000,
     fetch: async () => okResponse({ base_resp: { status_code: 1004, status_msg: 'cookie is missing, log in again' } })
   });
@@ -471,7 +539,7 @@ test('fetchMinimaxLimits maps base_resp auth-shaped errors to unauthorized', asy
 
 test('fetchMinimaxLimits maps an unexpected body shape to unavailable', async () => {
   const r = await fetchMinimaxLimits({ minimaxApiHost: 'cn' }, {
-    env: { MINIMAX_TOKEN_PLAN_KEY: 'eyJ' },
+    env: { MINIMAX_CODING_API_KEY: 'sk-cp-test' },
     now: () => 1_716_350_000_000,
     fetch: async () => okResponse({ nope: true })
   });
@@ -479,11 +547,11 @@ test('fetchMinimaxLimits maps an unexpected body shape to unavailable', async ()
 });
 
 test('fetchMinimaxLimits reports cn region when pinned to the CN endpoint', async () => {
-  const r = await fetchMinimaxLimits({ minimaxApiHost: 'cn', minimaxApiKey: 'eyJ' }, {
+  const r = await fetchMinimaxLimits({ minimaxApiHost: 'cn', minimaxApiKey: 'sk-cp-test' }, {
     env: {},
     now: () => 1_716_350_000_000,
     fetch: async (url) => {
-      assert.equal(url, MINIMAX_REMAINS_URL_CN);
+      assert.equal(url, MINIMAX_TOKEN_PLAN_REMAINS_URL_CN);
       return okResponse({ data: { model_remains: [{ model_name: 'general', current_interval_remaining_percent: 50 }] } });
     }
   });

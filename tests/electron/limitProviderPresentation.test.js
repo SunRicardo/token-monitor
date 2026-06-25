@@ -67,8 +67,8 @@ test('capability tags explain how each provider is collected in settings', () =>
   assert.deepEqual(limitProviderCapabilityTags('cursor'), ['Manual login', 'Web']);
   assert.deepEqual(limitProviderCapabilityTags('antigravity'), ['App/CLI must be open', 'RPC']);
   assert.deepEqual(limitProviderCapabilityTags('opencode'), ['Local/Web', 'Manual login']);
-  assert.deepEqual(limitProviderCapabilityTags('minimax'), ['Subscription', 'API key']);
-  assert.deepEqual(limitProviderCapabilityTags('grok'), ['Auto', 'CLI auth']);
+  assert.deepEqual(limitProviderCapabilityTags('minimax'), ['Token Plan', 'API key']);
+  assert.deepEqual(limitProviderCapabilityTags('grok'), ['Auto', 'CLI/Web']);
   assert.deepEqual(limitProviderCapabilityTags('unknown'), []);
 });
 
@@ -76,20 +76,21 @@ test('Minimax capability tags are localized in settings', () => {
   const app = readRendererFile('app.js');
   const i18n = readRendererFile('i18n.js');
 
-  assert.match(app, /Subscription: 'settings\.limits\.capability\.subscription'/);
-  assert.match(i18n, /'settings\.limits\.capability\.subscription': 'Subscription'/);
-  assert.match(i18n, /'settings\.limits\.capability\.subscription': '訂閱'/);
-  assert.match(i18n, /'settings\.limits\.capability\.subscription': '订阅'/);
+  assert.match(app, /'Token Plan': 'settings\.limits\.capability\.tokenPlan'/);
+  assert.match(i18n, /'settings\.limits\.capability\.tokenPlan': 'Token Plan'/);
+  assert.match(i18n, /'settings\.limits\.capability\.apiKey': 'API key'/);
+  assert.match(i18n, /'settings\.limits\.capability\.apiKey': 'API 金鑰'/);
+  assert.match(i18n, /'settings\.limits\.capability\.apiKey': 'API 密钥'/);
 });
 
-test('Grok CLI auth capability tag is localized in settings', () => {
+test('Grok CLI/Web capability tag is localized in settings', () => {
   const app = readRendererFile('app.js');
   const i18n = readRendererFile('i18n.js');
 
-  assert.match(app, /'CLI auth': 'settings\.limits\.capability\.cliAuth'/);
-  assert.match(i18n, /'settings\.limits\.capability\.cliAuth': 'CLI auth'/);
-  assert.match(i18n, /'settings\.limits\.capability\.cliAuth': 'CLI 認證'/);
-  assert.match(i18n, /'settings\.limits\.capability\.cliAuth': 'CLI 认证'/);
+  assert.doesNotMatch(app, /cliAuth/);
+  assert.doesNotMatch(i18n, /cliAuth/);
+  assert.match(app, /'CLI\/Web': 'settings\.limits\.capability\.cliWeb'/);
+  assert.match(i18n, /'settings\.limits\.capability\.cliWeb': 'CLI\/Web'/);
 });
 
 test('API key account status distinguishes pending checks from completed failures', () => {
@@ -126,7 +127,7 @@ test('undetected settings tags include status and supported collection hints', (
   assert.deepEqual(
     limitProviderSettingsTags({ provider: 'grok', status: 'notConfigured', source: 'web' })
       .map((tag) => tag.label),
-    ['Run grok login', 'Auto', 'CLI auth']
+    ['Run grok login', 'Auto', 'CLI/Web']
   );
 });
 
@@ -150,6 +151,16 @@ test('detected settings tags show only current source after status', () => {
     limitProviderSettingsTags({ provider: 'codex', status: 'ok', source: 'rpc', sourceDetail: 'managed' })
       .map((tag) => tag.label),
     ['Live', 'Managed']
+  );
+  assert.deepEqual(
+    limitProviderSettingsTags({ provider: 'grok', status: 'ok', source: 'rpc', sourceDetail: 'cli' })
+      .map((tag) => tag.label),
+    ['Live', 'CLI']
+  );
+  assert.deepEqual(
+    limitProviderSettingsTags({ provider: 'grok', status: 'ok', source: 'web' })
+      .map((tag) => tag.label),
+    ['Live', 'Web']
   );
   assert.deepEqual(
     limitProviderSettingsTags({ provider: 'opencode', status: 'ok', source: 'web' })
@@ -486,6 +497,17 @@ test('deepseek status copy: notConfigured -> Add API key, unauthorized -> Update
   );
   assert.deepEqual(
     presentation.limitProviderStatusLabel({ provider: 'deepseek', status: 'unauthorized' }),
+    { label: 'Update API key', tone: 'setup' }
+  );
+});
+
+test('minimax status copy uses the same API key wording as CodexBar', () => {
+  assert.deepEqual(
+    presentation.limitProviderStatusLabel({ provider: 'minimax', status: 'notConfigured' }),
+    { label: 'Add API key', tone: 'setup' }
+  );
+  assert.deepEqual(
+    presentation.limitProviderStatusLabel({ provider: 'minimax', status: 'unauthorized' }),
     { label: 'Update API key', tone: 'setup' }
   );
 });
