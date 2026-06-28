@@ -564,7 +564,7 @@ function clientWatchCandidates(clientsCsv) {
     path.join(home, '.config', 'Code', 'User', 'globalStorage', 'kilocode.kilo-code', 'tasks'),
     path.join(home, '.vscode-server', 'data', 'User', 'globalStorage', 'kilocode.kilo-code', 'tasks')
   );
-  add('micode', path.join(home, '.local', 'share', 'micode'));
+  add('micode', path.join(home, '.local', 'share', 'mimocode'));
   add('zcode', path.join(home, '.zcode', 'projects'));
   // Kiro (AWS): tokscale reads three home-relative roots — the CLI sessions dir,
   // the Kiro IDE globalStorage root (native macOS / Linux / Windows), and the
