@@ -35,7 +35,11 @@ const WSL_DATA_MARKERS = [
   '.config/Code/User/globalStorage/kilocode.kilo-code/tasks',
   '.vscode-server/data/User/globalStorage/kilocode.kilo-code/tasks',
   '.local/share/micode/mimocode.db',
-  '.zcode/projects'
+  '.zcode/projects',
+  '.kiro/sessions/cli',
+  '.local/share/kiro-cli/data.sqlite3',
+  '.config/Kiro/User/globalStorage/kiro.kiroagent',
+  '.config/kiro/User/globalStorage/kiro.kiroagent'
 ];
 
 // Maps every WSL_DATA_MARKERS entry to the tracked-client id that owns it, so a
@@ -65,7 +69,11 @@ const MARKER_CLIENTS = {
   '.config/Code/User/globalStorage/kilocode.kilo-code/tasks': 'kilocode',
   '.vscode-server/data/User/globalStorage/kilocode.kilo-code/tasks': 'kilocode',
   '.local/share/micode/mimocode.db': 'micode',
-  '.zcode/projects': 'zcode'
+  '.zcode/projects': 'zcode',
+  '.kiro/sessions/cli': 'kiro',
+  '.local/share/kiro-cli/data.sqlite3': 'kiro',
+  '.config/Kiro/User/globalStorage/kiro.kiroagent': 'kiro',
+  '.config/kiro/User/globalStorage/kiro.kiroagent': 'kiro'
 };
 
 // Clients whose tokscale `--home` scan can fall back to a HOST-native database

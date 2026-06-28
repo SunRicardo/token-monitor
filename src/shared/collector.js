@@ -566,6 +566,37 @@ function clientWatchCandidates(clientsCsv) {
   );
   add('micode', path.join(home, '.local', 'share', 'micode'));
   add('zcode', path.join(home, '.zcode', 'projects'));
+  // Kiro (AWS): tokscale reads three home-relative roots — the CLI sessions dir,
+  // the Kiro IDE globalStorage root (native macOS / Linux / Windows), and the
+  // kiro-cli sqlite dir. None falls back to a host-absolute path under --home
+  // (unlike Zed), so all are safe to watch cross-platform for seconds-level
+  // refresh and a correct waiting/missing status.
+  //
+  // Note the deliberate Kiro-vs-kiro casing asymmetry below (do not "fix" it to
+  // list both cases everywhere): tokscale scans both `Kiro` and `kiro` cased
+  // globalStorage roots, but watchPathsForClients filters by dirExists, so the
+  // COST of listing both differs by filesystem:
+  //   - Linux/WSL (case-sensitive): a missing variant is filtered out at zero
+  //     cost, and a real lowercase build is genuinely distinct — so list BOTH
+  //     `.config/Kiro` and `.config/kiro` (free insurance for the case ambiguity
+  //     that tokscale scanning both already signals exists in the wild).
+  //   - macOS/Windows (case-insensitive): `Kiro` and `kiro` resolve to the SAME
+  //     dir, so both would pass dirExists and double-watch one directory with no
+  //     functional gain — so list only the canonical `Kiro` (it already resolves
+  //     a lowercase install on these filesystems). Same reason zed lists one case.
+  // Usage counting is unaffected either way: full scans run tokscale, which reads
+  // every root; the watch list only governs refresh latency + the presence dot.
+  // (APPDATA || home AppData\Roaming mirrors how cline resolves the Windows root.)
+  add(
+    'kiro',
+    path.join(home, '.kiro', 'sessions', 'cli'),
+    path.join(home, 'Library', 'Application Support', 'Kiro', 'User', 'globalStorage', 'kiro.kiroagent'),
+    path.join(home, '.config', 'Kiro', 'User', 'globalStorage', 'kiro.kiroagent'),
+    path.join(home, '.config', 'kiro', 'User', 'globalStorage', 'kiro.kiroagent'),
+    path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'Kiro', 'User', 'globalStorage', 'kiro.kiroagent'),
+    path.join(home, '.local', 'share', 'kiro-cli'),
+    path.join(home, 'Library', 'Application Support', 'kiro-cli')
+  );
   add(
     'cline',
     path.join(home, '.config', 'Code', 'User', 'globalStorage', 'saoudrizwan.claude-dev', 'tasks'),

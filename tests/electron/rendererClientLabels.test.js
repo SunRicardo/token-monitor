@@ -35,7 +35,7 @@ test('renderer client labels cover every known client', () => {
 
 test('renderer known clients include current tokscale-supported tools', () => {
   const clients = knownClientIds(rendererSource());
-  for (const client of ['cline', 'kimi', 'qwen', 'grok', 'copilot', 'pi', 'zed', 'kilocode', 'micode', 'zcode']) {
+  for (const client of ['cline', 'kimi', 'qwen', 'grok', 'copilot', 'pi', 'zed', 'kilocode', 'micode', 'zcode', 'kiro']) {
     assert.ok(clients.includes(client), `${client} should be a known renderer client`);
   }
 });
@@ -52,4 +52,9 @@ test('renderer reuses vendor icons for MiMo Code and ZCode tool rows', () => {
   const styles = rendererStyles();
   assert.match(styles, /\.row-icon-micode\s*\{[^}]*assets\/icons\/xiaomi\.svg/s);
   assert.match(styles, /\.row-icon-zcode\s*\{[^}]*assets\/icons\/zai\.svg/s);
+});
+
+test('renderer uses the Kiro brand icon for the Kiro tool row', () => {
+  const styles = rendererStyles();
+  assert.match(styles, /\.row-icon-kiro\s*\{[^}]*assets\/icons\/kiro\.svg/s);
 });

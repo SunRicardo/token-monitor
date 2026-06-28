@@ -127,7 +127,7 @@ test('watchPathsForClients includes the GitHub Copilot CLI otel root', () => {
   }
 });
 
-test('watchPathsForClients watches Pi (incl. Oh My Pi), Zed (incl. native macOS), and Kilo Code (only tokscale-scanned roots)', () => {
+test('watchPathsForClients watches Pi (incl. Oh My Pi), Zed (incl. native macOS), Kilo Code (only tokscale-scanned roots), and Kiro (CLI + IDE + kiro-cli roots)', () => {
   const tmp = withTmpHome([
     path.join('.pi', 'agent', 'sessions'),
     path.join('.omp', 'agent', 'sessions'),
@@ -137,13 +137,16 @@ test('watchPathsForClients watches Pi (incl. Oh My Pi), Zed (incl. native macOS)
     path.join('.vscode-server', 'data', 'User', 'globalStorage', 'kilocode.kilo-code', 'tasks'),
     path.join('Library', 'Application Support', 'Code', 'User', 'globalStorage', 'kilocode.kilo-code', 'tasks'),
     path.join('.local', 'share', 'micode'),
-    path.join('.zcode', 'projects')
+    path.join('.zcode', 'projects'),
+    path.join('.kiro', 'sessions', 'cli'),
+    path.join('Library', 'Application Support', 'Kiro', 'User', 'globalStorage', 'kiro.kiroagent'),
+    path.join('.local', 'share', 'kiro-cli')
   ]);
   const originalHomedir = os.homedir;
   os.homedir = () => tmp;
   try {
     const { clientDataDirPresence, watchPathsForClients } = freshCollector();
-    const dirs = watchPathsForClients('pi,zed,kilocode,micode,zcode');
+    const dirs = watchPathsForClients('pi,zed,kilocode,micode,zcode,kiro');
     assert.ok(dirs.includes(path.join(tmp, '.pi', 'agent', 'sessions')));
     assert.ok(dirs.includes(path.join(tmp, '.omp', 'agent', 'sessions')));
     assert.ok(dirs.includes(path.join(tmp, '.local', 'share', 'zed', 'threads')));
@@ -155,8 +158,13 @@ test('watchPathsForClients watches Pi (incl. Oh My Pi), Zed (incl. native macOS)
     assert.ok(!dirs.includes(path.join(tmp, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'kilocode.kilo-code', 'tasks')));
     assert.ok(dirs.includes(path.join(tmp, '.local', 'share', 'micode')));
     assert.ok(dirs.includes(path.join(tmp, '.zcode', 'projects')));
-    assert.deepEqual(clientDataDirPresence('pi,zed,kilocode,micode,zcode'), {
-      pi: true, zed: true, kilocode: true, micode: true, zcode: true
+    // Kiro: tokscale reads the CLI sessions dir, the Kiro IDE globalStorage root,
+    // and the kiro-cli sqlite dir — all home-relative, so we watch each.
+    assert.ok(dirs.includes(path.join(tmp, '.kiro', 'sessions', 'cli')));
+    assert.ok(dirs.includes(path.join(tmp, 'Library', 'Application Support', 'Kiro', 'User', 'globalStorage', 'kiro.kiroagent')));
+    assert.ok(dirs.includes(path.join(tmp, '.local', 'share', 'kiro-cli')));
+    assert.deepEqual(clientDataDirPresence('pi,zed,kilocode,micode,zcode,kiro'), {
+      pi: true, zed: true, kilocode: true, micode: true, zcode: true, kiro: true
     });
   } finally {
     os.homedir = originalHomedir;

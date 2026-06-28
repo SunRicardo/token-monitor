@@ -391,6 +391,15 @@ test('extractUsageFromTokscale normalizes MiMo Code and ZCode client ids', () =>
   assert.equal(period.clients.zcode, 29);
 });
 
+test('extractUsageFromTokscale normalizes Kiro client ids', () => {
+  const period = extractUsageFromTokscale([
+    { client: 'kiro', model: 'claude-sonnet-4', totalTokens: 31 },
+    { client: 'Kiro', model: 'claude-sonnet-4', totalTokens: 7 }
+  ]);
+
+  assert.equal(period.clients.kiro, 38);
+});
+
 test('normalizeClientName keeps kilo distinct from kilocode and maps Oh My Pi to pi', () => {
   const period = extractUsageFromTokscale([
     { client: 'kilo', model: 'x', totalTokens: 5 },
