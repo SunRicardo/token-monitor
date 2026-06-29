@@ -5,22 +5,19 @@
 ## What's changed
 
 ### Added
-- **GitHub Copilot limits support:** sign in from Settings and show Copilot limit windows alongside the other AI Tool Limits providers.
-- **Grok and Minimax limits support:** show Grok billing/credits and Minimax Token Plan limits from the Limits views, tray, and provider account cards. (#32)
-- Usage tracking for **MiMo Code** and **ZCode**, with matching app icons and WSL discovery markers.
-- **Windows WSL controls:** Settings -> Collection now includes a **Scan tools inside WSL** toggle and a **WSL detection** panel that shows which running distro/home paths contribute usage.
-- **Display currency auto-update:** costs can use daily refreshed exchange rates, with manual overrides still available in Settings. (#33)
+- **Kiro usage tracking:** collect Kiro CLI, Kiro IDE globalStorage, and `kiro-cli` usage, including Kiro activity from running WSL distros on Windows.
+- **Kiro limits support:** show Kiro quota windows in AI Tool Limits, Home, and tray/floating limit bars. (#41)
+- **Customizable Home modules:** Settings -> Main Screen now lets you choose which Home modules appear, reorder them, and separately tune Home limit providers.
 
 ### Improved
-- Full collector scans now publish progressive results sooner, reducing the wait during heavier scans. (#27)
-- The collector now preserves its full-scan anchor across restarts and refreshes WSL snapshots on interval ticks, reducing unnecessary full rescans. (#29)
-- Tokscale is bundled at **4.0.4**, including the Codex fork/replay accounting fix.
+- Tokscale is bundled at **4.0.5**, including the MiMo Code scan-path fix.
+- Kiro watch paths now cover CLI sessions, IDE globalStorage, and `kiro-cli` databases so usage refreshes within seconds after new activity.
+- MiMo Code scanning now uses the correct `~/.local/share/mimocode` data path while remaining available as an opt-in tracked tool.
 
 ### Fixed
-- Stale devices no longer keep old today/month totals alive in Hub aggregates. (#37)
-- Collector period windows now share one capture time, avoiding mismatched boundary timestamps. (#37)
-- Hermes Agent watches are limited to the `state.db` file family so unrelated file changes do not retrigger collection. (#38)
-- WSL usage remains included correctly during warm progressive previews.
+- Home no longer blanks the Activity/Trend module during cold starts before full history loads. (#39)
+- Broken stdout/stderr pipes no longer show noisy main-process error dialogs. (#35)
+- MiMo Code is no longer tracked by default because its database can import Claude Code sessions and double-count Claude usage; it can still be enabled from Settings.
 
 ## Which file should I download?
 
@@ -55,22 +52,19 @@ open-source: https://github.com/junhoyeo/tokscale
 ## 更新内容
 
 ### 新增
-- **GitHub Copilot 额度支持：** 可在设置中登录，并与其他 AI 工具用量上限提供方一起显示 Copilot 的额度窗口。
-- **Grok 和 Minimax 额度支持：** 在额度视图、托盘和提供方账号卡片中显示 Grok billing/credits 与 Minimax Token Plan 额度。(#32)
-- 新增 **MiMo Code** 和 **ZCode** 用量追踪，并补齐对应应用图标与 WSL 发现标记。
-- **Windows WSL 控制：** 设置 -> 采集 现在包含 **扫描 WSL 里的工具** 开关，以及显示哪些运行中的发行版/home 路径贡献用量的 **WSL 检测** 面板。
-- **显示币别自动汇率：** 成本可使用每日自动刷新的汇率，仍可在设置中手动覆写。(#33)
+- **Kiro 用量追踪：** 采集 Kiro CLI、Kiro IDE globalStorage 与 `kiro-cli` 用量，并在 Windows 上自动并入运行中的 WSL 发行版里的 Kiro 用量。
+- **Kiro 额度支持：** 在 AI 工具限制、主页、托盘/悬浮额度条中显示 Kiro 额度窗口。(#41)
+- **主页模块自定义：** 设置 -> 主界面 现在可以选择主页显示哪些模块、调整顺序，并单独配置主页额度提供者。
 
 ### 改进
-- 完整采集扫描现在会更早推送渐进结果，降低重型扫描时的等待感。(#27)
-- 采集器会跨重启保留 full-scan anchor，并在定期扫描时刷新 WSL 快照，减少不必要的完整重扫。(#29)
-- Tokscale 已内置升级到 **4.0.4**，包含 Codex fork/replay 统计修复。
+- Tokscale 已内置升级到 **4.0.5**，包含 MiMo Code 扫描路径修复。
+- Kiro 监听路径现在覆盖 CLI sessions、IDE globalStorage 与 `kiro-cli` 数据库，新活动后可在数秒内刷新用量。
+- MiMo Code 扫描现在使用正确的 `~/.local/share/mimocode` 数据路径，并继续作为可手动开启的追踪工具提供。
 
 ### 修复
-- Hub 聚合时，过期设备不再让旧的今日/本月总量继续保留。(#37)
-- 采集器的 period windows 现在共用同一个捕获时间，避免边界时间戳不一致。(#37)
-- Hermes Agent 监听范围已限制在 `state.db` 文件族，避免无关文件变化重新触发采集。(#38)
-- WSL 用量在 warm progressive preview 期间会继续正确并入。
+- 主页冷启动时不再因为完整历史尚未加载而清空活动/趋势模块。(#39)
+- stdout/stderr 管道断开时不再弹出嘈杂的主进程错误提示。(#35)
+- MiMo Code 不再默认追踪，因为它的数据库可能导入 Claude Code session 并造成 Claude 用量重复计算；仍可在设置中手动启用。
 
 ## 应该下载哪个文件？
 
