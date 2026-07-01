@@ -341,6 +341,13 @@ async function maybeSyncAntigravity(clientsCsv, logger, home = os.homedir()) {
 
 const HISTORY_CAP_DAYS = 370;
 const HISTORY_TIMEOUT_MS = 60000;
+const DEFAULT_HISTORY_INTERVAL_MS = 15 * 60 * 1000;
+const HISTORY_INTERVAL_VALUES = new Set([5, 10, 15, 30, 60].map((minutes) => minutes * 60 * 1000));
+
+function normalizeHistoryIntervalMs(value) {
+  const parsed = Number(value);
+  return HISTORY_INTERVAL_VALUES.has(parsed) ? parsed : DEFAULT_HISTORY_INTERVAL_MS;
+}
 
 async function collectHistoryOnce(options) {
   const clients = normalizeClientsCsv(options.clients);
@@ -965,7 +972,10 @@ module.exports = {
   wslPeriodsForPreview,
   statusFromSignals,
   decideResolver,
+  DEFAULT_HISTORY_INTERVAL_MS,
+  HISTORY_INTERVAL_VALUES,
   localTodayKey,
+  normalizeHistoryIntervalMs,
   sessionTimestampMap,
   locateBundledBinary,
   lookupModelPricing,

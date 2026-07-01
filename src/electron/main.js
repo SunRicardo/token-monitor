@@ -14,7 +14,7 @@ const { appVersion } = require('../shared/appVersion');
 // event and Electron pops a "JavaScript error in the main process" dialog.
 installSafeStdout();
 const { DEFAULT_CLIENTS, KNOWN_CLIENTS, clientsCsvForSetting } = require('../shared/clientTracking');
-const { startCollector, lookupModelPricing } = require('../shared/collector');
+const { startCollector, lookupModelPricing, normalizeHistoryIntervalMs } = require('../shared/collector');
 const { customPricingPath } = require('../shared/tokscaleConfig');
 const { applyCustomPricing, normalizeCustomPricingSetting } = require('../shared/tokscaleCustomPricing');
 const { createHub } = require('../hub/server');
@@ -181,7 +181,8 @@ function defaultSettings() {
     hiddenViews: defaultViewDisplayPreferences().hiddenViews,
     homeModuleOrder: defaultHomeModulePreferences().homeModuleOrder,
     hiddenHomeModules: defaultHomeModulePreferences().hiddenHomeModules,
-    historyEnabled: false,
+    historyEnabled: true,
+    historyIntervalMs: normalizeHistoryIntervalMs(process.env.TOKEN_MONITOR_HISTORY_INTERVAL_MS),
     wslScanEnabled: parseBoolean(process.env.TOKEN_MONITOR_WSL_SCAN, true),
     collectionMode: 'live',
     collectionIntervalMs: 5 * 60 * 1000,
@@ -1237,7 +1238,7 @@ function startSyncCollector() {
     agentRuntime: 'electron-widget',
     intervalMs: collectorIntervalMs(),
     historyEnabled: settings.historyEnabled !== false,
-    historyIntervalMs: Number(process.env.TOKEN_MONITOR_HISTORY_INTERVAL_MS || 15 * 60 * 1000),
+    historyIntervalMs: normalizeHistoryIntervalMs(settings.historyIntervalMs),
     watchEnabled: collectorWatchEnabled(),
     watchDebounceMs: 1500,
     limitsEnabled: settings.limitsEnabled !== false,
@@ -1280,7 +1281,7 @@ function startHostCollector() {
     agentRuntime: 'electron-widget',
     intervalMs: collectorIntervalMs(),
     historyEnabled: settings.historyEnabled !== false,
-    historyIntervalMs: Number(process.env.TOKEN_MONITOR_HISTORY_INTERVAL_MS || 15 * 60 * 1000),
+    historyIntervalMs: normalizeHistoryIntervalMs(settings.historyIntervalMs),
     watchEnabled: collectorWatchEnabled(),
     watchDebounceMs: 1500,
     limitsEnabled: settings.limitsEnabled !== false,
@@ -1451,7 +1452,7 @@ function startLocalCollector() {
     agentRuntime: 'electron-widget',
     intervalMs: collectorIntervalMs(),
     historyEnabled: settings.historyEnabled !== false,
-    historyIntervalMs: Number(process.env.TOKEN_MONITOR_HISTORY_INTERVAL_MS || 15 * 60 * 1000),
+    historyIntervalMs: normalizeHistoryIntervalMs(settings.historyIntervalMs),
     watchEnabled: collectorWatchEnabled(),
     watchDebounceMs: 1500,
     limitsEnabled: settings.limitsEnabled !== false,
@@ -2402,6 +2403,7 @@ app.whenReady().then(() => {
     const previousLimitProviders = settings.limitProviders;
     const previousLimitsRefreshMs = settings.limitsRefreshMs;
     const previousHistoryEnabled = settings.historyEnabled;
+    const previousHistoryIntervalMs = settings.historyIntervalMs;
     const previousWslScanEnabled = settings.wslScanEnabled;
     const previousCollectionMode = settings.collectionMode;
     const previousCollectionIntervalMs = settings.collectionIntervalMs;
@@ -2457,6 +2459,7 @@ app.whenReady().then(() => {
       homeLimitProviderOrder: patch.homeLimitProviderOrder !== undefined ? migrateHomeLimitProviderOrder(patch.homeLimitProviderOrder) : (settings.homeLimitProviderOrder || ''),
       hiddenHomeLimitProviders: patch.hiddenHomeLimitProviders !== undefined ? normalizeHiddenLimitProviders(patch.hiddenHomeLimitProviders) : normalizeHiddenLimitProviders(settings.hiddenHomeLimitProviders),
       historyEnabled: parseBoolean(patch.historyEnabled ?? settings.historyEnabled, false),
+      historyIntervalMs: normalizeHistoryIntervalMs(patch.historyIntervalMs ?? settings.historyIntervalMs),
       wslScanEnabled: parseBoolean(patch.wslScanEnabled ?? settings.wslScanEnabled, true),
       collectionMode: normalizeCollectionMode(patch.collectionMode ?? settings.collectionMode),
       collectionIntervalMs: normalizeCollectionIntervalMs(patch.collectionIntervalMs ?? settings.collectionIntervalMs),
@@ -2526,6 +2529,7 @@ app.whenReady().then(() => {
       settings.limitProviders !== previousLimitProviders ||
       settings.limitsRefreshMs !== previousLimitsRefreshMs ||
       settings.historyEnabled !== previousHistoryEnabled ||
+      settings.historyIntervalMs !== previousHistoryIntervalMs ||
       settings.wslScanEnabled !== previousWslScanEnabled ||
       settings.collectionMode !== previousCollectionMode ||
       settings.collectionIntervalMs !== previousCollectionIntervalMs ||

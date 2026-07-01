@@ -4149,16 +4149,39 @@ function renderTrendSettingsList() {
   const input = document.createElement('input');
   input.type = 'checkbox';
   input.checked = state.settings?.historyEnabled !== false;
-  input.addEventListener('change', async () => {
-    const enabling = input.checked;
-    await setTrendEnabled(enabling);
-    state.trendsActivating = enabling;
-    renderHomeIfVisible();
-  });
   const text = document.createElement('span');
   text.textContent = t('settings.views.enableTrend');
   label.append(input, text);
   wrap.append(label);
+
+  const HISTORY_INTERVAL_OPTIONS = [300000, 600000, 900000, 1800000, 3600000];
+  const intervalRow = document.createElement('label');
+  intervalRow.className = 'status-provider-interval';
+  intervalRow.classList.toggle('hidden', !input.checked);
+  const intervalLabel = document.createElement('span');
+  intervalLabel.textContent = t('settings.views.trendInterval');
+  const select = document.createElement('select');
+  select.id = 'trendIntervalSelect';
+  const currentMs = HISTORY_INTERVAL_OPTIONS.includes(Number(state.settings?.historyIntervalMs)) ? Number(state.settings.historyIntervalMs) : 900000;
+  for (const ms of HISTORY_INTERVAL_OPTIONS) {
+    const option = document.createElement('option');
+    option.value = String(ms);
+    option.textContent = t('settings.views.trendIntervalMinutes', { n: ms / 60000 });
+    if (ms === currentMs) option.selected = true;
+    select.appendChild(option);
+  }
+  select.addEventListener('change', () => void saveSettings({ historyIntervalMs: Number(select.value) }));
+  intervalRow.append(intervalLabel, select);
+  wrap.append(intervalRow);
+
+  input.addEventListener('change', async () => {
+    const enabling = input.checked;
+    intervalRow.classList.toggle('hidden', !enabling);
+    await setTrendEnabled(enabling);
+    state.trendsActivating = enabling;
+    renderHomeIfVisible();
+  });
+
   return wrap;
 }
 

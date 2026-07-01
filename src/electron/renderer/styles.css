@@ -3048,6 +3048,7 @@ body.floating-bubble-collapsed-right .floating-bubble-tab {
   font-size: 11px;
 }
 .status-provider-interval select { font-size: 11px; }
+.status-provider-interval.hidden { display: none; }
 
 .trends-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; padding-right: 2px; overflow: hidden; }
 .trends-panel.hidden { display: none; }

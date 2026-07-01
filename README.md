@@ -69,7 +69,7 @@ Most usage monitors are useful on the machine they run on. Token Monitor is buil
 - **Cache hit statistics** — click on any tool or model to expand a detailed breakdown of input tokens (cache hit vs miss), output tokens, and hit rate percentages
 - **Cost breakdown** alongside token counts
 - **Cost in your currency** — show costs in USD, TWD, HKD, or CNY; exchange rates auto-update daily and can be manually overridden in Settings
-- **Usage Trends & Dashboard** (opt-in) — a dedicated dashboard window with a GitHub-style activity heatmap, streaks, and stacked per-tool/per-model usage history (bar and K-line views) across all your devices
+- **Usage Trends & Dashboard** — a home-screen activity heatmap and trend chart, plus a dedicated dashboard window with streaks and stacked per-tool/per-model usage history (bar and K-line views) across all your devices
 - **AI Tool Limits detection** for Claude Code, Codex, Cursor, Antigravity, OpenCode, Grok, Minimax, GitHub Copilot, and Kiro with session, weekly, billing, and credits windows, plus DeepSeek prepaid balance and today/month spend
 - **Optional Status view** for Claude, OpenAI, Cursor, and DeepSeek status pages, with manual or interval re-checks
 - **Customizable tool list** to hide, pin, and reorder tools in the main dashboard without changing what gets tracked
@@ -188,7 +188,7 @@ Click the `⚙` button in the widget header to open the Settings panel.
 - **Multi-device Sync** — three modes: **Local only** (this device, no hub), **Connect to a hub** (paste another machine's Hub URL + secret), or **Host hub on this device** (open a hub here so other devices can connect; LAN/Tailscale/ZeroTier addresses are listed for you).
 - **Tracked Tools** — choose which AI tools are collected, and independently hide, pin, or reorder tools in the main list.
 - **AI Tool Limits** — choose Claude Code, Codex, Cursor, Antigravity, OpenCode, DeepSeek, Grok, Minimax, GitHub Copilot, and Kiro limit detection and refresh frequency.
-- **Trends** — opt-in usage history; turn it on to collect daily history and open the Usage Dashboard (activity heatmap, streaks, and stacked per-tool/per-model bar and K-line charts).
+- **Trends** — choose the scan interval for daily usage history, or turn it off; open the Usage Dashboard for the activity heatmap, streaks, and stacked per-tool/per-model bar and K-line charts.
 - **Window behavior** — choose floating above apps, a normal window, or desktop pinned mode.
 - **Tray Mode** — switch to a menu bar (macOS) or system tray (Windows) popover and choose what shows next to the icon: cost, today's tokens, total tokens, cost + tokens, the closest Claude/Codex/Cursor/Antigravity/OpenCode/Grok/Minimax/GitHub Copilot/Kiro limit % left, or icon-only.
 - **Floating Bubble** — collapse the widget into a draggable mini-window, reopen it by click or hover preview, and choose bubble content from icon, tokens, cost, or AI Tool Limit bars.
@@ -207,7 +207,7 @@ TOKEN_MONITOR_HUB_URL=               # required for sync mode — Worker URL or 
 TOKEN_MONITOR_SECRET=                # shared secret, must match the hub
 TOKEN_MONITOR_DEVICE_ID=             # optional — defaults to hostname
 TOKEN_MONITOR_CLIENTS=               # optional — defaults to all supported tools; set empty to disable tracking
-TOKEN_MONITOR_HISTORY_ENABLED=       # optional — defaults to disabled; set to 1 to collect Trends history
+TOKEN_MONITOR_HISTORY_ENABLED=       # optional — defaults to enabled; set to 0 to skip collecting Trends history
 TOKEN_MONITOR_LIMITS_ENABLED=        # optional — defaults to enabled; set to 0 to skip CLI probing
 TOKEN_MONITOR_LIMIT_PROVIDERS=       # optional — defaults to all supported (claude, codex, cursor, antigravity, opencode, deepseek, minimax, grok, copilot, kiro)
 ```
