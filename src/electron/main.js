@@ -2865,7 +2865,11 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('opencode:deleteProfile', async (_event, name) => {
     const profiles = settings.opencodeProfiles || {};
+    const deletedProfile = profiles[name];
     delete profiles[name];
+    if (deletedProfile?.cookie && settings.opencodeCookie === deletedProfile.cookie) {
+      settings.opencodeCookie = '';
+    }
     settings.opencodeProfiles = profiles;
     saveSettings();
     opencodeStatusCache = { value: null, at: 0 };

@@ -90,6 +90,7 @@ test('OpenCode account panel provides multi-profile management', () => {
   assert.match(details, /<div id="opencodeAddForm" class="opencode-add-form">/);
   assert.match(details, /<button id="opencodeAddToggle" class="opencode-add-summary" type="button" aria-expanded="false" aria-controls="opencodeAddDetails">/);
   assert.match(details, /<div id="opencodeAddDetails" class="opencode-add-details accordion-animated-container hidden">/);
+  assert.match(details, /<button id="opencodeOpenBrowser"[\s\S]*data-i18n="settings\.opencode\.openBrowser">/);
   assert.match(details, /<span data-i18n="settings\.opencode\.addProfile"/);
   assert.match(details, /<input id="opencodeProfileName" type="text"[\s\S]*data-i18n-placeholder="settings\.opencode\.profileNamePlaceholder"/);
   assert.match(details, /<textarea id="opencodeCookieInput"[\s\S]*placeholder="auth=\.\.\."><\/textarea>/);
@@ -105,9 +106,50 @@ test('OpenCode account panel provides multi-profile management', () => {
   const setupBody = functionBodyBeforeMarker(app, 'setupCursorAccountUI', '\nsetupCursorAccountUI();');
   assert.match(setupBody, /document\.getElementById\('opencodeAddToggle'\)/);
   assert.match(setupBody, /addDetails\?\.classList\.toggle\('hidden'/);
+  assert.match(setupBody, /document\.getElementById\('opencodeOpenBrowser'\)\?\.addEventListener\('click'/);
+  assert.match(setupBody, /window\.tokenMonitor\.openExternal\('https:\/\/opencode\.ai\/auth'\)/);
   assert.match(setupBody, /window\.tokenMonitor\.opencode\.saveProfile\(/);
   assert.match(setupBody, /renderOpenCodeProfiles\(\)/);
   assert.match(setupBody, /updateOpenCodeProfilesStatus\(\)/);
+});
+
+test('OpenCode disabled profiles still count in the account summary', () => {
+  const app = readRendererFile('app.js');
+  const renderBody = functionBody(app, 'renderOpenCodeProfiles', 'updateOpenCodeProfilesStatus');
+  assert.match(renderBody, /state\.opencodeProfileCount = entries\.length;/);
+  assert.match(renderBody, /api\.setProfileEnabled\(name, toggle\.checked\)\.then\(\(\) => \{/);
+  assert.match(renderBody, /updateOpenCodeProfilesStatus\(\);/);
+  assert.doesNotMatch(renderBody, /if \(toggle\.checked\) updateOpenCodeProfilesStatus\(\)/);
+
+  const statusBody = functionBody(app, 'updateOpenCodeProfilesStatus', 'renderCursorStatus');
+  assert.match(statusBody, /const configuredProfileCount = state\.opencodeProfileCount \|\| 0;/);
+  assert.match(statusBody, /Math\.max\(Object\.keys\(profiles\)\.length, configuredProfileCount\)/);
+  assert.match(statusBody, /t\('settings\.opencode\.connected', \{ linked: linkedCount, total: totalCount \}\)/);
+});
+
+test('OpenCode profile deletion clears the legacy default cookie when it owns the profile', () => {
+  const main = fs.readFileSync(path.join(rendererDir, '..', 'main.js'), 'utf8');
+  const handler = main.slice(
+    main.indexOf("ipcMain.handle('opencode:deleteProfile'"),
+    main.indexOf("ipcMain.handle('opencode:renameProfile'")
+  );
+  assert.ok(handler, 'opencode:deleteProfile handler should exist');
+  assert.match(handler, /const deletedProfile = profiles\[name\];/);
+  assert.match(handler, /if \(deletedProfile\?\.cookie && settings\.opencodeCookie === deletedProfile\.cookie\) \{/);
+  assert.match(handler, /settings\.opencodeCookie = '';/);
+});
+
+test('OpenCode profile enable toggles restart the collector mode so limits source updates', () => {
+  const main = fs.readFileSync(path.join(rendererDir, '..', 'main.js'), 'utf8');
+  const handler = main.slice(
+    main.indexOf("ipcMain.handle('opencode:setProfileEnabled'"),
+    main.indexOf("ipcMain.handle('codex:accounts'")
+  );
+  assert.ok(handler, 'opencode:setProfileEnabled handler should exist');
+  assert.match(handler, /profiles\[name\]\.enabled = Boolean\(enabled\);/);
+  assert.match(handler, /saveSettings\(\);/);
+  assert.match(handler, /opencodeStatusCache = \{ value: null, at: 0 \};/);
+  assert.match(handler, /startMode\(\)/);
 });
 
 test('Codex account panel supports per-account enable toggles without showing timestamps', () => {

@@ -5747,9 +5747,7 @@ function renderOpenCodeProfiles() {
           const info = item.querySelector('.profile-info');
           info.textContent = toggle.checked ? '...' : t('settings.opencode.disabled');
           renderSettingsSummaries();
-          // Enabling adds the profile to the status query; refresh so the row
-          // resolves from the loading placeholder instead of sticking on '...'.
-          if (toggle.checked) updateOpenCodeProfilesStatus();
+          updateOpenCodeProfilesStatus();
         });
       });
 
@@ -5868,7 +5866,8 @@ async function updateOpenCodeProfilesStatus() {
   const totalEl = document.getElementById('opencodeCookieStatus');
   if (totalEl) {
     const linkedCount = Object.values(profiles).filter(s => s.linked).length;
-    const totalCount = Object.keys(profiles).length;
+    const configuredProfileCount = state.opencodeProfileCount || 0;
+    const totalCount = Math.max(Object.keys(profiles).length, configuredProfileCount);
     if (totalCount > 0) {
       totalEl.textContent = t('settings.opencode.connected', { linked: linkedCount, total: totalCount });
     } else {
@@ -6271,6 +6270,10 @@ function setupCursorAccountUI() {
       document.getElementById('opencodeAddForm')?.classList.toggle('expanded', next);
     }
     addToggle?.addEventListener('click', () => setOpenCodeAddExpanded(addDetails?.classList.contains('hidden')));
+
+    document.getElementById('opencodeOpenBrowser')?.addEventListener('click', () => {
+      window.tokenMonitor.openExternal('https://opencode.ai/auth');
+    });
 
     document.getElementById('opencodeCookieSubmit').addEventListener('click', async () => {
       const input = document.getElementById('opencodeCookieInput');
