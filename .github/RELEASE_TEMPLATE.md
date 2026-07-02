@@ -5,15 +5,18 @@
 ## What's changed
 
 ### Added
-- **Codex account toggles:** Settings -> Accounts -> Codex Accounts now lets you enable or disable tracking for each saved Codex account without removing the account.
-- **Collection frequency:** Settings -> Collection now lets you choose how often usage is collected: live tracking by default, or every 5, 15, or 30 minutes.
-- **Codex reset credits:** AI Tool Limits now shows Codex reset counts when the signed-in account reports them.
+- **Claude Fable weekly cap:** Claude now shows a temporary Fable-only weekly window.
+
+### Changed
+- **Usage Trends setup:** Fresh installs collect Trends history by default, saved opt-out settings stay off, and Settings now includes 5, 10, 15, 30, or 60 minute scan intervals.
 
 ### Improved
-- The main view switcher and renderer icons have smoother hover states and more consistent labels.
+- **Bundled Tokscale 4.0.9:** fixes Grok `signals.json` compaction-total reconciliation and parses Kiro execution files plus GitHub Copilot Desktop SQLite usage.
+- **Hermes profile tracking:** Hermes Agent scans now include profile databases under the Hermes home folder or Windows `LOCALAPPDATA`, so profile-specific usage updates live with the rest of the tool list. (#43)
+- **Home overview polish:** Home device rows now prioritize the highest-usage devices, disabled Trends has a direct turn-on action, and active tools are labeled as "Tracking" instead of "Detecting."
 
 ### Fixed
-- Deleted OpenCode profiles no longer reappear after restart when they match the old default cookie, and enabling or disabling a profile now updates the limits source immediately.
+- **Archived client breakdowns:** cache hit, cache write, and output-token splits are restored when archived or untracked client sessions are shown in expanded rows.
 
 ## Which file should I download?
 
@@ -48,15 +51,18 @@ open-source: https://github.com/junhoyeo/tokscale
 ## 更新内容
 
 ### 新增
-- **Codex 账号追踪开关：** 设置 -> 账号 -> Codex 账号 现在可以对已添加的 Codex 账号逐一启用或停用追踪，无需移除账号。
-- **采集频率：** 设置 -> 采集 现在可以选择用量采集频率：默认即时追踪，也可以改为每 5、15、30 分钟采集。
-- **Codex 重置次数：** AI 工具限制现在会在账号提供数据时显示 Codex 重置次数。
+- **Claude Fable 每周上限：** Claude 现在会显示临时的 Fable-only 每周窗口。
+
+### 变更
+- **使用趋势设定：** 全新安装会默认采集趋势历史，已保存的关闭设定仍会保留；设置中也新增每 5、10、15、30、60 分钟扫描的间隔选项。
 
 ### 改进
-- 主视图切换器和渲染器图标的 hover 状态更顺滑，标签也更一致。
+- **升级内置 Tokscale 至 4.0.9：** 修复 Grok `signals.json` 压缩总量对账，并解析 Kiro 执行文件与 GitHub Copilot Desktop SQLite 用量。
+- **Hermes 设定档追踪：** Hermes Agent 现在会扫描 Hermes home 或 Windows `LOCALAPPDATA` 下的 profile 数据库，profile 用量也会随工具列表一起更新。（#43）
+- **主页概览细节：** 主页设备列表现在优先显示用量最高的设备；趋势关闭时有直接启用按钮；活跃工具状态也从“检测中”改为“追踪中”。
 
 ### 修复
-- 删除 OpenCode 账号设定档后，如果它对应旧版默认 cookie，重启后不再重新出现；启用或停用设定档后，额度来源也会立即更新。
+- **归档客户端明细：** 展开已归档或未追踪客户端的 session 时，会恢复缓存命中、缓存写入和输出 token 拆分，不再全部落到粗略明细里。
 
 ## 应该下载哪个文件？
 
