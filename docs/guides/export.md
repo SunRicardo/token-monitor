@@ -114,4 +114,4 @@ tidy (long) tables, so they pivot cleanly.
 
 Use `token-monitor-export.json` (or the CSVs) as a JSON/CSV file data source. For
 a live dashboard driven by the hub instead of files, see the `/api/stats` and
-`/api/history` endpoints in [API.md](API.md).
+`/api/history` endpoints in [API.md](../API.md).
