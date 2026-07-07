@@ -138,7 +138,7 @@ test('watchPathsForClients watches Pi (incl. Oh My Pi), Zed (incl. native macOS)
     path.join('Library', 'Application Support', 'Code', 'User', 'globalStorage', 'kilocode.kilo-code', 'tasks'),
     path.join('.local', 'share', 'mimocode'),
     path.join('.zcode', 'projects'),
-    path.join('.kiro', 'sessions', 'cli'),
+    path.join('.kiro', 'sessions', 'workspace-a', 'sess_123'),
     path.join('Library', 'Application Support', 'Kiro', 'User', 'globalStorage', 'kiro.kiroagent'),
     path.join('.local', 'share', 'kiro-cli'),
     path.join('.codebuddy', 'projects'),
@@ -160,9 +160,10 @@ test('watchPathsForClients watches Pi (incl. Oh My Pi), Zed (incl. native macOS)
     assert.ok(!dirs.includes(path.join(tmp, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'kilocode.kilo-code', 'tasks')));
     assert.ok(dirs.includes(path.join(tmp, '.local', 'share', 'mimocode')));
     assert.ok(dirs.includes(path.join(tmp, '.zcode', 'projects')));
-    // Kiro: tokscale reads the CLI sessions dir, the Kiro IDE globalStorage root,
-    // and the kiro-cli sqlite dir — all home-relative, so we watch each.
-    assert.ok(dirs.includes(path.join(tmp, '.kiro', 'sessions', 'cli')));
+    // Kiro: tokscale reads the sessions tree for both CLI and IDE, the Kiro IDE
+    // globalStorage root, and the kiro-cli sqlite dir — all home-relative, so we
+    // watch each.
+    assert.ok(dirs.includes(path.join(tmp, '.kiro', 'sessions')));
     assert.ok(dirs.includes(path.join(tmp, 'Library', 'Application Support', 'Kiro', 'User', 'globalStorage', 'kiro.kiroagent')));
     assert.ok(dirs.includes(path.join(tmp, '.local', 'share', 'kiro-cli')));
     // CodeBuddy/WorkBuddy: assert the platform-agnostic roots. CodeBuddy's

@@ -598,9 +598,10 @@ function clientWatchCandidates(clientsCsv) {
   // refreshes via the periodic full tick; the WSL marker stays the broader
   // `.workbuddy` so a db-only WSL home is still scanned.
   add('workbuddy', path.join(home, '.workbuddy', 'projects'));
-  // Kiro (AWS): tokscale reads three home-relative roots — the CLI sessions dir,
-  // the Kiro IDE globalStorage root (native macOS / Linux / Windows), and the
-  // kiro-cli sqlite dir. None falls back to a host-absolute path under --home
+  // Kiro (AWS): tokscale reads home-relative roots — the sessions tree used by
+  // both CLI and IDE, the Kiro IDE globalStorage root (native macOS / Linux /
+  // Windows), and the kiro-cli sqlite dir. None falls back to a host-absolute
+  // path under --home
   // (unlike Zed), so all are safe to watch cross-platform for seconds-level
   // refresh and a correct waiting/missing status.
   //
@@ -621,7 +622,7 @@ function clientWatchCandidates(clientsCsv) {
   // (APPDATA || home AppData\Roaming mirrors how cline resolves the Windows root.)
   add(
     'kiro',
-    path.join(home, '.kiro', 'sessions', 'cli'),
+    path.join(home, '.kiro', 'sessions'),
     path.join(home, 'Library', 'Application Support', 'Kiro', 'User', 'globalStorage', 'kiro.kiroagent'),
     path.join(home, '.config', 'Kiro', 'User', 'globalStorage', 'kiro.kiroagent'),
     path.join(home, '.config', 'kiro', 'User', 'globalStorage', 'kiro.kiroagent'),

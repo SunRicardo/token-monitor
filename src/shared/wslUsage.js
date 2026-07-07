@@ -8,7 +8,7 @@ const LXSS_KEY = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Lxss';
 
 // Relative (Linux-style) paths under a WSL home. If any exists, a tracked client
 // stores data there and the home is worth a tokscale scan. These mirror the roots
-// tokscale 3.1.3 actually reads (incl. alternate roots: Claude transcripts, Kimi
+// tokscale actually reads (incl. alternate roots: Claude transcripts, Kimi
 // Code, legacy OpenClaw bot dirs) so a home holding only an alternate-root client
 // is still discovered. The `.vscode-server` entries cover Cline / Kilo Code
 // running through the VS Code WSL remote.
@@ -36,7 +36,7 @@ const WSL_DATA_MARKERS = [
   '.vscode-server/data/User/globalStorage/kilocode.kilo-code/tasks',
   '.local/share/mimocode/mimocode.db',
   '.zcode/projects',
-  '.kiro/sessions/cli',
+  '.kiro/sessions',
   '.local/share/kiro-cli/data.sqlite3',
   '.config/Kiro/User/globalStorage/kiro.kiroagent',
   '.config/kiro/User/globalStorage/kiro.kiroagent',
@@ -72,7 +72,7 @@ const MARKER_CLIENTS = {
   '.vscode-server/data/User/globalStorage/kilocode.kilo-code/tasks': 'kilocode',
   '.local/share/mimocode/mimocode.db': 'micode',
   '.zcode/projects': 'zcode',
-  '.kiro/sessions/cli': 'kiro',
+  '.kiro/sessions': 'kiro',
   '.local/share/kiro-cli/data.sqlite3': 'kiro',
   '.config/Kiro/User/globalStorage/kiro.kiroagent': 'kiro',
   '.config/kiro/User/globalStorage/kiro.kiroagent': 'kiro',
