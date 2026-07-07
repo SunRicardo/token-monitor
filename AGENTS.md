@@ -119,6 +119,13 @@ Never add an AI `Co-Authored-By` trailer. **Do** keep the genuine human `Co-auth
 - PR titles follow the commit-message convention above — they become the squash-merge subject.
 - In the description: summarize the behaviour change, note the commands you ran (`npm run verify` at minimum), attach screenshots/GIFs for UI changes, and link the related issue.
 
+### Fork / Upstream Hygiene
+
+- `main` 可保留本地 docs / audit / planning 文档。
+- 准备给 upstream 的 PR 分支要排除无关 docs 变更。
+- 只有与上游功能或修复直接相关的文档，才进入 upstream PR，例如 `README`、`docs/API.md`。
+- 提 PR 前先看 `git diff --stat`，确认没有混入无关 docs。
+
 ### Authoring GitHub content via `gh`
 
 Write PR/issue bodies and comments to a file and pass it, rather than inline heredocs: `gh issue comment --body-file <path>`, `gh api -X PATCH … -F body=@<path>`. Inline `--body "$(cat <<EOF … EOF)"` mangles backtick escaping and renders as a literal `` \` `` in GitHub markdown. Same spirit for prose: write paragraphs as continuous lines and let GitHub wrap them — don't hard-wrap at 80 columns.
