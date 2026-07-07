@@ -5,15 +5,17 @@
 ## What's changed
 
 ### Added
-- **Japanese and Korean interface languages:** Settings -> General -> Interface language now includes 日本語 and 한국어, and Auto (system) recognizes Japanese and Korean system locales. (#57, #58)
-- **Linux AppImage downloads:** Linux x64 AppImage is now available alongside macOS and Windows builds. (#65)
+- **AI Tool Limits providers:** Settings -> AI Tool Limits now supports GLM / Z.ai, Volcengine, and Qoder quota tracking, with account setup, provider cards, and matching source labels. (#84)
+- **Home activity details:** The Home Activity heatmap now shows a per-day token tooltip and highlights the hovered day. (#83)
+
+### Changed
+- **New install title style:** Fresh installs now start with the compact title-icon header enabled; existing appearance settings stay unchanged.
 
 ### Improved
-- **Dashboard stat cards:** Activity summary cards now balance their widths so longer localized labels and values fit more evenly.
-- **Bundled tokscale 4.0.11:** Includes Oh My Pi (OMP) usage tracking and ZCode parsing fixes. (#77)
+- **Home activity freshness:** Today's heatmap cell now uses the live Today total, so the Activity chart stays aligned with the headline usage after refreshes or crossing midnight.
 
 ### Fixed
-- **App update prompts:** Dismissing one release no longer hides later releases for a full day; cached newer versions are refreshed more quickly.
+- **Codex quota windows:** Short empty Codex quota reads no longer clear recent session or weekly windows, keeping the Codex limits card populated when the CLI/API response is temporarily incomplete.
 
 ## Which file should I download?
 
@@ -56,15 +58,17 @@ open-source: https://github.com/junhoyeo/tokscale
 ## 更新内容
 
 ### 新增
-- **日文和韩文界面：** 设置 -> 常规 -> 界面语言 现在包含 日本語 和 한국어，自动（跟随系统）也会识别日文、韩文系统语言。（#57、#58）
-- **Linux AppImage 下载：** 现在会和 macOS、Windows 一起提供 Linux x64 AppImage。（#65）
+- **AI 工具额度提供商：** 设置 -> AI 工具额度 现在支持 GLM / Z.ai、Volcengine 和 Qoder 额度追踪，并提供账号配置、额度卡片和对应的来源标签。（#84）
+- **主界面活动详情：** 主界面的活动热力图现在会在悬停时显示每日 token 提示，并高亮当前日期格。（#83）
+
+### 变更
+- **新安装默认标题样式：** 全新安装现在默认启用紧凑的标题图标；已有外观设置保持不变。
 
 ### 改进
-- **仪表盘统计卡片：** 活动摘要卡片现在会平衡宽度，较长的本地化标签和值也更容易排布整齐。
-- **内置 tokscale 4.0.11：** 包含 Oh My Pi (OMP) 用量追踪和 ZCode 解析修复。（#77）
+- **主界面活动实时性：** 今日热力图格现在使用实时「今日」总量，刷新或跨过午夜后也会和上方用量一致。
 
 ### 修复
-- **应用更新提示：** 忽略某个版本后，后续新版本不会再被整天隐藏；已缓存的新版本会更快刷新。
+- **Codex 额度窗口：** 短暂的空额度读取不会再清掉最近的 session 或 weekly 窗口，CLI/API 临时没有返回完整数据时，Codex 额度卡片仍会保持可用。
 
 ## 应该下载哪个文件？
 
