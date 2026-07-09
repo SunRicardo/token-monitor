@@ -42,6 +42,26 @@ contextBridge.exposeInMainWorld('tokenMonitor', {
   getAppInfo: () => ipcRenderer.invoke('app:getInfo'),
   openExternal: (url) => ipcRenderer.invoke('app:openExternal', url),
   openUserData: () => ipcRenderer.invoke('app:openUserData'),
+  mimo: {
+    getStatus: () => ipcRenderer.invoke('mimo:getStatus'),
+    accounts: () => ipcRenderer.invoke('mimo:accounts'),
+    addAccount: () => ipcRenderer.invoke('mimo:addAccount'),
+    signIn: () => ipcRenderer.invoke('mimo:signIn'),
+    refreshStatus: () => ipcRenderer.invoke('mimo:refreshStatus'),
+    openDataDir: () => ipcRenderer.invoke('mimo:openDataDir'),
+    removeAccount: (id) => ipcRenderer.invoke('mimo:removeAccount', id),
+    setAccountEnabled: (id, enabled) => ipcRenderer.invoke('mimo:setAccountEnabled', id, enabled),
+    onStatus: (callback) => {
+      const handler = (_event, status) => callback(status);
+      ipcRenderer.on('mimo:status', handler);
+      return () => ipcRenderer.removeListener('mimo:status', handler);
+    },
+    onAccounts: (callback) => {
+      const handler = (_event, accounts) => callback(accounts);
+      ipcRenderer.on('mimo:accounts', handler);
+      return () => ipcRenderer.removeListener('mimo:accounts', handler);
+    }
+  },
   exportNow: () => ipcRenderer.invoke('export:now'),
   pickExportDir: () => ipcRenderer.invoke('export:pickAutoDir'),
   getTokscaleStatus: () => ipcRenderer.invoke('tokscale:getStatus'),

@@ -714,6 +714,24 @@
                 <div id="kimiErrorMessage" class="settings-note error hidden"></div>
               </div>
             </div>
+            <div id="mimoAccountGroup" class="settings-group cursor-account-group">
+              <button id="mimoSettingsToggle" class="settings-group-header cursor-settings-toggle" type="button" aria-expanded="false" aria-controls="mimoSettingsDetails">
+                <span data-i18n="settings.mimo.title">MiMo Account</span>
+                <span class="cursor-settings-summary">
+                  <span id="mimoAccountStatus" class="cursor-status-pill" data-i18n="settings.mimo.notConfigured">Not configured</span>
+                  <span class="cursor-disclosure-icon" aria-hidden="true"></span>
+                </span>
+              </button>
+              <div id="mimoSettingsDetails" class="cursor-settings-details hidden">
+                <p class="settings-note" data-i18n="settings.mimo.description">Sign in to MiMo inside Token Monitor. The web session stays isolated on this device.</p>
+                <div id="mimoAccountList" class="managed-account-list"></div>
+                <div class="settings-actions">
+                  <button id="mimoSignInButton" data-i18n="settings.mimo.signIn">Add account</button>
+                  <button id="mimoRefreshButton" data-i18n="settings.mimo.refresh">Refresh</button>
+                </div>
+                <div id="mimoAccountErrorMessage" class="settings-note error hidden"></div>
+              </div>
+            </div>
             <div id="copilotAccountGroup" class="settings-group cursor-account-group">
               <button id="copilotSettingsToggle" class="settings-group-header cursor-settings-toggle" type="button" aria-expanded="false" aria-controls="copilotSettingsDetails">
                 <span data-i18n="settings.copilot.title">GitHub Copilot Account</span>
