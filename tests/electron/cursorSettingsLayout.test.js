@@ -706,7 +706,6 @@ test('MiMo account panel exposes add account and refresh actions', () => {
   assert.match(preload, /getStatus: \(\) => ipcRenderer\.invoke\('mimo:getStatus'\)/);
   assert.match(preload, /accounts: \(\) => ipcRenderer\.invoke\('mimo:accounts'\)/);
   assert.match(preload, /addAccount: \(\) => ipcRenderer\.invoke\('mimo:addAccount'\)/);
-  assert.match(preload, /signIn: \(\) => ipcRenderer\.invoke\('mimo:signIn'\)/);
   assert.match(preload, /refreshStatus: \(\) => ipcRenderer\.invoke\('mimo:refreshStatus'\)/);
   assert.match(preload, /openDataDir: \(\) => ipcRenderer\.invoke\('mimo:openDataDir'\)/);
   assert.match(preload, /removeAccount: \(id\) => ipcRenderer\.invoke\('mimo:removeAccount', id\)/);
@@ -757,7 +756,6 @@ test('MiMo account panel exposes add account and refresh actions', () => {
   assert.match(main, /ipcMain\.handle\('mimo:getStatus'/);
   assert.match(main, /ipcMain\.handle\('mimo:accounts'/);
   assert.match(main, /ipcMain\.handle\('mimo:addAccount'/);
-  assert.match(main, /ipcMain\.handle\('mimo:signIn'/);
   assert.match(main, /ipcMain\.handle\('mimo:refreshStatus'/);
   assert.match(main, /ipcMain\.handle\('mimo:openDataDir'/);
   assert.match(main, /ipcMain\.handle\('mimo:setAccountEnabled'/);
@@ -766,7 +764,6 @@ test('MiMo account panel exposes add account and refresh actions', () => {
   assert.doesNotMatch(main, /shell\.openExternal\(MIMO_PLATFORM_CONSOLE_URL\)/);
   assert.doesNotMatch(addAccountHandler, /cookie|header/i);
   assert.match(addAccountHandler, /ipcMain\.handle\('mimo:addAccount', \(\) => beginMimoManagedAccountLogin\(\)\);/);
-  assert.match(addAccountHandler, /ipcMain\.handle\('mimo:signIn', \(\) => beginMimoManagedAccountLogin\(\)\);/);
   assert.match(refreshHandler, /queueMimoSessionRefresh\('manual'\)/);
   assert.match(main, /fs\.mkdirSync\(dataDir, \{ recursive: true \}\)/);
   assert.match(main, /shell\.openPath\(dataDir\)/);

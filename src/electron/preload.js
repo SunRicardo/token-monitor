@@ -46,7 +46,6 @@ contextBridge.exposeInMainWorld('tokenMonitor', {
     getStatus: () => ipcRenderer.invoke('mimo:getStatus'),
     accounts: () => ipcRenderer.invoke('mimo:accounts'),
     addAccount: () => ipcRenderer.invoke('mimo:addAccount'),
-    signIn: () => ipcRenderer.invoke('mimo:signIn'),
     refreshStatus: () => ipcRenderer.invoke('mimo:refreshStatus'),
     openDataDir: () => ipcRenderer.invoke('mimo:openDataDir'),
     removeAccount: (id) => ipcRenderer.invoke('mimo:removeAccount', id),
