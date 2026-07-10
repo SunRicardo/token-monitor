@@ -1526,56 +1526,61 @@ function runCodexLoginWithCommand(command, options = {}, deps = {}) {
   const clearTimer = deps.clearTimeout || clearTimeout;
   const onOutput = typeof options.onOutput === 'function' ? options.onOutput : () => {};
   const timeoutMs = Number(options.timeoutMs || deps.codexLoginTimeoutMs || 180000);
-  if (signal?.aborted) return Promise.resolve({ outcome: 'cancelled', exitCode: null, output: '' });
-  const spec = codexLoginSpawnSpec(command, platform);
-  let child;
-  try {
-    child = spawnFn(spec.command, spec.args, {
-      windowsHide: true,
-      detached: platform !== 'win32',
-      env: { ...withCodexPathHints(env, platform), CODEX_HOME: options.homePath }
-    });
-  } catch (error) {
-    if (signal?.aborted) return Promise.resolve({ outcome: 'cancelled', exitCode: null, output: '' });
-    return Promise.resolve({ outcome: 'launchFailed', exitCode: null, output: String(error?.message || error) });
-  }
+  const commands = codexRpcCommandCandidates({ ...deps, env, platform });
+  if (commands.length === 0) return Promise.resolve({ outcome: 'missingBinary', exitCode: null, output: '' });
 
-  return new Promise((resolve) => {
-    let output = '';
-    let settled = false;
-    let timer = null;
-    const append = (chunk) => {
-      const text = chunk == null ? '' : String(chunk);
-      if (!text) return;
-      output += text;
-      if (output.length > 8000) output = output.slice(-8000);
-      onOutput(text);
-    };
-    const finish = (outcome, exitCode) => {
-      if (settled) return;
-      settled = true;
-      if (timer !== null) clearTimer(timer);
-      signal?.removeEventListener?.('abort', onAbort);
-      resolve({ outcome, exitCode: exitCode ?? null, output: output.trim() });
-    };
-    const onAbort = () => {
-      killCodexLoginProcess(child, platform, { spawn: spawnFn });
-      finish('cancelled', null);
-    };
-    child.stdout?.on('data', append);
-    child.stderr?.on('data', append);
-    child.on('error', (error) => { append(String(error?.message || error)); finish('launchFailed', null); });
-    child.on('close', (code) => finish(code === 0 ? 'success' : 'failed', code));
-    signal?.addEventListener?.('abort', onAbort, { once: true });
-    if (signal?.aborted) {
-      onAbort();
-      return;
+  const runCommand = (command) => {
+    const spec = codexLoginSpawnSpec(command, platform);
+    let child;
+    try {
+      child = spawnFn(spec.command, spec.args, {
+        windowsHide: true,
+        detached: platform !== 'win32',
+        env: { ...withCodexPathHints(env, platform), CODEX_HOME: options.homePath }
+      });
+    } catch (error) {
+      return Promise.resolve({ outcome: 'launchFailed', exitCode: null, output: String(error?.message || error) });
     }
-    timer = setTimer(() => {
-      killCodexLoginProcess(child, platform, { spawn: spawnFn });
-      finish('timedOut', null);
-    }, timeoutMs);
-  });
+
+    return new Promise((resolve) => {
+      let output = '';
+      let settled = false;
+      let timer = null;
+      const append = (chunk) => {
+        const text = chunk == null ? '' : String(chunk);
+        if (!text) return;
+        output += text;
+        if (output.length > 8000) output = output.slice(-8000);
+        onOutput(text);
+      };
+      const finish = (outcome, exitCode) => {
+        if (settled) return;
+        settled = true;
+        if (timer !== null) clearTimer(timer);
+        resolve({ outcome, exitCode: exitCode ?? null, output: output.trim() });
+      };
+      child.stdout?.on('data', append);
+      child.stderr?.on('data', append);
+      child.on('error', (error) => { append(String(error?.message || error)); finish('launchFailed', null); });
+      child.on('close', (code) => finish(code === 0 ? 'success' : 'failed', code));
+      timer = setTimer(() => {
+        killCodexLoginProcess(child, platform, { spawn: spawnFn });
+        finish('timedOut', null);
+      }, timeoutMs);
+    });
+  };
+
+  return (async () => {
+    const launchErrors = [];
+    for (const command of commands) {
+      const result = await runCommand(command);
+      // A command that started has already entered its login flow: do not
+      // retry after cancellation, authorization errors, or a timeout.
+      if (result.outcome !== 'launchFailed') return result;
+      if (result.output) launchErrors.push(result.output);
+    }
+    return { outcome: 'launchFailed', exitCode: null, output: launchErrors.join('\n') };
+  })();
 }
 
 function shouldTryNextCodexLoginCommand(result) {
