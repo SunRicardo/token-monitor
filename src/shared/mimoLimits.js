@@ -12,6 +12,7 @@ const MIMO_PLATFORM_CONSOLE_URL = 'https://platform.xiaomimimo.com/console/plan-
 const MIMO_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36';
 const MIMO_LOGIN_HOST_SUFFIXES = ['xiaomimimo.com', 'xiaomi.com', 'mi.com'];
 const MIMO_LOGIN_BLOCKED_PROTOCOLS = new Set(['about:', 'chrome:', 'chrome-extension:', 'data:', 'devtools:', 'file:', 'filesystem:', 'javascript:', 'vbscript:']);
+const MIMO_LOGIN_ALLOWED_EXTERNAL_PROTOCOLS = new Set(['mimo:', 'xiaomi:', 'mi:']);
 
 function cleanText(value) {
   let raw = value;
@@ -88,8 +89,7 @@ function isMimoLoginHttpUrl(value) {
 function isMimoLoginExternalProtocolUrl(value) {
   const parsed = parseMimoLoginUrl(value);
   if (!parsed) return false;
-  if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return false;
-  return !MIMO_LOGIN_BLOCKED_PROTOCOLS.has(parsed.protocol);
+  return MIMO_LOGIN_ALLOWED_EXTERNAL_PROTOCOLS.has(parsed.protocol);
 }
 
 function formatMimoLoginUrlForLog(value) {
@@ -147,9 +147,19 @@ function classifyMimoLoginUrl(value) {
     };
   }
 
+  if (MIMO_LOGIN_ALLOWED_EXTERNAL_PROTOCOLS.has(protocol)) {
+    return {
+      action: 'external',
+      reason: 'external_protocol',
+      protocol,
+      hostname,
+      displayUrl
+    };
+  }
+
   return {
-    action: 'external',
-    reason: 'external_protocol',
+    action: 'block',
+    reason: 'unsupported_protocol',
     protocol,
     hostname,
     displayUrl

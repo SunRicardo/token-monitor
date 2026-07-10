@@ -80,9 +80,16 @@ test('classifyMimoLoginUrl routes MiMo and Xiaomi http urls into child windows',
   assert.equal(formatMimoLoginUrlForLog(httpsUrl), 'https://account.xiaomi.com/pass/serviceLogin');
 });
 
-test('classifyMimoLoginUrl sends custom schemes external and blocks dangerous protocols', () => {
-  assert.equal(classifyMimoLoginUrl('weixin://dl/business?ticket=abc').action, 'external');
-  assert.equal(isMimoLoginExternalProtocolUrl('weixin://dl/business?ticket=abc'), true);
+test('classifyMimoLoginUrl sends allowed custom schemes external and blocks others', () => {
+  assert.equal(classifyMimoLoginUrl('mimo://dl/business?ticket=abc').action, 'external');
+  assert.equal(isMimoLoginExternalProtocolUrl('mimo://dl/business?ticket=abc'), true);
+  assert.equal(classifyMimoLoginUrl('xiaomi://dl/business?ticket=abc').action, 'external');
+  assert.equal(isMimoLoginExternalProtocolUrl('xiaomi://dl/business?ticket=abc'), true);
+  assert.equal(classifyMimoLoginUrl('mi://dl/business?ticket=abc').action, 'external');
+  assert.equal(isMimoLoginExternalProtocolUrl('mi://dl/business?ticket=abc'), true);
+
+  assert.equal(classifyMimoLoginUrl('weixin://dl/business?ticket=abc').action, 'block');
+  assert.equal(isMimoLoginExternalProtocolUrl('weixin://dl/business?ticket=abc'), false);
   assert.equal(formatMimoLoginUrlForLog('weixin://dl/business?ticket=abc'), 'weixin://dl/business');
 
   assert.equal(classifyMimoLoginUrl('javascript:alert(1)').action, 'block');
