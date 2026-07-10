@@ -476,7 +476,7 @@ function mimoManagedAccountsForCollector() {
 }
 
 function mimoManagedRoot() {
-  return path.join(sharedDataDir(), 'mimo', 'accounts');
+  return path.join(sharedDataDir(), 'managed-mimo-accounts');
 }
 
 function legacyMimoDataDirPath() {
@@ -591,6 +591,11 @@ async function removeMimoManagedAccountDataIfSafe(account) {
       await session.fromPartition(partition).clearStorageData({});
     } catch (_) {}
   }
+  if (partition !== MIMO_SESSION_PARTITION) {
+    try {
+      await session.fromPartition(MIMO_SESSION_PARTITION).clearStorageData({});
+    } catch (_) {}
+  }
   await removeMimoManagedDataDirIfSafe(account.dataDir);
 }
 
@@ -638,13 +643,18 @@ async function finalizeMimoManagedAccountLogin(activeAccount, probe) {
     if (backupDataDir) await removeMimoManagedDataDirIfSafe(backupDataDir);
   }
 
-  return commitMimoManagedAccount(identity, existing, {
+  const pendingPartition = String(activeAccount?.partition || '').trim();
+  const result = commitMimoManagedAccount(identity, existing, {
     id,
     dataDir: finalDataDir,
     partition: finalPartition,
     enabled: isLoginFlow ? true : undefined,
     addedAt: activeAccount?.addedAt
   });
+  if (isLoginFlow && pendingPartition && pendingPartition !== finalPartition) {
+    try { await session.fromPartition(pendingPartition).clearStorageData({}); } catch (_) {}
+  }
+  return result;
 }
 
 async function removeMimoManagedAccount(id) {
@@ -3381,8 +3391,6 @@ function configureMimoLoginWindow(win, { source, closeReason, account } = {}) {
     const decision = classifyMimoLoginUrl(url);
     logMimoLoginDecision(`will-navigate -> ${decision.action}`, url, source);
     if (decision.action === 'child') {
-      event.preventDefault();
-      openMimoLoginTarget(url, { source: `${source}:will-navigate`, parent: win, account });
       return;
     }
     if (decision.action === 'external') {
@@ -4020,7 +4028,6 @@ app.whenReady().then(() => {
     return mimoAccountsForRenderer();
   });
   ipcMain.handle('mimo:addAccount', () => beginMimoManagedAccountLogin());
-  ipcMain.handle('mimo:signIn', () => beginMimoManagedAccountLogin());
   ipcMain.handle('mimo:refreshStatus', async () => queueMimoSessionRefresh('manual'));
   ipcMain.handle('mimo:openDataDir', async () => {
     const dataDir = mimoManagedRoot();
