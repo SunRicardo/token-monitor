@@ -1505,7 +1505,10 @@ function renderLimitProviderHead(id, label, provider, color, options = {}) {
   title.textContent = options.title || label;
   const provenance = limitProviderProvenance(provider);
   const liveCodexAccount = options.accountTitle && limitProviderPresentationApi.isCodexLiveAccount(provider, provenance);
-  const activeCodexAccount = options.accountTitle && (
+  // The local marker only disambiguates rows when the Codex provider is
+  // rendered as a multi-account group. A single visible account is necessarily
+  // the only choice, so a checkmark there adds noise and can look selected.
+  const activeCodexAccount = options.showActiveBadge && (
     codexActiveAccountMatchesProvider(provider) ||
     (!state.codexActiveAccount && liveCodexAccount)
   );
@@ -1887,6 +1890,7 @@ function renderCodexAccountGroup(label, providers, color) {
       accountRow: true,
       accountTitle: true,
       allowSystemSwitch: true,
+      showActiveBadge: true,
       showIcon: false
     }));
   });

@@ -298,7 +298,7 @@ test('Codex system account switching is exposed from limits account rows', () =>
   assert.match(renderHead, /activeZone\.append\(title, badge, activePopover\)/);
   assert.match(renderHead, /badge\.textContent = '\\u2713';/);
   assert.doesNotMatch(renderHead, /badge\.textContent = 'Active'/);
-  assert.match(renderHead, /options\.accountTitle && limitProviderPresentationApi\.isCodexLiveAccount\(provider, provenance\)/);
+  assert.match(renderHead, /options\.showActiveBadge && \(/);
   assert.match(renderHead, /codexSwitchAccountForProvider\(provider\)/);
   assert.match(renderHead, /switchZone\.className = 'limit-account-switch-zone'/);
   assert.match(renderHead, /switchPopover\.className = 'limit-account-switch-popover'/);
@@ -322,6 +322,7 @@ test('Codex system account switching is exposed from limits account rows', () =>
 
   const group = functionBody(app, 'renderCodexAccountGroup', 'renderOpenCodeAccountGroup');
   assert.match(group, /allowSystemSwitch: true/);
+  assert.match(group, /showActiveBadge: true/);
 
   const css = fs.readFileSync(path.join(rendererDir, 'styles.css'), 'utf8');
   assert.match(css, /\.limit-account-switch-zone/);
@@ -418,6 +419,10 @@ test('Codex system account switching is exposed from limits account rows', () =>
   assert.doesNotMatch(refreshBody, /codexManagedAccountsForCollector\(\)/);
   const renderLimits = functionBody(app, 'renderLimits', 'serviceStatusLabel');
   assert.match(renderLimits, /id === 'codex' \? \{\s*accountTitle: true,\s*allowSystemSwitch: true\s*\} : undefined/s);
+  assert.doesNotMatch(
+    renderLimits,
+    /renderLimitProviderRow\(id, label, provider, color, id === 'codex' \? \{[\s\S]*?showActiveBadge: true/
+  );
   assert.match(renderLimits, /const holdCodexSwitchPopoverRender = codexSwitchPopoverShouldHoldRender\(\);/);
   assert.match(renderLimits, /holdResetCreditsTooltipRender \|\| holdCodexSwitchPopoverRender/);
   assert.match(renderLimits, /if \(holdCodexSwitchPopoverRender\) state\.codexSwitchPopoverRenderPending = true;/);
