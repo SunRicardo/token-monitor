@@ -2574,6 +2574,9 @@ body.floating-bubble-collapsed-right .floating-bubble-tab {
   line-height: 1;
   white-space: nowrap;
 }
+html.is-windows .limit-live-badge {
+  font-size: 8px;
+}
 .limit-account-active-zone {
   position: relative;
   display: inline-flex;

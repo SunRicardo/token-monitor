@@ -334,6 +334,7 @@ test('Codex system account switching is exposed from limits account rows', () =>
   assert.match(css, /\.limit-live-badge\s*\{[^}]*display: inline-flex;/s);
   assert.match(css, /\.limit-live-badge\s*\{[^}]*width: 14px;/s);
   assert.match(css, /\.limit-live-badge\s*\{[^}]*margin-left: -6px;/s);
+  assert.match(css, /html\.is-windows \.limit-live-badge\s*\{[^}]*font-size: 8px;/s);
   assert.doesNotMatch(css, /\.limit-live-badge::before/);
   assert.match(css, /\.limit-account-active-zone/);
   assert.match(css, /\.limit-account-active-popover/);
