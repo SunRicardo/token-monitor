@@ -37,6 +37,8 @@
       "src/shared/**/*",
       "src/hub/**/*",
       "assets/icon.png",
+      "assets/tray-icon.png",
+      "assets/Logo_Base.png",
       "assets/icons/**/*",
       "package.json"
     ],
