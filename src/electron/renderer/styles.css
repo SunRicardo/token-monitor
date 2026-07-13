@@ -234,6 +234,12 @@ body.is-windows.floating-bubble-collapsed-right .floating-bubble-tab {
   display: none;
   font-weight: 700;
   line-height: 1;
+  width: 1.6em;
+  height: 1.6em;
+  vertical-align: middle;
+  background: currentColor;
+  -webkit-mask: url("../../../assets/Logo_Base.png") center / contain no-repeat;
+  mask: url("../../../assets/Logo_Base.png") center / contain no-repeat;
 }
 /* Offscreen probe: rendered with the same font/size as the title, used by JS */
 /* to detect "would Token Monitor still fit?". Independent of the live text */
