@@ -3,13 +3,13 @@
 const path = require('node:path');
 const { formatTrayText, pickWorstLimit } = require('../shared/trayText');
 
-const ICON_PATH = path.join(__dirname, '..', '..', 'assets', 'icon.png');
+const ICON_PATH = path.join(__dirname, '..', '..', 'assets', 'tray-icon.png');
 
 function buildTrayIcon() {
   const { nativeImage } = require('electron');
   // macOS menu bar items render at 16–22pt; 18px is a good middle ground.
   // Resize handles HiDPI itself; 20px matches typical menubar item size.
-  return nativeImage.createFromPath(ICON_PATH).resize({ width: 20, height: 20 });
+  return nativeImage.createFromPath(ICON_PATH).resize({ width: 16, height: 16 });
 }
 
 function trayUsagePeriod(contentMode) {
