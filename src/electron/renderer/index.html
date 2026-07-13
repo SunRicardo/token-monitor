@@ -252,25 +252,32 @@
                 <p class="settings-note" data-i18n="settings.appearance.themeCodeNote">Shares interface colours only. Vendor colours and appearance preferences stay local.</p>
                 <p id="themeCodeStatus" class="theme-code-status" aria-live="polite"></p>
               </div>
-              <div id="themeAdvancedGroup" class="settings-group cursor-account-group theme-advanced-group">
+              <div id="themeAdvancedGroup" class="settings-group cursor-account-group theme-color-accordion">
                 <button id="themeAdvancedToggle" class="settings-group-header cursor-settings-toggle" type="button" aria-expanded="false" aria-controls="themeAdvancedDetails">
                   <span data-i18n="settings.appearance.advanced">Advanced customization</span>
                   <span class="cursor-settings-summary">
                     <span class="cursor-disclosure-icon" aria-hidden="true"></span>
                   </span>
                 </button>
-                <div id="themeAdvancedDetails" class="cursor-settings-details hidden">
+                <div id="themeAdvancedDetails" class="cursor-settings-details hidden" inert>
                   <div id="themeColorGrid" class="color-picker-grid"></div>
-                  <div class="settings-subgroup settings-vendor-color-group">
-                    <div class="settings-note-row">
-                      <div class="settings-group-header"><span data-i18n="settings.appearance.vendorTitle">Vendor Colors</span></div>
-                      <div class="tool-header-actions">
-                        <button id="resetVendorColorsButton" class="tool-header-action" type="button" title="Reset to brand" aria-label="Reset to brand" data-i18n-title="settings.appearance.resetBrand" data-i18n-aria-label="settings.appearance.resetBrand"><span aria-hidden="true">↺</span></button>
-                      </div>
-                    </div>
-                    <p class="settings-note" data-i18n="settings.appearance.vendorNote">Override the chart and list colour for each tool. Reset returns it to the brand colour.</p>
-                    <div id="vendorColorList" class="vendor-color-list"></div>
+                </div>
+              </div>
+              <div id="themeVendorGroup" class="settings-group cursor-account-group theme-color-accordion settings-vendor-color-group">
+                <div class="settings-note-row">
+                  <button id="themeVendorToggle" class="settings-group-header cursor-settings-toggle" type="button" aria-expanded="false" aria-controls="themeVendorDetails">
+                    <span data-i18n="settings.appearance.vendorTitle">Vendor Colors</span>
+                    <span class="cursor-settings-summary">
+                      <span class="cursor-disclosure-icon" aria-hidden="true"></span>
+                    </span>
+                  </button>
+                  <div class="tool-header-actions">
+                    <button id="resetVendorColorsButton" class="tool-header-action" type="button" title="Reset to brand" aria-label="Reset to brand" data-i18n-title="settings.appearance.resetBrand" data-i18n-aria-label="settings.appearance.resetBrand"><span aria-hidden="true">↺</span></button>
                   </div>
+                </div>
+                <div id="themeVendorDetails" class="cursor-settings-details hidden" inert>
+                  <p class="settings-note" data-i18n="settings.appearance.vendorNote">Override the chart and list colour for each tool. Reset returns it to the brand colour.</p>
+                  <div id="vendorColorList" class="vendor-color-list"></div>
                 </div>
               </div>
             </div>

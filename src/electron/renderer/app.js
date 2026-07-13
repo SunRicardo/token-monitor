@@ -274,6 +274,9 @@ Object.assign(els, {
   themeAdvancedGroup: document.getElementById('themeAdvancedGroup'),
   themeAdvancedToggle: document.getElementById('themeAdvancedToggle'),
   themeAdvancedDetails: document.getElementById('themeAdvancedDetails'),
+  themeVendorGroup: document.getElementById('themeVendorGroup'),
+  themeVendorToggle: document.getElementById('themeVendorToggle'),
+  themeVendorDetails: document.getElementById('themeVendorDetails'),
   vendorColorList: document.getElementById('vendorColorList'),
   resetThemeColorsButton: document.getElementById('resetThemeColorsButton'),
   resetVendorColorsButton: document.getElementById('resetVendorColorsButton'),
@@ -6146,12 +6149,21 @@ els.themeCodeInput?.addEventListener('keydown', (event) => {
   void applyThemeCodeFromInput();
 });
 els.themeCodeInput?.addEventListener('input', invalidateThemeCodeFeedback);
-els.themeAdvancedToggle?.addEventListener('click', () => {
-  const open = els.themeAdvancedDetails?.classList.contains('hidden');
-  els.themeAdvancedToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
-  els.themeAdvancedDetails?.classList.toggle('hidden', !open);
-  els.themeAdvancedGroup?.classList.toggle('expanded', Boolean(open));
-});
+function setupThemeAccordion(group, toggle, details) {
+  if (!group || !toggle || !details) return;
+  const setExpanded = (expanded) => {
+    const open = Boolean(expanded);
+    toggle.setAttribute('aria-expanded', String(open));
+    details.classList.toggle('hidden', !open);
+    details.inert = !open;
+    group.classList.toggle('expanded', open);
+  };
+  toggle.addEventListener('click', () => setExpanded(details.classList.contains('hidden')));
+  setExpanded(false);
+}
+
+setupThemeAccordion(els.themeAdvancedGroup, els.themeAdvancedToggle, els.themeAdvancedDetails);
+setupThemeAccordion(els.themeVendorGroup, els.themeVendorToggle, els.themeVendorDetails);
 els.systemGlassInput.addEventListener('change', saveAppearanceFromControls);
 els.liveDotInput.addEventListener('change', saveAppearanceFromControls);
 els.toolIconsInput.addEventListener('change', saveAppearanceFromControls);

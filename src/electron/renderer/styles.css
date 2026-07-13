@@ -1479,7 +1479,7 @@ body.floating-bubble-collapsed-right .floating-bubble-tab {
 .theme-code-status:empty { display: none; }
 .theme-code-status.success { color: var(--green); }
 .theme-code-status.error { color: var(--red); }
-.theme-advanced-group { border-top: 1px solid var(--line); padding-top: 9px; }
+.theme-color-accordion { border-top: 1px solid var(--line); padding-top: 9px; }
 .color-picker-grid { display: grid; gap: 6px; }
 .color-picker-row, .vendor-color-row {
   display: grid;
