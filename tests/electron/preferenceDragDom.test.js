@@ -178,6 +178,12 @@ test('main section holds views; appearance is its own section; window holds beha
   assert.match(appearance, /id="glassInput"/);
   assert.match(appearance, /id="zoomInput"/);
   assert.match(appearance, /id="themePresetChips"/);
+  assert.match(appearance, /id="themeCodeInput"/);
+  assert.match(appearance, /id="applyThemeCodeButton"/);
+  assert.match(appearance, /id="copyThemeCodeButton"/);
+  assert.match(appearance, /id="themeCodeStatus"[^>]*aria-live="polite"/);
+  assert.match(appearance, /id="themeAdvancedToggle"[^>]*aria-controls="themeAdvancedDetails"/);
+  assert.match(appearance, /id="themeAdvancedDetails" class="cursor-settings-details hidden"/);
   assert.match(appearance, /id="themeColorGrid"/);
   assert.match(appearance, /id="vendorColorList"/);
 
@@ -219,6 +225,31 @@ test('main section holds views; appearance is its own section; window holds beha
     /id="trayIconOptions"[\s\S]*?<\/div>\s*<label class="checkbox-label"><input id="trayModeInput"/,
     'tray-only mode should not sit beside tray icon options'
   );
+});
+
+test('theme code feedback clears when the displayed code changes', () => {
+  const app = readRendererFile('app.js');
+  const build = functionBody(app, 'buildAppearanceColorControls', 'renderThemePresetChips');
+  const clear = functionBody(app, 'clearThemeCodeStatus', 'applyThemeCodeFromInput');
+  const invalidate = functionBody(app, 'invalidateThemeCodeFeedback', 'themeCodeFeedbackIsCurrent');
+  const apply = functionBody(app, 'applyThemeCodeFromInput', 'copyCurrentThemeCode');
+  const paste = functionBody(app, 'pasteAndApplyThemeCode', 'copyCurrentThemeCode');
+  const copy = functionBody(app, 'copyCurrentThemeCode', 'previewVendorColor');
+
+  assert.match(build, /themeCodeInput\.value !== code/);
+  assert.match(build, /invalidateThemeCodeFeedback\(\)/);
+  assert.match(clear, /themeCodeStatus\.textContent = ''/);
+  assert.match(clear, /classList\.remove\('success', 'error'\)/);
+  assert.match(invalidate, /themeCodeFeedbackGeneration \+= 1/);
+  assert.match(app, /themeCodeInput\?\.addEventListener\('input', invalidateThemeCodeFeedback\)/);
+  assert.match(apply, /const generation = invalidateThemeCodeFeedback\(\)/);
+  assert.match(apply, /themeCodeFeedbackIsCurrent\(generation, parsed\.code\)/);
+  assert.match(paste, /const generation = invalidateThemeCodeFeedback\(\)/);
+  assert.match(paste, /const code = els\.themeCodeInput\?\.value/);
+  assert.equal((paste.match(/themeCodeFeedbackIsCurrent\(generation, code\)/g) || []).length, 2);
+  assert.match(paste, /if \(els\.themeCodeInput\) els\.themeCodeInput\.value = trimmed/);
+  assert.match(copy, /const generation = invalidateThemeCodeFeedback\(\)/);
+  assert.match(copy, /themeCodeFeedbackIsCurrent\(generation, code\)/);
 });
 
 test('Trends has a master toggle separate from main-screen visibility', () => {

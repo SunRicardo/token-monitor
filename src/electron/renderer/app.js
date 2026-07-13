@@ -267,6 +267,13 @@ Object.assign(els, {
   appearanceSettingsSummary: document.getElementById('appearanceSettingsSummary'),
   themePresetChips: document.getElementById('themePresetChips'),
   themeColorGrid: document.getElementById('themeColorGrid'),
+  themeCodeInput: document.getElementById('themeCodeInput'),
+  applyThemeCodeButton: document.getElementById('applyThemeCodeButton'),
+  copyThemeCodeButton: document.getElementById('copyThemeCodeButton'),
+  themeCodeStatus: document.getElementById('themeCodeStatus'),
+  themeAdvancedGroup: document.getElementById('themeAdvancedGroup'),
+  themeAdvancedToggle: document.getElementById('themeAdvancedToggle'),
+  themeAdvancedDetails: document.getElementById('themeAdvancedDetails'),
   vendorColorList: document.getElementById('vendorColorList'),
   resetThemeColorsButton: document.getElementById('resetThemeColorsButton'),
   resetVendorColorsButton: document.getElementById('resetVendorColorsButton'),
@@ -3791,6 +3798,7 @@ function applyAppearanceSettings(settings) {
 }
 
 const themePresetsApi = window.TokenMonitorThemePresets;
+let themeCodeFeedbackGeneration = 0;
 // Snapshot of the canonical brand colours, taken before any override is
 // applied. clientColors is mutated in place (other modules hold the same
 // reference), so this is the source of truth for "reset to brand".
@@ -3841,6 +3849,13 @@ function buildAppearanceColorControls() {
   renderThemePresetChips();
   renderThemeColorGrid();
   renderVendorColorList();
+  if (els.themeCodeInput && document.activeElement !== els.themeCodeInput) {
+    const code = themePresetsApi.encodeThemeCode(state.settings?.themeColors);
+    if (els.themeCodeInput.value !== code) {
+      els.themeCodeInput.value = code;
+      invalidateThemeCodeFeedback();
+    }
+  }
 }
 
 function renderThemePresetChips() {
@@ -3963,6 +3978,75 @@ async function commitThemeColors(overrides) {
   buildAppearanceColorControls();
   renderSettingsSummaries();
   await saveSettings({ themeColors: overrides });
+}
+
+function showThemeCodeStatus(key, type = '') {
+  if (!els.themeCodeStatus) return;
+  els.themeCodeStatus.textContent = t(key);
+  els.themeCodeStatus.classList.toggle('success', type === 'success');
+  els.themeCodeStatus.classList.toggle('error', type === 'error');
+}
+
+function clearThemeCodeStatus() {
+  if (!els.themeCodeStatus) return;
+  els.themeCodeStatus.textContent = '';
+  els.themeCodeStatus.classList.remove('success', 'error');
+}
+
+function invalidateThemeCodeFeedback() {
+  themeCodeFeedbackGeneration += 1;
+  clearThemeCodeStatus();
+  return themeCodeFeedbackGeneration;
+}
+
+function themeCodeFeedbackIsCurrent(generation, code) {
+  return generation === themeCodeFeedbackGeneration && els.themeCodeInput?.value === code;
+}
+
+async function applyThemeCodeFromInput() {
+  const generation = invalidateThemeCodeFeedback();
+  const parsed = themePresetsApi.decodeThemeCode(els.themeCodeInput?.value);
+  if (!parsed.ok) {
+    const key = parsed.reason === 'unsupportedVersion'
+      ? 'settings.appearance.themeCodeUnsupported'
+      : 'settings.appearance.themeCodeInvalid';
+    showThemeCodeStatus(key, 'error');
+    return;
+  }
+  els.themeCodeInput.value = parsed.code;
+  await commitThemeColors(parsed.colors);
+  if (themeCodeFeedbackIsCurrent(generation, parsed.code)) {
+    showThemeCodeStatus('settings.appearance.themeCodeApplied', 'success');
+  }
+}
+
+async function pasteAndApplyThemeCode() {
+  const generation = invalidateThemeCodeFeedback();
+  const code = els.themeCodeInput?.value;
+  let text;
+  try {
+    text = await navigator.clipboard.readText();
+  } catch (_) {
+    if (!themeCodeFeedbackIsCurrent(generation, code)) return;
+    showThemeCodeStatus('settings.appearance.themeCodeCopyFailed', 'error');
+    return;
+  }
+  if (!themeCodeFeedbackIsCurrent(generation, code)) return;
+  const trimmed = (text || '').trim();
+  if (els.themeCodeInput) els.themeCodeInput.value = trimmed;
+  await applyThemeCodeFromInput();
+}
+
+async function copyCurrentThemeCode() {
+  const generation = invalidateThemeCodeFeedback();
+  const code = themePresetsApi.encodeThemeCode(state.settings?.themeColors);
+  els.themeCodeInput.value = code;
+  const copied = await copyToClipboard(code);
+  if (!themeCodeFeedbackIsCurrent(generation, code)) return;
+  showThemeCodeStatus(
+    copied ? 'settings.appearance.themeCodeCopied' : 'settings.appearance.themeCodeCopyFailed',
+    copied ? 'success' : 'error'
+  );
 }
 
 function previewVendorColor(id, value) {
@@ -4407,13 +4491,17 @@ function renderHubAddresses(addresses, port) {
 
 async function copyToClipboard(text, button) {
   try {
-    await navigator.clipboard.writeText(text);
+    if (window.tokenMonitor.copyText) await window.tokenMonitor.copyText(text);
+    else await navigator.clipboard.writeText(text);
     if (button) {
       const previous = button.textContent;
       button.textContent = '✓';
       setTimeout(() => { button.textContent = previous; }, 900);
     }
-  } catch (_) { /* clipboard blocked; no-op */ }
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 async function refreshHubInfo() {
@@ -6050,6 +6138,20 @@ els.blurInput.addEventListener('input', applyAppearanceFromControls);
 els.zoomInput.addEventListener('input', applyAppearanceFromControls);
 els.resetThemeColorsButton?.addEventListener('click', () => commitThemeColors({}));
 els.resetVendorColorsButton?.addEventListener('click', () => commitVendorColors({}));
+els.applyThemeCodeButton?.addEventListener('click', () => { void pasteAndApplyThemeCode(); });
+els.copyThemeCodeButton?.addEventListener('click', () => { void copyCurrentThemeCode(); });
+els.themeCodeInput?.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  void applyThemeCodeFromInput();
+});
+els.themeCodeInput?.addEventListener('input', invalidateThemeCodeFeedback);
+els.themeAdvancedToggle?.addEventListener('click', () => {
+  const open = els.themeAdvancedDetails?.classList.contains('hidden');
+  els.themeAdvancedToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  els.themeAdvancedDetails?.classList.toggle('hidden', !open);
+  els.themeAdvancedGroup?.classList.toggle('expanded', Boolean(open));
+});
 els.systemGlassInput.addEventListener('change', saveAppearanceFromControls);
 els.liveDotInput.addEventListener('change', saveAppearanceFromControls);
 els.toolIconsInput.addEventListener('change', saveAppearanceFromControls);
