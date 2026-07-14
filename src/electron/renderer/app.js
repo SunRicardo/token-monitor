@@ -83,6 +83,7 @@ const LIMIT_PROVIDERS = [
 const DEFAULT_LIMIT_PROVIDER_ORDER = LIMIT_PROVIDERS.map((provider) => provider.id).join(',');
 const limitProviderOrderApi = window.TokenMonitorLimitProviderOrder;
 const limitProviderPresentationApi = window.TokenMonitorLimitProviderPresentation;
+const accountIdentityApi = window.TokenMonitorAccountIdentity;
 const clientStatusPresentationApi = window.TokenMonitorClientStatusPresentation;
 const serviceStatusPresentationApi = window.TokenMonitorServiceStatusPresentation;
 const clientDisplayPreferencesApi = window.TokenMonitorClientDisplayPreferences;
@@ -197,6 +198,7 @@ function normalizeInitialViewValue(value, allowed, fallback) {
 }
 
 const state = { period: normalizeInitialViewValue(initialViewState.period, viewPeriodValues, 'today'), appUpdate: null, breakdown: normalizeInitialViewValue(initialViewState.breakdown, viewBreakdownValues, 'home'), viewSwitcherOpen: false, viewSwitcherHasOpened: false, resetCreditsTooltipHasOpened: false, resetCreditsTooltipActive: false, resetCreditsTooltipRenderPending: false, settings: null, stats: null, homeHistory: null, homeHistoryBusy: false, homeHistoryRequested: false, homeHistoryPreviewKey: '', homeActivityScrollLeft: null, homeActivityFollowEnd: true, homeActivityResizeObserver: null, serviceStatus: null, serviceStatusBusy: false, serviceProvidersExpanded: false, trendSettingsExpanded: false, trendsActivating: false, homeSettingsExpanded: false, homeLimitSettingsExpanded: false, serviceStatusTicker: null, refreshTimer: null, refreshBusy: false, refreshFeedbackTimer: null, currentTotal: 0, rowSignature: '', streamConnected: false, streamFailure: null, mode: 'idle', appInfo: null, tokscaleStatus: null, tokscaleCheck: null, tokscaleBusy: false, hubInfo: null, cursorAccount: { status: null, error: '' }, cursorAccountExpanded: false, codexAccountExpanded: false, codexAccountError: '', codexSignInBusy: false, codexSignInFlowId: '', codexLoginUrl: '', codexLoginStatus: '', codexLoginOutput: '', codexActiveAccount: null, codexPendingActiveAccount: null, codexPendingActiveAccountUntil: 0, codexPendingActiveAccountTimer: null, codexSystemSwitchingAccountId: '', codexSystemSwitchErrorAccountId: '', codexSystemSwitchError: '', codexSwitchPopoverHasOpened: false, codexSwitchPopoverActive: false, codexSwitchPopoverRenderPending: false, customPricingExpanded: false, opencodeProfileCount: 0, opencodeCookieExpanded: false, deepseekAccountExpanded: false, deepseekPendingCheckSince: 0, minimaxAccountExpanded: false, minimaxPendingCheckSince: 0, zaiAccountExpanded: false, zaiPendingCheckSince: 0, zaiteamAccountExpanded: false, zaiteamPendingCheckSince: 0, volcengineAccountExpanded: false, volcenginePendingCheckSince: 0, qoderAccountExpanded: false, qoderPendingCheckSince: 0, kimiAccountExpanded: false, kimiPendingCheckSince: 0, ollamaAccountExpanded: false, ollamaPendingCheckSince: 0, mimoAccountExpanded: false, mimoAccountError: '', copilotAccountExpanded: false, copilotManualExpanded: false, copilotPendingCheckSince: 0, copilotSignInBusy: false, copilotSignInCancelable: false, copilotSignInFlowId: '', copilotAuthorizeMessage: '', copilotLoginStatus: '', copilotErrorMessage: '', floatingBubble: initialFloatingBubble, suppressInitialNumberAnimation: window.__TOKEN_MONITOR_SUPPRESS_INITIAL_NUMBER_ANIMATION__ === true, openSession: null, detailSort: 'time', recordingWindowShortcut: false, windowShortcutInvalid: false };
+let directBreakdownOverride = null;
 state.projectSettingsExpanded = false;
 state.settingsSections = Object.fromEntries(SETTINGS_SECTION_IDS.map((id) => [id, false]));
 const defaultAppearance = { glassOpacity: 68, glassBlur: 32, zoomFactor: 1, systemGlass: true, showLiveDot: true, showToolIcons: true, titleIconOnly: true, showCompactTotalTokens: false, settingsInTitlebar: false };
@@ -1161,16 +1163,20 @@ function visibleBreakdownOrder() {
     views: VIEW_DISPLAY_OPTIONS,
     orderValue: effectiveViewDisplayOrderValue(),
     hiddenValue: state.settings?.hiddenViews,
-    availableIds: availableBreakdownIds()
+    availableIds: availableBreakdownIds(),
+    includeIds: directBreakdownOverride ? [directBreakdownOverride] : []
   });
 }
 
 function ensureBreakdownVisible() {
+  const availableIds = availableBreakdownIds();
+  if (directBreakdownOverride === state.breakdown && availableIds.includes(state.breakdown)) return;
+  directBreakdownOverride = null;
   const next = viewDisplayPreferencesApi.preferredViewId({
     views: VIEW_DISPLAY_OPTIONS,
     orderValue: effectiveViewDisplayOrderValue(),
     hiddenValue: state.settings?.hiddenViews,
-    availableIds: availableBreakdownIds(),
+    availableIds,
     currentId: state.breakdown
   });
   if (next !== state.breakdown) setBreakdown(next);
@@ -1579,24 +1585,11 @@ function renderLimitProviderMark(id, color) {
 
 function codexSwitchAccountForProvider(provider) {
   if (!provider || provider.provider !== 'codex') return null;
-  const accountKey = String(provider.accountKey || '').trim();
-  const email = String(provider.accountEmail || '').trim().toLowerCase();
-  if (!accountKey && !email) return null;
+  if (!provider.accountKey && !provider.accountEmail) return null;
   return (state.settings?.codexManagedAccounts || []).find((account) => {
     if (account.enabled === false) return false;
-    if (accountKey && String(account.accountKey || '').trim() === accountKey) return true;
-    return Boolean(email && String(account.email || '').trim().toLowerCase() === email);
+    return accountIdentityApi.codexAccountMatchesProvider(account, provider);
   }) || null;
-}
-
-function codexAccountMatchesProvider(account, provider) {
-  if (!account || !provider || provider.provider !== 'codex') return false;
-  const accountKey = String(account.accountKey || '').trim();
-  const providerKey = String(provider.accountKey || '').trim();
-  if (accountKey && providerKey && accountKey === providerKey) return true;
-  const accountEmail = String(account.email || account.accountEmail || '').trim().toLowerCase();
-  const providerEmail = String(provider.accountEmail || '').trim().toLowerCase();
-  return Boolean(accountEmail && providerEmail && accountEmail === providerEmail);
 }
 
 function codexProviderMatchesProvider(left, right) {
@@ -1610,7 +1603,7 @@ function codexProviderMatchesProvider(left, right) {
 }
 
 function codexActiveAccountMatchesProvider(provider) {
-  return codexAccountMatchesProvider(state.codexActiveAccount, provider);
+  return accountIdentityApi.codexAccountMatchesProvider(state.codexActiveAccount, provider);
 }
 
 function codexAccountsShareIdentity(left, right) {
@@ -1633,9 +1626,7 @@ function codexAccountsShareIdentity(left, right) {
 // without per-device rows fall back to the aggregate (localDeviceLimitsProviders
 // returns null there), mirroring localProviderStatus().
 function localLiveCodexProvider() {
-  const localProviders = localDeviceLimitsProviders();
-  const providers = localProviders !== null ? localProviders : (state.stats?.limits?.providers || []);
-  return providers.find((provider) => limitProviderPresentationApi.isCodexLiveAccount(provider)) || null;
+  return accountIdentityApi.localLiveCodexProvider(state.stats, state.settings?.deviceId || '');
 }
 
 function codexActiveAccountFromStats() {
@@ -2139,20 +2130,9 @@ function renderLimitProviderRow(id, label, provider, color, options = {}) {
   return row;
 }
 
-function maskEmailAddressForDisplay(value) {
-  const email = String(value || '').trim();
-  const at = email.indexOf('@');
-  if (at <= 0 || at === email.length - 1) return email;
-  const local = email.slice(0, at);
-  const domain = email.slice(at + 1);
-  const first = local[0] || '';
-  const last = local.length > 1 ? local[local.length - 1] : '';
-  return `${first}***${last}@${domain}`;
-}
-
 function codexAccountTitle(provider, index) {
   const email = String(provider?.accountEmail || '').trim();
-  if (email) return state.settings?.maskLimitAccountEmails ? maskEmailAddressForDisplay(email) : email;
+  if (email) return state.settings?.maskLimitAccountEmails ? accountIdentityApi.maskEmailAddress(email) : email;
   // Never fall back to the plan label here — "Plus" as a title reads like an
   // account name. The plan still shows on the right via limitProviderPlan().
   return `Account ${index + 1}`;
@@ -2183,7 +2163,7 @@ function renderCodexAccountGroup(label, providers, color) {
 
 function mimoAccountTitle(provider, index) {
   const email = String(provider?.accountEmail || '').trim();
-  if (email) return state.settings?.maskLimitAccountEmails ? maskEmailAddressForDisplay(email) : email;
+  if (email) return state.settings?.maskLimitAccountEmails ? accountIdentityApi.maskEmailAddress(email) : email;
   return `Account ${index + 1}`;
 }
 
@@ -2664,6 +2644,26 @@ function openTrendSettings() {
   requestAnimationFrame(() => {
     document.getElementById('trendSettingsContainer')?.scrollIntoView({ block: 'nearest' });
   });
+}
+
+function openSettingsPanel() {
+  if (!els.settingsPanel) return;
+  if (state.viewSwitcherOpen) setViewSwitcherOpen(false);
+  els.settingsPanel.classList.remove('hidden');
+  els.shell.classList.add('settings-open');
+  els.shell.style.transform = 'translateZ(0)';
+  requestAnimationFrame(() => { els.shell.style.transform = ''; });
+}
+
+function openViewFromTray(viewId) {
+  if (!availableBreakdownIds().includes(viewId)) return;
+  if (state.viewSwitcherOpen) setViewSwitcherOpen(false);
+  stopWindowShortcutRecording();
+  els.settingsPanel?.classList.add('hidden');
+  els.shell.classList.remove('settings-open');
+  state.openSession = null;
+  setBreakdown(viewId, { allowHidden: true });
+  render();
 }
 
 async function loadHomeHistory() {
@@ -3747,8 +3747,9 @@ function setPeriod(period) {
   return true;
 }
 
-function setBreakdown(breakdown) {
+function setBreakdown(breakdown, options = {}) {
   const next = normalizeInitialViewValue(breakdown, viewBreakdownValues, state.breakdown);
+  directBreakdownOverride = options.allowHidden === true ? next : null;
   if (next === state.breakdown) {
     publishViewState();
     return false;
@@ -6308,6 +6309,9 @@ window.tokenMonitor.onSettingsPush?.((next) => {
   maybeUpdateBarsIcon();
 });
 
+window.tokenMonitor.onOpenSettings?.(openSettingsPanel);
+window.tokenMonitor.onOpenView?.(openViewFromTray);
+
 window.tokenMonitor.onFloatingBubbleState?.((payload) => {
   applyFloatingBubbleState(payload);
 });
@@ -6796,13 +6800,10 @@ async function refreshCodexAccounts() {
 // Linked. Only legacy/non-aggregated stats without a `devices` array may fall
 // back to the aggregate; once raw device rows are present they are authoritative.
 function localDeviceLimitsProviders() {
-  const devices = state.stats?.devices;
-  if (!Array.isArray(devices)) return null;
-  const localId = state.settings?.deviceId || '';
-  const local = localId
-    ? devices.find((device) => device.deviceId === localId)
-    : (devices.length === 1 ? devices[0] : null);
-  return local?.limits?.providers || [];
+  return accountIdentityApi.localDeviceLimitsProviders(
+    state.stats,
+    state.settings?.deviceId || ''
+  );
 }
 
 function localProviderStatus(name) {
