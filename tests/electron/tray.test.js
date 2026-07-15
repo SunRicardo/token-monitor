@@ -73,9 +73,9 @@ test('macOS tray icon downsamples the high-resolution template like provider ico
     }
   }), resized);
 
-  assert.match(calls[0][1], /assets[\\/]icons[\\/]tray-token-monitor\.png$/);
+  assert.match(calls[0][1], /assets[\\/]tray-icon\.png$/);
   assert.deepEqual(calls.slice(1), [
-    ['resize', { height: 20, quality: 'best' }],
+    ['resize', { height: 16, quality: 'best' }],
     ['template', true]
   ]);
 });
@@ -99,7 +99,7 @@ test('non-macOS tray icon keeps the resized full-color app asset', () => {
   }), resized);
 
   assert.match(calls[0][1], /assets[\\/]icon\.png$/);
-  assert.deepEqual(calls.slice(1), [['resize', { width: 20, height: 20 }]]);
+  assert.deepEqual(calls.slice(1), [['resize', { width: 16, height: 16 }]]);
 });
 
 test('tray context menu complements the primary click with useful commands', () => {
