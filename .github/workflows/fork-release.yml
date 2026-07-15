@@ -47,8 +47,19 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+      - name: Generate release body from upstream template
+        run: |
+          # Extract version from tag (e.g. 0.27.0-fork-f94bece -> 0.27.0)
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG%%-fork-*}"
+          # Replace upstream repo URLs with fork repo URLs, and update version
+          sed -e "s|Javis603/token-monitor|SunRicardo/token-monitor|g" \
+              -e "s|download/v[0-9.]*/|download/${TAG}/|g" \
+              -e "s|releases/download/v[0-9.]*/|releases/download/${TAG}/|g" \
+              .github/RELEASE_TEMPLATE.md > release-body.md
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             artifacts/*.dmg
             artifacts/*.exe
+          body_path: release-body.md

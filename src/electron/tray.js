@@ -12,11 +12,11 @@ function buildTrayIcon(options = {}) {
   const platform = options.platform || process.platform;
   const nativeImage = options.nativeImage || require('electron').nativeImage;
   if (platform === 'darwin') {
-    const image = nativeImage.createFromPath(TRAY_ICON_PATH).resize({ height: 20, quality: 'best' });
+    const image = nativeImage.createFromPath(TRAY_ICON_PATH).resize({ height: 16, quality: 'best' });
     image.setTemplateImage(true);
     return image;
   }
-  return nativeImage.createFromPath(ICON_PATH).resize({ width: 20, height: 20 });
+  return nativeImage.createFromPath(ICON_PATH).resize({ width: 16, height: 16 });
 }
 
 function trayUsagePeriod(contentMode) {
