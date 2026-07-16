@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const {
+  resolveMacWidgetSnapshotPath,
   updateMacWidgetSnapshot,
   writeMacWidgetSnapshot
 } = require('../../src/electron/macWidgetBridge');
@@ -79,6 +80,36 @@ test('is a no-op on macOS when no shared-container path is configured', async ()
     ok: false,
     reason: 'not-configured'
   });
+});
+
+test('resolves only safe macOS App Group snapshot paths', () => {
+  assert.equal(resolveMacWidgetSnapshotPath({
+    platform: 'darwin',
+    appGroup: 'group.com.example.tokenmonitor',
+    home: '/Users/example'
+  }), path.join(
+    '/Users/example',
+    'Library',
+    'Group Containers',
+    'group.com.example.tokenmonitor',
+    'snapshot.json'
+  ));
+  assert.equal(resolveMacWidgetSnapshotPath({
+    platform: 'linux',
+    appGroup: 'group.com.example.tokenmonitor',
+    home: '/home/example'
+  }), null);
+  assert.equal(resolveMacWidgetSnapshotPath({
+    platform: 'darwin',
+    appGroup: '../../credentials',
+    home: '/Users/example'
+  }), null);
+  assert.equal(resolveMacWidgetSnapshotPath({
+    platform: 'darwin',
+    appGroup: 'group.com.example.tokenmonitor',
+    home: '/Users/example',
+    snapshotFileName: '../credentials.json'
+  }), null);
 });
 
 test('serializes aggregate stats before writing the snapshot', async () => {

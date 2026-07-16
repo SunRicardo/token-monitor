@@ -109,6 +109,7 @@ const {
 const { historyPreview, historyRevision } = require('../shared/history');
 const { readSessionDetail } = require('../shared/sessionDetail');
 const { startDiscordRpc, stopDiscordRpc, updateDiscordRpc } = require('./discordRpc');
+const { resolveMacWidgetSnapshotPath, updateMacWidgetSnapshot } = require('./macWidgetBridge');
 const linuxAutostart = require('./linuxAutostart');
 const { codexAccountIdForProvider, localLiveCodexProvider } = require('./renderer/accountIdentity');
 const {
@@ -228,6 +229,14 @@ function normalizeHomeLimitAccountCount(value) {
   if (!Number.isFinite(count)) return HOME_LIMIT_ACCOUNT_COUNT_DEFAULT;
   return Math.max(1, Math.min(HOME_LIMIT_ACCOUNT_COUNT_MAX, count));
 }
+
+let pendingMacWidgetOpen = false;
+app.on('open-url', (event, url) => {
+  if (url !== 'token-monitor://widget') return;
+  event.preventDefault();
+  pendingMacWidgetOpen = true;
+  if (app.isReady()) setImmediate(openMainWindowFromWidget);
+});
 
 function defaultSettings() {
   const envHubUrl = process.env.TOKEN_MONITOR_HUB_URL || '';
@@ -1897,6 +1906,9 @@ let lastCollectedDevice = null;
 let latestHubStats = null;
 let tray = null;
 let latestStats = null;
+let pendingMacWidgetStats = null;
+let macWidgetWriteInFlight = false;
+let cachedMacWidgetConfiguration;
 let trayRefreshInFlight = false;
 let trayCodexActiveAccountId = '';
 let trayCodexPendingAccountId = '';
@@ -2263,11 +2275,74 @@ function injectLocalDeviceStatus(stats) {
   return stats;
 }
 
+function macWidgetConfiguration() {
+  if (process.platform !== 'darwin') return null;
+  if (cachedMacWidgetConfiguration !== undefined) return cachedMacWidgetConfiguration;
+
+  let appGroup = String(process.env.TOKEN_MONITOR_APP_GROUP || '').trim();
+  let snapshotFileName = 'snapshot.json';
+  const configCandidates = [
+    path.join(process.resourcesPath, 'token-monitor-widget.json'),
+    path.resolve(__dirname, '..', '..', 'build', 'macos-widget', 'widget-config.json')
+  ];
+  if (!appGroup) {
+    for (const configPath of configCandidates) {
+      try {
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        appGroup = String(config.appGroup || '').trim();
+        snapshotFileName = String(config.snapshotFileName || snapshotFileName).trim();
+        if (appGroup) break;
+      } catch (_) {}
+    }
+  }
+  const snapshotPath = resolveMacWidgetSnapshotPath({
+    appGroup,
+    home: app.getPath('home'),
+    snapshotFileName
+  });
+  if (!snapshotPath) {
+    cachedMacWidgetConfiguration = null;
+    return cachedMacWidgetConfiguration;
+  }
+  cachedMacWidgetConfiguration = {
+    appGroup,
+    snapshotPath
+  };
+  return cachedMacWidgetConfiguration;
+}
+
+function scheduleMacWidgetSnapshot(stats) {
+  if (process.platform !== 'darwin' || !stats) return;
+  pendingMacWidgetStats = stats;
+  if (macWidgetWriteInFlight) return;
+  macWidgetWriteInFlight = true;
+  setImmediate(async () => {
+    try {
+      while (pendingMacWidgetStats) {
+        const nextStats = pendingMacWidgetStats;
+        pendingMacWidgetStats = null;
+        const config = macWidgetConfiguration();
+        if (!config) break;
+        await updateMacWidgetSnapshot(nextStats, {
+          snapshotPath: config.snapshotPath,
+          logger: (message) => console.warn(message)
+        });
+      }
+    } catch (error) {
+      console.warn(`[mac-widget] update failed: ${error?.message || error}`);
+    } finally {
+      macWidgetWriteInFlight = false;
+      if (pendingMacWidgetStats) scheduleMacWidgetSnapshot(pendingMacWidgetStats);
+    }
+  });
+}
+
 function sendPush(payload) {
   const previousHistoryRevision = statsHistoryRevision(latestStats);
   if (payload?.data?.stats) {
     injectLocalDeviceStatus(payload.data.stats);
     latestStats = payload.data.stats;
+    scheduleMacWidgetSnapshot(latestStats);
     syncTrayCodexActiveAccount();
     updateTrayDisplay();
     if (settings.exportAutoEnabled && settings.exportDir && Date.now() - lastExportAt >= exportIntervalMs()) {
@@ -2493,6 +2568,18 @@ function showPopover() {
   // case where macOS fires blur immediately after show because the click that
   // opened us still has the menu bar as the focused element.
   setTimeout(() => { suppressNextBlurHide = false; }, 250);
+}
+
+function openMainWindowFromWidget() {
+  if (!app.isReady() || !mainWindow || mainWindow.isDestroyed()) return;
+  pendingMacWidgetOpen = false;
+  if (settings?.trayMode && tray) {
+    showPopover();
+    return;
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
 }
 
 function hidePopover() {
@@ -3800,6 +3887,7 @@ app.whenReady().then(() => {
   configureWindowToggleShortcut();
   cleanupStaleStaging().catch((error) => console.log(`[tokscale] staging cleanup failed: ${error.message}`));
   ensureTray();
+  if (pendingMacWidgetOpen) setImmediate(openMainWindowFromWidget);
   if (settings.trayMode) enterTrayMode();
   regenerateTokscalePricing();
   startMode();
