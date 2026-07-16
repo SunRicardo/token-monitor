@@ -10,6 +10,7 @@
 2. [ARCHITECTURE.md](ARCHITECTURE.md) - Electron、renderer、shared、hub、worker、agent 的关系。
 3. [DATA_FLOW.md](DATA_FLOW.md) - usage、cost、limits、history、sync 的数据流和隐私边界。
 4. [audit/LOCAL_CLIENTS_AUDIT.md](audit/LOCAL_CLIENTS_AUDIT.md) - 当前支持的本地 client。
+5. [audit/MACOS_WIDGET_IMPLEMENTATION_BASELINE.md](audit/MACOS_WIDGET_IMPLEMENTATION_BASELINE.md) - 原生 macOS Widget 的数据、隐私、打包与签名接入基线。
 5. [audit/LIMIT_PROVIDERS_AUDIT.md](audit/LIMIT_PROVIDERS_AUDIT.md) - 当前支持的云端 limit provider（17 个，含 MiMo 多账号和 Ollama Cloud）。
 6. [providers/MIMO_CLOUD_DISCOVERY.md](providers/MIMO_CLOUD_DISCOVERY.md) - MiMo Cloud 早期探测记录（已实现，保留作参考）。
 7. [providers/MIMO_LOGIN_ARCHITECTURE_RETROSPECTIVE.md](providers/MIMO_LOGIN_ARCHITECTURE_RETROSPECTIVE.md) - MiMo 登录方案复盘、维护者重构动机与可复用工程经验。
