@@ -11,9 +11,10 @@
 3. [DATA_FLOW.md](DATA_FLOW.md) - usage、cost、limits、history、sync 的数据流和隐私边界。
 4. [audit/LOCAL_CLIENTS_AUDIT.md](audit/LOCAL_CLIENTS_AUDIT.md) - 当前支持的本地 client。
 5. [audit/MACOS_WIDGET_IMPLEMENTATION_BASELINE.md](audit/MACOS_WIDGET_IMPLEMENTATION_BASELINE.md) - 原生 macOS Widget 的数据、隐私、打包与签名接入基线。
-5. [audit/LIMIT_PROVIDERS_AUDIT.md](audit/LIMIT_PROVIDERS_AUDIT.md) - 当前支持的云端 limit provider（17 个，含 MiMo 多账号和 Ollama Cloud）。
-6. [providers/MIMO_CLOUD_DISCOVERY.md](providers/MIMO_CLOUD_DISCOVERY.md) - MiMo Cloud 早期探测记录（已实现，保留作参考）。
-7. [providers/MIMO_LOGIN_ARCHITECTURE_RETROSPECTIVE.md](providers/MIMO_LOGIN_ARCHITECTURE_RETROSPECTIVE.md) - MiMo 登录方案复盘、维护者重构动机与可复用工程经验。
+6. [guides/MACOS_WIDGET_DEVELOPMENT.md](guides/MACOS_WIDGET_DEVELOPMENT.md) - App Group 配置、构建、测试、签名结构和刷新限制。
+7. [audit/LIMIT_PROVIDERS_AUDIT.md](audit/LIMIT_PROVIDERS_AUDIT.md) - 当前支持的云端 limit provider（17 个，含 MiMo 多账号和 Ollama Cloud）。
+8. [providers/MIMO_CLOUD_DISCOVERY.md](providers/MIMO_CLOUD_DISCOVERY.md) - MiMo Cloud 早期探测记录（已实现，保留作参考）。
+9. [providers/MIMO_LOGIN_ARCHITECTURE_RETROSPECTIVE.md](providers/MIMO_LOGIN_ARCHITECTURE_RETROSPECTIVE.md) - MiMo 登录方案复盘、维护者重构动机与可复用工程经验。
 8. [UI_STRUCTURE.md](UI_STRUCTURE.md) - 当前 renderer UI 结构与视图。
 9. [CONFIG_AND_STORAGE.md](CONFIG_AND_STORAGE.md) - 配置、存储、账号凭据与数据出站边界。
 10. [audit/DEVELOPMENT_BASELINE.md](audit/DEVELOPMENT_BASELINE.md) - 审计基线与验证结果。
