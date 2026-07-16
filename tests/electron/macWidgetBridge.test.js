@@ -1,0 +1,104 @@
+'use strict';
+
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const os = require('node:os');
+const path = require('node:path');
+const test = require('node:test');
+const {
+  updateMacWidgetSnapshot,
+  writeMacWidgetSnapshot
+} = require('../../src/electron/macWidgetBridge');
+
+async function withTempDirectory(run) {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'token-monitor-widget-'));
+  try {
+    return await run(directory);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+}
+
+test('atomically replaces the snapshot and removes temporary files', async () => {
+  await withTempDirectory(async (directory) => {
+    const snapshotPath = path.join(directory, 'nested', 'snapshot.json');
+    await fs.mkdir(path.dirname(snapshotPath), { recursive: true });
+    await fs.writeFile(snapshotPath, 'old snapshot', 'utf8');
+
+    const result = await writeMacWidgetSnapshot('{"schemaVersion":1}\n', {
+      platform: 'darwin',
+      snapshotPath
+    });
+
+    assert.deepEqual(result, { ok: true, path: snapshotPath });
+    assert.equal(await fs.readFile(snapshotPath, 'utf8'), '{"schemaVersion":1}\n');
+    assert.deepEqual(await fs.readdir(path.dirname(snapshotPath)), ['snapshot.json']);
+    assert.equal((await fs.stat(snapshotPath)).mode & 0o777, 0o600);
+  });
+});
+
+test('keeps the previous snapshot and reports a controlled failure when rename fails', async () => {
+  await withTempDirectory(async (directory) => {
+    const snapshotPath = path.join(directory, 'snapshot.json');
+    await fs.writeFile(snapshotPath, 'last good snapshot', 'utf8');
+    const messages = [];
+    const failingFs = {
+      ...fs,
+      async rename() { throw new Error('simulated rename failure'); }
+    };
+
+    const result = await writeMacWidgetSnapshot('new snapshot', {
+      platform: 'darwin',
+      snapshotPath,
+      fs: failingFs,
+      logger: (message) => messages.push(message)
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.reason, 'write-failed');
+    assert.equal(await fs.readFile(snapshotPath, 'utf8'), 'last good snapshot');
+    assert.deepEqual(await fs.readdir(directory), ['snapshot.json']);
+    assert.match(messages[0], /simulated rename failure/);
+  });
+});
+
+test('is a no-op outside macOS without touching the filesystem', async () => {
+  const fsApi = new Proxy({}, {
+    get() { throw new Error('filesystem should not be accessed'); }
+  });
+  const result = await writeMacWidgetSnapshot('snapshot', {
+    platform: 'linux',
+    snapshotPath: '/not/used/snapshot.json',
+    fs: fsApi
+  });
+  assert.deepEqual(result, { ok: false, reason: 'unsupported-platform' });
+});
+
+test('is a no-op on macOS when no shared-container path is configured', async () => {
+  assert.deepEqual(await writeMacWidgetSnapshot('snapshot', { platform: 'darwin' }), {
+    ok: false,
+    reason: 'not-configured'
+  });
+});
+
+test('serializes aggregate stats before writing the snapshot', async () => {
+  await withTempDirectory(async (directory) => {
+    const snapshotPath = path.join(directory, 'snapshot.json');
+    const result = await updateMacWidgetSnapshot({
+      periods: { today: { totalTokens: 42, costUsd: 0.5 } }
+    }, {
+      platform: 'darwin',
+      snapshotPath,
+      snapshotOptions: { now: '2026-07-16T09:00:00Z' }
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(JSON.parse(await fs.readFile(snapshotPath, 'utf8')), {
+      schemaVersion: 1,
+      generatedAt: '2026-07-16T09:00:00.000Z',
+      today: { totalTokens: 42, costUsd: 0.5 },
+      tools: [],
+      limits: []
+    });
+  });
+});
