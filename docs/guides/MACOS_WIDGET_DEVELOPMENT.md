@@ -50,12 +50,12 @@ export TOKEN_MONITOR_PROFILE='development-clone'
 ## 数据链路
 
 1. local/client/host 模式都从 `src/electron/main.js` 的 `sendPush()` 进入统一出口。
-2. `src/shared/macWidgetSnapshot.js` 生成 schema version 3 的显式白名单快照。
+2. `src/shared/macWidgetSnapshot.js` 生成 schema version 4 的显式白名单快照。
 3. `src/electron/macWidgetBridge.js` 在 macOS 上执行同目录临时写入、`fsync` 和原子 rename。
 4. 内容变化且写入成功后，Electron 调用打包进 app 的 `TokenMonitorWidgetReloader`，通过公开 `WidgetCenter.reloadTimelines(ofKind:)` 请求刷新。
 5. WidgetKit 通过 `FileManager.containerURL(forSecurityApplicationGroupIdentifier:)` 读取快照。
 
-快照只包含 `periods.day/month/total` 下的 overview、models、activity、trend，以及单份 quota、非敏感 presentation 和 status。旧版 top-level overview/models/activity/trend 继续保留作兼容读取。账号 key、邮箱、姓名、Cookie、API key/token、prompt、conversation/session 内容、Hub 凭据和本地路径不会写入。Swift 端继续兼容 schema v1/v2，并对缺失字段使用 fallback。
+快照只包含 `periods.day/month/total` 下的 overview、models、activity、trend，以及单份 quota、非敏感 presentation 和 status。Quota 只允许输出 provider/status/window 及可选的原币 `balance.amount/currency`；不会复制 Provider 原始响应。旧版 top-level overview/models/activity/trend 继续保留作兼容读取。账号 key、邮箱、姓名、Cookie、API key/token、prompt、conversation/session 内容、Hub 凭据和本地路径不会写入。Swift 端继续兼容 schema v1/v2/v3，并对缺失字段使用 fallback。
 
 周期选择存储在 App Group `UserDefaults` 的 `selectedPeriod`，只属于 Widget 展示状态，不写入 Electron `settings.json`，不改变主应用当前页面周期，也不触发数据采集。Small 使用紧凑循环按钮，Medium/Large 使用三段按钮；Intent 直接调用 `WidgetCenter.reloadTimelines(ofKind:)`，与主应用业务数据变化后的 native reload helper 分工独立。
 
@@ -63,7 +63,7 @@ export TOKEN_MONITOR_PROFILE='development-clone'
 
 Widget Kind 固定为 `com.tokenmonitor.dashboard`。Small、Medium 和 Large 共用同一个 Kind，页面差异只由 App Intent 配置决定。旧桌面实例如果仍显示旧 UI，需要删除旧 Widget 后重新添加。
 
-三种尺寸共享固定页面骨架：Header 承载 `Σ·` 与周期控件，Content 只承载当前页面主体，Footer 固定承载左下角页面按钮和右下角打开入口。骨架使用顶底锚定的 `ZStack`，Header/Footer 不参与页面 Content 的 `VStack` 高度分配；Content 通过 `WidgetScaffoldGeometry` 预留固定顶部和底部空间。页面切换不得让 Header/Footer 回到页面内容流中，也不得用页面级 padding、负 offset 或不同 Footer 高度补偿跳动；Small 活动页使用“活跃 X 天”横向文案加居中热力图，避免左侧窄栏或负偏移导致裁切。Large 使用独立上下内容 inset，保证顶部 Logo 和底部按钮不贴近系统 Widget 边缘。
+三种尺寸共享固定页面骨架：Header 承载 `Σ·` 与周期控件，Content 只承载当前页面主体，Footer 固定承载左下角页面按钮和右下角打开入口。骨架使用单一 `VStack` 的固定 Header/Flexible Content/固定 Footer 三段结构；WidgetKit 系统 content margins 是唯一外边距来源，项目 metrics 不再叠加横向 outer inset。Quota 和 Models 根据 Content 真实高度选择 regular/compact 并计算可见行，只在紧凑行仍无法完整展示时才出现“另有 N 项”。Activity 使用 Sunday-start 的 7 行日历热力图，并按宽高自适应显示最近数周。页面切换不得让 Header/Footer 回到页面内容流中，也不得用页面级 padding、负 offset 或不同 Footer 高度补偿跳动。
 
 ## 构建与测试
 

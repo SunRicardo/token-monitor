@@ -1,6 +1,17 @@
 import XCTest
 
 final class WidgetSnapshotDecodingTests: XCTestCase {
+    func testDecodesSchemaV4ProviderBalances() throws {
+        let snapshot = try decode("""
+        {"schemaVersion":4,"generatedAt":"2026-07-17T09:00:00.000Z","periods":{"day":{"overview":{"currentPeriod":"today","totalTokens":100,"updatedAt":"2026-07-17T08:59:00.000Z"}}},"quota":[{"provider":"mimo","status":"ok","balance":{"amount":3.62,"currency":"CNY"},"windows":[]},{"provider":"deepseek","status":"ok","balance":{"amount":9.33,"currency":"USD"},"windows":[]},{"provider":"codex","status":"ok","windows":[{"kind":"weekly","remainingPercent":2}]}],"status":{"noData":false}}
+        """)
+
+        XCTAssertEqual(snapshot.schemaVersion, 4)
+        XCTAssertEqual(snapshot.quota[0].balance, WidgetQuotaBalance(amount: 3.62, currency: "CNY"))
+        XCTAssertEqual(snapshot.quota[1].balance, WidgetQuotaBalance(amount: 9.33, currency: "USD"))
+        XCTAssertNil(snapshot.quota[2].balance)
+    }
+
     func testDecodesSchemaV3AndSelectsPeriods() throws {
         let snapshot = try decode("""
         {"schemaVersion":3,"generatedAt":"2026-07-17T09:00:00.000Z","periods":{"day":{"overview":{"currentPeriod":"today","totalTokens":100,"costUsd":1,"updatedAt":"2026-07-17T08:59:00.000Z"},"models":[{"displayName":"day-model","totalTokens":100,"sharePercent":100}],"activity":{"currentPeriod":"today","activeDays":1,"days":[]},"trend":{"peakTokens":100,"currentTokens":100,"points":[]}},"month":{"overview":{"currentPeriod":"month","totalTokens":200,"costUsd":2,"updatedAt":"2026-07-17T08:59:00.000Z"},"models":[{"displayName":"month-model","totalTokens":200,"sharePercent":100}],"activity":{"currentPeriod":"month","activeDays":2,"days":[]},"trend":{"peakTokens":200,"currentTokens":200,"points":[]}},"total":{"overview":{"currentPeriod":"allTime","totalTokens":300,"costUsd":3,"updatedAt":"2026-07-17T08:59:00.000Z"},"models":[{"displayName":"total-model","totalTokens":300,"sharePercent":100}],"activity":{"currentPeriod":"allTime","activeDays":3,"days":[]},"trend":{"peakTokens":300,"currentTokens":300,"points":[]}}},"quota":[],"presentation":{"currencySymbol":"¥"},"status":{"isStale":false,"dataAgeSeconds":60,"providerConfigured":true,"providerNeedsLogin":false,"noData":false}}
@@ -57,6 +68,45 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         XCTAssertEqual(provider(status: "unexpectedInternalValue").displayStatus, "暂不可用")
     }
 
+    func testQuotaValuePrioritizesBalanceThenPercentThenStatus() {
+        let balanceAndPercent = WidgetQuotaProvider(
+            provider: "mimo",
+            status: "ok",
+            updatedAt: nil,
+            windows: [WidgetLimitWindow(kind: "billing", usedPercent: 60, remainingPercent: 40, resetsAt: nil, windowMinutes: nil)],
+            balance: WidgetQuotaBalance(amount: 3.62, currency: "CNY")
+        )
+        let zeroUsd = WidgetQuotaProvider(
+            provider: "deepseek",
+            status: "ok",
+            updatedAt: nil,
+            windows: [],
+            balance: WidgetQuotaBalance(amount: 0, currency: "USD")
+        )
+        let percentOnly = WidgetQuotaProvider(
+            provider: "codex",
+            status: "ok",
+            updatedAt: nil,
+            windows: [WidgetLimitWindow(kind: "weekly", usedPercent: 98, remainingPercent: 2, resetsAt: nil, windowMinutes: nil)]
+        )
+
+        XCTAssertEqual(WidgetFormat.quotaValue(balanceAndPercent), "¥3.62 left")
+        XCTAssertEqual(WidgetFormat.quotaValue(zeroUsd), "$0.00 left")
+        XCTAssertEqual(WidgetFormat.quotaValue(percentOnly), "2% left")
+        XCTAssertEqual(WidgetFormat.quotaValue(provider(status: "notConfigured")), "未配置")
+        XCTAssertEqual(WidgetFormat.quotaValue(provider(status: "unauthorized")), "需要重新登录")
+        XCTAssertEqual(
+            WidgetFormat.quotaValue(WidgetQuotaProvider(
+                provider: "deepseek",
+                status: "ok",
+                updatedAt: nil,
+                windows: [],
+                balance: WidgetQuotaBalance(amount: 9.33, currency: "HKD")
+            )),
+            "HK$9.33 left"
+        )
+    }
+
     func testAllFiveIntentPagesAreIndependentValues() {
         XCTAssertEqual(WidgetPage.allCases.map(\.rawValue), ["overview", "quota", "models", "activity", "trend"])
         var first = TokenMonitorWidgetConfigurationIntent()
@@ -66,7 +116,7 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         XCTAssertNotEqual(first.page, second.page)
     }
 
-    func testSmallMediumAndLargeViewModelsBoundRowsAndPreserveLongNames() throws {
+    func testViewModelsPreserveAvailableRowsAndLongNames() throws {
         let snapshot = try decode("""
         {"schemaVersion":2,"generatedAt":"2026-07-17T09:00:00Z","overview":{"totalTokens":10},"models":[{"displayName":"A very long provider model name that must stay on one line","totalTokens":7,"sharePercent":70},{"displayName":"Second","totalTokens":2,"sharePercent":20},{"displayName":"Third","totalTokens":1,"sharePercent":10}],"status":{"noData":false}}
         """)
@@ -74,7 +124,7 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         let medium = WidgetViewModel.make(snapshot: snapshot, page: .models, layout: .medium)
         let large = WidgetViewModel.make(snapshot: snapshot, page: .models, layout: .large)
         XCTAssertTrue(small.primaryValue.hasPrefix("A very long"))
-        XCTAssertEqual(small.rows.count, 1)
+        XCTAssertEqual(small.rows.count, 2)
         XCTAssertEqual(medium.rows.count, 2)
         XCTAssertEqual(large.rows.count, 2)
     }
@@ -165,13 +215,15 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         let medium = WidgetLayoutMetrics.metrics(for: .systemMedium)
         let large = WidgetLayoutMetrics.metrics(for: .systemLarge)
 
-        XCTAssertGreaterThan(large.outerTopInset, medium.outerTopInset)
-        XCTAssertGreaterThanOrEqual(large.outerBottomInset, medium.outerBottomInset)
-        XCTAssertEqual(small.outerInsets.leading, small.horizontalInset)
-        XCTAssertEqual(medium.outerInsets.trailing, medium.horizontalInset)
-        XCTAssertGreaterThan(small.footerHeight, 0)
-        XCTAssertGreaterThan(medium.footerHeight, 0)
-        XCTAssertGreaterThan(large.footerHeight, 0)
+        for metrics in [small, medium, large] {
+            XCTAssertEqual(metrics.outerTopInset, 0)
+            XCTAssertEqual(metrics.outerBottomInset, 0)
+            XCTAssertEqual(metrics.horizontalInset, 0)
+            XCTAssertEqual(metrics.outerInsets.leading, 0)
+            XCTAssertEqual(metrics.outerInsets.trailing, 0)
+        }
+        XCTAssertEqual([small.headerHeight, medium.headerHeight, large.headerHeight], [20, 22, 24])
+        XCTAssertEqual([small.footerHeight, medium.footerHeight, large.footerHeight], [25, 26, 28])
         XCTAssertEqual(small.pageControlWidth, 108)
         XCTAssertEqual(medium.pageControlWidth, 112)
         XCTAssertEqual(large.pageControlWidth, 112)
@@ -192,11 +244,155 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
             XCTAssertGreaterThan(geometry.contentHeight(for: 160), 0)
             XCTAssertLessThan(geometry.contentTopReserved + geometry.contentBottomReserved, 160)
 
+            let expectedFrames = geometry.regionFrames(for: CGSize(width: 280, height: 160))
+            XCTAssertEqual(expectedFrames.header.minY, 0)
+            XCTAssertEqual(expectedFrames.header.height, metrics.headerHeight)
+            XCTAssertEqual(expectedFrames.content.minY, geometry.contentTopReserved)
+            XCTAssertEqual(expectedFrames.footer.maxY, 160)
+            XCTAssertEqual(expectedFrames.footer.height, metrics.footerHeight)
+
             for _ in pages {
                 for _ in periods {
                     XCTAssertEqual(geometry, metrics.scaffoldGeometry)
+                    XCTAssertEqual(expectedFrames, metrics.scaffoldGeometry.regionFrames(for: CGSize(width: 280, height: 160)))
                 }
             }
+        }
+    }
+
+    func testAdaptiveListCapacityFillsBeforeShowingMoreRows() {
+        for count in [0, 1, 2, 4, 6, 10] {
+            for kind in [WidgetListKind.quota, .models] {
+                let full = WidgetListCapacity.plan(itemCount: count, availableHeight: 400, kind: kind)
+                XCTAssertEqual(full.density, .regular)
+                XCTAssertEqual(full.visibleCount, count)
+                XCTAssertEqual(full.hiddenCount, 0)
+            }
+        }
+
+        let mediumFour = WidgetListCapacity.plan(itemCount: 4, availableHeight: 55, kind: .quota)
+        XCTAssertEqual(mediumFour.density, .compact)
+        XCTAssertEqual(mediumFour.visibleCount, 4)
+        XCTAssertEqual(mediumFour.hiddenCount, 0)
+
+        let smallThree = WidgetListCapacity.plan(itemCount: 3, availableHeight: 41, kind: .quota)
+        XCTAssertEqual(smallThree.density, .compact)
+        XCTAssertEqual(smallThree.visibleCount, 3)
+        XCTAssertEqual(smallThree.hiddenCount, 0)
+
+        let constrained = WidgetListCapacity.plan(itemCount: 6, availableHeight: 35, kind: .models)
+        XCTAssertEqual(constrained.density, .summary)
+        XCTAssertEqual(constrained.visibleCount, 2)
+        XCTAssertEqual(constrained.hiddenCount, 4)
+        let occupied = CGFloat(constrained.visibleCount) * constrained.rowHeight
+            + CGFloat(constrained.visibleCount) * constrained.rowSpacing
+            + constrained.moreRowHeight
+        XCTAssertLessThanOrEqual(occupied, 35)
+
+        let summaryOnly = WidgetListCapacity.plan(itemCount: 10, availableHeight: 11, kind: .quota)
+        XCTAssertEqual(summaryOnly.visibleCount, 0)
+        XCTAssertEqual(summaryOnly.hiddenCount, 10)
+    }
+
+    func testHeatmapUsesSundayRowsAndCalendarPlaceholders() throws {
+        let reference = try utcDate("2026-06-10")
+        let layout = WidgetHeatmapLayoutCalculator.make(
+            days: [
+                WidgetActivityDay(date: "2026-06-07", intensity: 1),
+                WidgetActivityDay(date: "2026-06-09", intensity: 3),
+                WidgetActivityDay(date: "2026-06-09", intensity: 4),
+                WidgetActivityDay(date: "2026-06-31", intensity: 4)
+            ],
+            referenceDate: reference,
+            availableSize: CGSize(width: 120, height: 70),
+            maxWeeks: 6,
+            minCellSize: 5,
+            maxCellSize: 9,
+            spacing: 2
+        )
+
+        XCTAssertEqual(layout.weekCount, 1)
+        XCTAssertEqual(layout.cells.count, 7)
+        XCTAssertEqual(layout.cell(week: 0, weekday: 0)?.date, "2026-06-07")
+        XCTAssertEqual(layout.cell(week: 0, weekday: 0)?.intensity, 1)
+        XCTAssertEqual(layout.cell(week: 0, weekday: 1)?.date, "2026-06-08")
+        XCTAssertEqual(layout.cell(week: 0, weekday: 1)?.intensity, 0)
+        XCTAssertEqual(layout.cell(week: 0, weekday: 2)?.intensity, 4)
+        XCTAssertEqual(layout.cell(week: 0, weekday: 4)?.isFuture, true)
+        XCTAssertEqual(Set(layout.cells.map(\.id)).count, layout.cells.count)
+    }
+
+    func testHeatmapAdaptsAcrossFamiliesAndHistoryLengthsWithoutOverflow() throws {
+        let reference = try utcDate("2026-07-17")
+        let scenarios: [(count: Int, size: CGSize, maxWeeks: Int, minWeeks: Int, minCell: CGFloat, maxCell: CGFloat)] = [
+            (28, CGSize(width: 120, height: 70), 6, 4, 5, 9),
+            (90, CGSize(width: 220, height: 70), 14, 10, 5, 10),
+            (180, CGSize(width: 320, height: 120), 26, 20, 6, 12)
+        ]
+
+        for scenario in scenarios {
+            let days = try continuousActivityDays(count: scenario.count, ending: "2026-07-17")
+            let layout = WidgetHeatmapLayoutCalculator.make(
+                days: days,
+                referenceDate: reference,
+                availableSize: scenario.size,
+                maxWeeks: scenario.maxWeeks,
+                minCellSize: scenario.minCell,
+                maxCellSize: scenario.maxCell,
+                spacing: 2
+            )
+            XCTAssertGreaterThanOrEqual(layout.weekCount, scenario.minWeeks)
+            XCTAssertLessThanOrEqual(layout.weekCount, scenario.maxWeeks)
+            XCTAssertEqual(layout.cells.count, layout.weekCount * 7)
+            XCTAssertGreaterThanOrEqual(layout.cellSize, scenario.minCell)
+            XCTAssertLessThanOrEqual(layout.cellSize, scenario.maxCell)
+            XCTAssertLessThanOrEqual(layout.renderedWidth, scenario.size.width + 0.001)
+            XCTAssertLessThanOrEqual(layout.renderedHeight, scenario.size.height + 0.001)
+            XCTAssertEqual(Set(layout.cells.map(\.id)).count, layout.cells.count)
+        }
+    }
+
+    func testHeatmapHandlesEmptySparseAndThemeIndependentGeometry() throws {
+        let reference = try utcDate("2026-07-17")
+        let empty = WidgetHeatmapLayoutCalculator.make(
+            days: [],
+            referenceDate: reference,
+            availableSize: CGSize(width: 220, height: 70),
+            maxWeeks: 14,
+            minCellSize: 5,
+            maxCellSize: 10,
+            spacing: 2
+        )
+        XCTAssertEqual(empty.weekCount, 0)
+        XCTAssertTrue(empty.cells.isEmpty)
+
+        let sparse = [
+            WidgetActivityDay(date: "2026-05-03", intensity: 4),
+            WidgetActivityDay(date: "2026-06-14", intensity: 2),
+            WidgetActivityDay(date: "2026-07-17", intensity: 1)
+        ]
+        let baseline = WidgetHeatmapLayoutCalculator.make(
+            days: sparse,
+            referenceDate: reference,
+            availableSize: CGSize(width: 220, height: 70),
+            maxWeeks: 14,
+            minCellSize: 5,
+            maxCellSize: 10,
+            spacing: 2
+        )
+        XCTAssertGreaterThan(baseline.cells.filter { !$0.isFuture && $0.intensity == 0 }.count, 0)
+
+        for _ in ["light", "dark", "accented"] {
+            let themed = WidgetHeatmapLayoutCalculator.make(
+                days: sparse,
+                referenceDate: reference,
+                availableSize: CGSize(width: 220, height: 70),
+                maxWeeks: 14,
+                minCellSize: 5,
+                maxCellSize: 10,
+                spacing: 2
+            )
+            XCTAssertEqual(themed, baseline)
         }
     }
 
@@ -228,6 +424,27 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
 
     private func decode(_ json: String) throws -> WidgetSnapshot {
         try WidgetSnapshot.decoder.decode(WidgetSnapshot.self, from: XCTUnwrap(json.data(using: .utf8)))
+    }
+
+    private func utcDate(_ value: String) throws -> Date {
+        try XCTUnwrap(ISO8601DateFormatter().date(from: "\(value)T00:00:00Z"))
+    }
+
+    private func continuousActivityDays(count: Int, ending: String) throws -> [WidgetActivityDay] {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let end = try utcDate(ending)
+        return try (0..<count).map { index in
+            let date = try XCTUnwrap(calendar.date(byAdding: .day, value: index - count + 1, to: end))
+            let components = calendar.dateComponents([.year, .month, .day], from: date)
+            let key = String(
+                format: "%04d-%02d-%02d",
+                components.year ?? 0,
+                components.month ?? 0,
+                components.day ?? 0
+            )
+            return WidgetActivityDay(date: key, intensity: index % 4 + 1)
+        }
     }
 
     private func provider(status: String) -> WidgetQuotaProvider {

@@ -10,6 +10,15 @@ const {
 
 const NOW = '2026-07-17T08:30:00.000Z';
 
+function dailyHistory(count, start = '2026-01-01') {
+  const startMs = Date.parse(`${start}T00:00:00.000Z`);
+  return Array.from({ length: count }, (_, index) => ({
+    date: new Date(startMs + index * 86_400_000).toISOString().slice(0, 10),
+    tokens: index + 1,
+    cost: (index + 1) / 100
+  }));
+}
+
 function sampleStats() {
   return {
     updatedAt: '2026-07-17T08:25:00.000Z',
@@ -44,7 +53,7 @@ function sampleStats() {
   };
 }
 
-test('builds schema v3 overview, quota, models, activity, trend and presentation', () => {
+test('builds schema v4 overview, quota, models, activity, trend and presentation', () => {
   const snapshot = buildMacWidgetSnapshot(sampleStats(), {
     now: NOW,
     presentation: {
@@ -54,7 +63,7 @@ test('builds schema v3 overview, quota, models, activity, trend and presentation
   });
 
   assert.equal(snapshot.schemaVersion, MAC_WIDGET_SCHEMA_VERSION);
-  assert.equal(MAC_WIDGET_SCHEMA_VERSION, 3);
+  assert.equal(MAC_WIDGET_SCHEMA_VERSION, 4);
   assert.deepEqual(snapshot.overview, {
     currentPeriod: 'today', totalTokens: 1_200_000, costUsd: 1.25,
     primaryTool: 'codex', updatedAt: '2026-07-17T08:25:00.000Z'
@@ -81,6 +90,43 @@ test('builds schema v3 overview, quota, models, activity, trend and presentation
   assert.equal(snapshot.status.isStale, false);
 });
 
+test('allowlists MiMo and DeepSeek balances and ranks numeric quota ahead of status-only rows', () => {
+  const snapshot = buildMacWidgetSnapshot({
+    limits: { providers: [
+      { provider: 'claude', status: 'ok', windows: [] },
+      { provider: 'mimo', status: 'ok', balance: { amount: 3.62, currency: 'CNY' }, windows: [] },
+      { provider: 'deepseek', status: 'ok', balance: { amount: 9.33, currency: 'USD' }, windows: [] },
+      { provider: 'codex', status: 'ok', windows: [{ kind: 'weekly', remainingPercent: 2 }] }
+    ] }
+  }, { now: NOW });
+
+  assert.deepEqual(snapshot.quota.map((provider) => provider.provider), [
+    'codex', 'deepseek', 'mimo', 'claude'
+  ]);
+  assert.deepEqual(snapshot.quota[1].balance, { amount: 9.33, currency: 'USD' });
+  assert.deepEqual(snapshot.quota[2].balance, { amount: 3.62, currency: 'CNY' });
+  assert.equal(Object.hasOwn(snapshot.quota[0], 'balance'), false);
+  assert.equal(snapshot.quota[0].windows[0].remainingPercent, 2);
+});
+
+test('preserves a zero balance and omits missing, non-finite, or unsupported balances', () => {
+  const snapshot = buildMacWidgetSnapshot({
+    limits: { providers: [
+      { provider: 'deepseek', status: 'ok', balance: { amount: '0', currency: ' cny ' } },
+      { provider: 'mimo', status: 'ok', balance: { amount: Infinity, currency: 'CNY' } },
+      { provider: 'cursor', status: 'ok', balance: { amount: 4.5, currency: 'EUR' } },
+      { provider: 'claude', status: 'ok', balance: { amount: 2.5 } },
+      { provider: 'codex', status: 'ok' }
+    ] }
+  }, { now: NOW });
+  const byProvider = new Map(snapshot.quota.map((provider) => [provider.provider, provider]));
+
+  assert.deepEqual(byProvider.get('deepseek').balance, { amount: 0, currency: 'CNY' });
+  for (const provider of ['mimo', 'cursor', 'claude', 'codex']) {
+    assert.equal(Object.hasOwn(byProvider.get(provider), 'balance'), false);
+  }
+});
+
 test('chooses the configured period without duplicating aggregation logic', () => {
   const snapshot = buildMacWidgetSnapshot(sampleStats(), {
     now: NOW,
@@ -103,32 +149,66 @@ test('keeps day, month and total model data independent', () => {
   assert.deepEqual(snapshot.periods.total.models.map((model) => model.displayName), ['total-model']);
 });
 
-test('keeps enough provider and history rows for adaptive large widget layouts', () => {
+test('keeps up to ten provider and model rows for adaptive widget capacity', () => {
   const stats = sampleStats();
-  stats.limits.providers = Array.from({ length: 7 }, (_, index) => ({
-    provider: ['codex', 'claude', 'cursor', 'antigravity', 'opencode', 'deepseek', 'minimax'][index],
+  const providerIds = [
+    'codex', 'claude', 'cursor', 'antigravity', 'opencode', 'deepseek',
+    'minimax', 'mimo', 'grok', 'copilot', 'kiro', 'zai'
+  ];
+  stats.limits.providers = providerIds.map((provider, index) => ({
+    provider,
     status: 'ok',
     windows: [{ kind: 'weekly', usedPercent: index * 10, resetsAt: '2026-07-20T00:00:00Z' }]
   }));
-  stats.historyPreview.daily = Array.from({ length: 50 }, (_, index) => ({
-    date: `2026-06-${String(index + 1).padStart(2, '0')}`,
-    tokens: index + 1,
-    cost: 0
-  })).concat(Array.from({ length: 19 }, (_, index) => ({
-    date: `2026-07-${String(index + 1).padStart(2, '0')}`,
-    tokens: 100 + index,
-    cost: 0
-  })));
+  stats.periods.today.models = Object.fromEntries(
+    Array.from({ length: 12 }, (_, index) => [`model-${String(index + 1).padStart(2, '0')}`, 12 - index])
+  );
 
   const snapshot = buildMacWidgetSnapshot(stats, { now: NOW });
-  assert.equal(snapshot.quota.length, 5);
-  assert.equal(snapshot.activity.days.length, 42);
+  assert.equal(snapshot.quota.length, 10);
+  assert.equal(snapshot.models.length, 10);
+});
+
+test('keeps real 28, 90, and 180 day activity ranges, caps at 182, and leaves trend at 28', () => {
+  for (const count of [28, 90, 180]) {
+    const daily = dailyHistory(count);
+    const snapshot = buildMacWidgetSnapshot({ historyPreview: { daily } }, { now: NOW });
+    assert.equal(snapshot.activity.days.length, count);
+    assert.equal(snapshot.activity.days[0].date, daily[0].date);
+    assert.equal(snapshot.activity.days.at(-1).date, daily.at(-1).date);
+    assert.equal(snapshot.trend.points.length, 28);
+  }
+
+  const daily = dailyHistory(190, '2025-12-01');
+  const snapshot = buildMacWidgetSnapshot({ historyPreview: { daily } }, { now: NOW });
+  assert.equal(snapshot.activity.days.length, 182);
+  assert.equal(snapshot.activity.days[0].date, daily[8].date);
+  assert.equal(snapshot.activity.days.at(-1).date, daily.at(-1).date);
   assert.equal(snapshot.trend.points.length, 28);
+});
+
+test('accepts only real UTC calendar dates and lets the last duplicate date win', () => {
+  const snapshot = buildMacWidgetSnapshot({ historyPreview: { daily: [
+    { date: '2026-03-01', tokens: 10, cost: 1 },
+    { date: '2026-02-29', tokens: 99, cost: 9.9 },
+    { date: '2026-04-31', tokens: 99, cost: 9.9 },
+    { date: '2026-02-28', tokens: 1, cost: 0.1 },
+    { date: '2024-02-29', tokens: 4, cost: 0.4 },
+    { date: '2026-02-28', tokens: 8, cost: 0.8 },
+    { date: '2026-01-01T00:00:00Z', tokens: 99, cost: 9.9 }
+  ] } }, { now: NOW });
+
+  assert.deepEqual(snapshot.activity.days.map((day) => day.date), [
+    '2024-02-29', '2026-02-28', '2026-03-01'
+  ]);
+  assert.deepEqual(snapshot.trend.points.find((point) => point.date === '2026-02-28'), {
+    date: '2026-02-28', totalTokens: 8, costUsd: 0.8
+  });
 });
 
 test('returns a complete empty schema and stale status for missing or old data', () => {
   const empty = buildMacWidgetSnapshot({}, { now: NOW });
-  assert.equal(empty.schemaVersion, 3);
+  assert.equal(empty.schemaVersion, 4);
   assert.equal(empty.overview.totalTokens, 0);
   assert.equal(empty.periods.day.overview.totalTokens, 0);
   assert.equal(empty.periods.month.overview.totalTokens, 0);
@@ -162,6 +242,24 @@ test('normalizes invalid values, statuses, names, and percentages', () => {
   });
 });
 
+test('keeps missing percentages absent instead of coercing them to zero or one hundred', () => {
+  const snapshot = buildMacWidgetSnapshot({
+    limits: { providers: [{
+      provider: 'codex',
+      status: 'ok',
+      windows: [
+        { kind: 'session', usedPercent: null, remainingPercent: null },
+        { kind: 'weekly', usedPercent: '', remainingPercent: undefined }
+      ]
+    }] }
+  }, { now: NOW });
+
+  assert.equal(snapshot.quota[0].windows[0].usedPercent, null);
+  assert.equal(snapshot.quota[0].windows[0].remainingPercent, null);
+  assert.equal(snapshot.quota[0].windows[1].usedPercent, null);
+  assert.equal(snapshot.quota[0].windows[1].remainingPercent, null);
+});
+
 test('uses explicit allowlists so secrets, identities and raw history never enter App Group', () => {
   const sensitive = [
     'sk-private-api-key', 'session-cookie-value', 'private@example.com',
@@ -176,11 +274,30 @@ test('uses explicit allowlists so secrets, identities and raw history never ente
   stats.historyPreview.daily[0].prompt = sensitive[3];
   stats.limits.providers[0].token = sensitive[0];
   stats.limits.providers[0].cookie = sensitive[1];
+  stats.limits.providers.push({
+    provider: 'mimo',
+    status: 'ok',
+    accountEmail: sensitive[2],
+    windows: [],
+    balance: {
+      amount: 3.62,
+      currency: 'CNY',
+      apiKey: sensitive[0],
+      cookie: sensitive[1],
+      accountEmail: sensitive[2],
+      rawResponse: { prompt: sensitive[3], path: sensitive[5] }
+    }
+  });
 
   const serialized = serializeMacWidgetSnapshot(stats, { now: NOW });
   for (const value of sensitive) assert.equal(serialized.includes(value), false);
   assert.equal(serialized.endsWith('\n'), true);
-  assert.equal(JSON.parse(serialized).schemaVersion, 3);
+  const parsed = JSON.parse(serialized);
+  assert.equal(parsed.schemaVersion, 4);
+  assert.deepEqual(parsed.quota.find((provider) => provider.provider === 'mimo').balance, {
+    amount: 3.62,
+    currency: 'CNY'
+  });
 });
 
 test('provider status summarizes configuration and login requirements without identity', () => {

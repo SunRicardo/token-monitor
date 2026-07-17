@@ -196,6 +196,7 @@ struct WidgetQuotaProvider: Decodable, Equatable, Identifiable {
     let provider: String
     let status: String
     let updatedAt: Date?
+    let balance: WidgetQuotaBalance?
     let windows: [WidgetLimitWindow]
     var id: String { "\(provider)-\(updatedAt?.timeIntervalSince1970 ?? 0)" }
 
@@ -212,18 +213,28 @@ struct WidgetQuotaProvider: Decodable, Equatable, Identifiable {
         }
     }
 
-    private enum CodingKeys: String, CodingKey { case provider, status, updatedAt, windows }
+    private enum CodingKeys: String, CodingKey { case provider, status, updatedAt, balance, windows }
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         provider = try container.decodeIfPresent(String.self, forKey: .provider) ?? "unknown"
         status = try container.decodeIfPresent(String.self, forKey: .status) ?? "unavailable"
         updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
+        balance = try container.decodeIfPresent(WidgetQuotaBalance.self, forKey: .balance)
         windows = try container.decodeIfPresent([WidgetLimitWindow].self, forKey: .windows) ?? []
     }
 
-    init(provider: String, status: String, updatedAt: Date?, windows: [WidgetLimitWindow]) {
-        self.provider = provider; self.status = status; self.updatedAt = updatedAt; self.windows = windows
+    init(provider: String, status: String, updatedAt: Date?, windows: [WidgetLimitWindow], balance: WidgetQuotaBalance? = nil) {
+        self.provider = provider
+        self.status = status
+        self.updatedAt = updatedAt
+        self.balance = balance
+        self.windows = windows
     }
+}
+
+struct WidgetQuotaBalance: Decodable, Equatable {
+    let amount: Double
+    let currency: String
 }
 
 struct WidgetLimitWindow: Decodable, Equatable, Identifiable {

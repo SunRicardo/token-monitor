@@ -38,6 +38,31 @@ struct WidgetScaffoldGeometry: Equatable {
     func contentHeight(for availableHeight: CGFloat) -> CGFloat {
         max(0, availableHeight - contentTopReserved - contentBottomReserved)
     }
+
+    func regionFrames(for size: CGSize) -> WidgetScaffoldRegionFrames {
+        let contentHeight = contentHeight(for: size.height)
+        return WidgetScaffoldRegionFrames(
+            header: CGRect(x: 0, y: 0, width: size.width, height: headerHeight),
+            content: CGRect(
+                x: 0,
+                y: contentTopReserved,
+                width: size.width,
+                height: contentHeight
+            ),
+            footer: CGRect(
+                x: 0,
+                y: max(0, size.height - footerHeight),
+                width: size.width,
+                height: footerHeight
+            )
+        )
+    }
+}
+
+struct WidgetScaffoldRegionFrames: Equatable {
+    let header: CGRect
+    let content: CGRect
+    let footer: CGRect
 }
 
 struct WidgetLayoutMetrics: Equatable {
@@ -72,40 +97,40 @@ struct WidgetLayoutMetrics: Equatable {
     static let small = WidgetLayoutMetrics(
         outerTopInset: 0,
         outerBottomInset: 0,
-        horizontalInset: 13,
+        horizontalInset: 0,
         headerHeight: 20,
         footerHeight: 25,
         contentGap: WidgetDesignTokens.smallGap,
         pageControlWidth: 108,
         activityMinCellSize: 5,
-        activityMaxCellSize: 7,
-        activityCellSpacing: 3
+        activityMaxCellSize: 9,
+        activityCellSpacing: 2
     )
 
     static let medium = WidgetLayoutMetrics(
-        outerTopInset: 1,
-        outerBottomInset: 1,
-        horizontalInset: 14,
+        outerTopInset: 0,
+        outerBottomInset: 0,
+        horizontalInset: 0,
         headerHeight: 22,
         footerHeight: 26,
         contentGap: WidgetDesignTokens.mediumGap,
         pageControlWidth: 112,
-        activityMinCellSize: 4,
-        activityMaxCellSize: 6,
-        activityCellSpacing: 3
+        activityMinCellSize: 5,
+        activityMaxCellSize: 10,
+        activityCellSpacing: 2
     )
 
     static let large = WidgetLayoutMetrics(
-        outerTopInset: 1,
-        outerBottomInset: 1,
-        horizontalInset: 18,
+        outerTopInset: 0,
+        outerBottomInset: 0,
+        horizontalInset: 0,
         headerHeight: 24,
         footerHeight: 28,
         contentGap: WidgetDesignTokens.largeGap,
         pageControlWidth: 112,
         activityMinCellSize: 5,
-        activityMaxCellSize: 8,
-        activityCellSpacing: 3
+        activityMaxCellSize: 12,
+        activityCellSpacing: 2
     )
 
     static func metrics(for family: WidgetFamily) -> WidgetLayoutMetrics {
@@ -117,10 +142,239 @@ struct WidgetLayoutMetrics: Equatable {
     }
 }
 
-enum WidgetLayout {
+enum WidgetLayout: CaseIterable, Equatable {
     case small
     case medium
     case large
+}
+
+enum WidgetContentDensity: CaseIterable, Equatable {
+    case regular
+    case compact
+    case summary
+}
+
+enum WidgetListKind: Equatable {
+    case quota
+    case models
+}
+
+struct WidgetListDensityGeometry: Equatable {
+    let rowHeight: CGFloat
+    let rowSpacing: CGFloat
+    let moreRowHeight: CGFloat
+
+    func fullHeight(itemCount: Int) -> CGFloat {
+        guard itemCount > 0 else { return 0 }
+        return CGFloat(itemCount) * rowHeight + CGFloat(itemCount - 1) * rowSpacing
+    }
+}
+
+struct WidgetListLayoutPlan: Equatable {
+    let density: WidgetContentDensity
+    let visibleCount: Int
+    let hiddenCount: Int
+    let rowHeight: CGFloat
+    let rowSpacing: CGFloat
+    let moreRowHeight: CGFloat
+}
+
+enum WidgetListCapacity {
+    static func geometry(kind: WidgetListKind, density: WidgetContentDensity) -> WidgetListDensityGeometry {
+        switch (kind, density) {
+        case (.quota, .regular):
+            WidgetListDensityGeometry(rowHeight: 30, rowSpacing: 3, moreRowHeight: 12)
+        case (.models, .regular):
+            WidgetListDensityGeometry(rowHeight: 28, rowSpacing: 3, moreRowHeight: 12)
+        case (_, .compact):
+            WidgetListDensityGeometry(rowHeight: 13, rowSpacing: 1, moreRowHeight: 11)
+        case (_, .summary):
+            WidgetListDensityGeometry(rowHeight: 11, rowSpacing: 1, moreRowHeight: 11)
+        }
+    }
+
+    static func plan(itemCount: Int, availableHeight: CGFloat, kind: WidgetListKind) -> WidgetListLayoutPlan {
+        let count = max(0, itemCount)
+        let height = max(0, availableHeight)
+
+        for density in [WidgetContentDensity.regular, .compact, .summary] {
+            let candidate = geometry(kind: kind, density: density)
+            if candidate.fullHeight(itemCount: count) <= height {
+                return WidgetListLayoutPlan(
+                    density: density,
+                    visibleCount: count,
+                    hiddenCount: 0,
+                    rowHeight: candidate.rowHeight,
+                    rowSpacing: candidate.rowSpacing,
+                    moreRowHeight: candidate.moreRowHeight
+                )
+            }
+        }
+
+        let summary = geometry(kind: kind, density: .summary)
+        let rowStride = summary.rowHeight + summary.rowSpacing
+        let availableForRows = max(0, height - summary.moreRowHeight - summary.rowSpacing)
+        let capacity = rowStride > 0 ? Int(floor((availableForRows + summary.rowSpacing) / rowStride)) : 0
+        let visibleCount = min(max(0, capacity), max(0, count - 1))
+        return WidgetListLayoutPlan(
+            density: .summary,
+            visibleCount: visibleCount,
+            hiddenCount: count - visibleCount,
+            rowHeight: summary.rowHeight,
+            rowSpacing: summary.rowSpacing,
+            moreRowHeight: summary.moreRowHeight
+        )
+    }
+}
+
+struct WidgetHeatmapCell: Equatable, Identifiable {
+    let date: String
+    let intensity: Int
+    let isFuture: Bool
+
+    var id: String { date }
+}
+
+struct WidgetHeatmapLayout: Equatable {
+    let weekCount: Int
+    let cellSize: CGFloat
+    let spacing: CGFloat
+    let cells: [WidgetHeatmapCell]
+    let startDate: String?
+    let endDate: String?
+
+    var renderedWidth: CGFloat {
+        guard weekCount > 0 else { return 0 }
+        return CGFloat(weekCount) * cellSize + CGFloat(weekCount - 1) * spacing
+    }
+
+    var renderedHeight: CGFloat {
+        guard weekCount > 0 else { return 0 }
+        return 7 * cellSize + 6 * spacing
+    }
+
+    var activeDays: Int {
+        cells.filter { !$0.isFuture && $0.intensity > 0 }.count
+    }
+
+    func cell(week: Int, weekday: Int) -> WidgetHeatmapCell? {
+        guard week >= 0, week < weekCount, weekday >= 0, weekday < 7 else { return nil }
+        return cells[week * 7 + weekday]
+    }
+}
+
+enum WidgetHeatmapLayoutCalculator {
+    static func make(
+        days: [WidgetActivityDay],
+        referenceDate: Date,
+        availableSize: CGSize,
+        maxWeeks: Int,
+        minCellSize: CGFloat,
+        maxCellSize: CGFloat,
+        spacing: CGFloat
+    ) -> WidgetHeatmapLayout {
+        let normalizedSpacing = max(0, spacing)
+        let normalizedMaxWeeks = max(0, maxWeeks)
+        guard normalizedMaxWeeks > 0, availableSize.width > 0, availableSize.height > 0 else {
+            return empty(spacing: normalizedSpacing)
+        }
+
+        var values: [Date: Int] = [:]
+        for day in days {
+            guard let date = parse(day.date) else { continue }
+            values[date] = max(values[date] ?? 0, min(4, max(0, day.intensity)))
+        }
+        guard let earliest = values.keys.min() else { return empty(spacing: normalizedSpacing) }
+
+        let reference = calendar.startOfDay(for: referenceDate)
+        let referenceSunday = sunday(for: reference)
+        let earliestSunday = sunday(for: min(earliest, reference))
+        let coverageDays = max(0, calendar.dateComponents([.day], from: earliestSunday, to: referenceSunday).day ?? 0)
+        let coverageWeeks = max(1, coverageDays / 7 + 1)
+        let widthCapacity = maxWeekCapacity(
+            width: availableSize.width,
+            minCellSize: max(0.1, minCellSize),
+            spacing: normalizedSpacing
+        )
+        let weekCount = min(normalizedMaxWeeks, coverageWeeks, widthCapacity)
+        guard weekCount > 0 else { return empty(spacing: normalizedSpacing) }
+
+        let widthFit = (availableSize.width - CGFloat(weekCount - 1) * normalizedSpacing) / CGFloat(weekCount)
+        let heightFit = (availableSize.height - 6 * normalizedSpacing) / 7
+        let cellSize = max(0, min(maxCellSize, widthFit, heightFit))
+        guard cellSize > 0 else { return empty(spacing: normalizedSpacing) }
+
+        let gridStart = calendar.date(byAdding: .day, value: -(weekCount - 1) * 7, to: referenceSunday) ?? referenceSunday
+        var cells: [WidgetHeatmapCell] = []
+        cells.reserveCapacity(weekCount * 7)
+        for offset in 0..<(weekCount * 7) {
+            guard let date = calendar.date(byAdding: .day, value: offset, to: gridStart) else { continue }
+            let isFuture = date > reference
+            cells.append(WidgetHeatmapCell(
+                date: format(date),
+                intensity: isFuture ? 0 : values[date] ?? 0,
+                isFuture: isFuture
+            ))
+        }
+
+        return WidgetHeatmapLayout(
+            weekCount: weekCount,
+            cellSize: cellSize,
+            spacing: normalizedSpacing,
+            cells: cells,
+            startDate: cells.first?.date,
+            endDate: cells.last(where: { !$0.isFuture })?.date
+        )
+    }
+
+    private static func maxWeekCapacity(width: CGFloat, minCellSize: CGFloat, spacing: CGFloat) -> Int {
+        let pitch = minCellSize + spacing
+        guard pitch > 0 else { return 0 }
+        return max(0, Int(floor((width + spacing) / pitch)))
+    }
+
+    private static func sunday(for date: Date) -> Date {
+        let weekday = calendar.component(.weekday, from: date)
+        return calendar.date(byAdding: .day, value: -(weekday - 1), to: date) ?? date
+    }
+
+    private static func parse(_ value: String) -> Date? {
+        let parts = value.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 3,
+              parts[0].count == 4,
+              parts[1].count == 2,
+              parts[2].count == 2,
+              let year = Int(parts[0]),
+              let month = Int(parts[1]),
+              let day = Int(parts[2]),
+              let date = calendar.date(from: DateComponents(year: year, month: month, day: day)),
+              format(date) == value else { return nil }
+        return date
+    }
+
+    private static func format(_ date: Date) -> String {
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", components.year ?? 0, components.month ?? 0, components.day ?? 0)
+    }
+
+    private static func empty(spacing: CGFloat) -> WidgetHeatmapLayout {
+        WidgetHeatmapLayout(
+            weekCount: 0,
+            cellSize: 0,
+            spacing: spacing,
+            cells: [],
+            startDate: nil,
+            endDate: nil
+        )
+    }
+
+    private static var calendar: Calendar = {
+        var value = Calendar(identifier: .gregorian)
+        value.locale = Locale(identifier: "en_US_POSIX")
+        value.timeZone = TimeZone(secondsFromGMT: 0)!
+        value.firstWeekday = 1
+        return value
+    }()
 }
 
 struct WidgetViewModel: Equatable {
@@ -131,12 +385,6 @@ struct WidgetViewModel: Equatable {
     let rows: [String]
 
     static func make(snapshot: WidgetSnapshot, page: WidgetPage, layout: WidgetLayout) -> WidgetViewModel {
-        let rowLimit: Int
-        switch layout {
-        case .small: rowLimit = 2
-        case .medium: rowLimit = 3
-        case .large: rowLimit = 5
-        }
         switch page {
         case .overview:
             return WidgetViewModel(
@@ -148,18 +396,17 @@ struct WidgetViewModel: Equatable {
             )
         case .quota:
             let provider = snapshot.quota.first
-            let remaining = provider?.windows.first?.remainingPercent
             return WidgetViewModel(
                 page: page,
                 title: provider.map { WidgetFormat.provider($0.provider) } ?? "额度",
-                primaryValue: remaining.map { "\(Int($0.rounded()))% left" } ?? provider?.displayStatus ?? "未配置",
+                primaryValue: provider.map(WidgetFormat.quotaValue) ?? "未配置",
                 secondaryValue: provider?.windows.first?.resetsAt.map(WidgetFormat.reset) ?? "",
-                rows: Array(snapshot.quota.dropFirst().prefix(max(0, rowLimit - 1))).map {
-                    "\(WidgetFormat.provider($0.provider)) · \($0.windows.first?.remainingPercent.map { "\(Int($0.rounded()))%" } ?? $0.displayStatus)"
+                rows: snapshot.quota.dropFirst().map {
+                    "\(WidgetFormat.provider($0.provider)) · \(WidgetFormat.quotaValue($0))"
                 }
             )
         case .models:
-            let models = Array(snapshot.models.prefix(rowLimit))
+            let models = snapshot.models
             return WidgetViewModel(
                 page: page,
                 title: "模型",
@@ -220,6 +467,28 @@ enum WidgetFormat {
         case "ollama": "Ollama"
         default: value.capitalized
         }
+    }
+
+    static func quotaValue(_ provider: WidgetQuotaProvider) -> String {
+        if let balance = provider.balance, balance.amount.isFinite {
+            let symbol = switch balance.currency.uppercased() {
+            case "CNY": "¥"
+            case "USD": "$"
+            case "TWD": "NT$"
+            case "HKD": "HK$"
+            default: "\(balance.currency.uppercased()) "
+            }
+            let amount = String(
+                format: "%.2f",
+                locale: Locale(identifier: "en_US_POSIX"),
+                balance.amount
+            )
+            return "\(symbol)\(amount) left"
+        }
+        if let remaining = provider.windows.first?.remainingPercent {
+            return "\(Int(remaining.rounded()))% left"
+        }
+        return provider.displayStatus
     }
 
     static func reset(_ date: Date) -> String {
