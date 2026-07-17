@@ -17,6 +17,28 @@ enum WidgetDesignTokens {
     static let dividerOpacity = 0.14
     static let panelOpacity = 0.065
     static let accent = Color.accentColor
+    static let periodControlHeight: CGFloat = 17
+    static let pageControlHeight: CGFloat = 18
+    static let openButtonSize: CGFloat = 20
+}
+
+struct WidgetScaffoldGeometry: Equatable {
+    let headerHeight: CGFloat
+    let footerHeight: CGFloat
+    let headerContentGap: CGFloat
+    let contentFooterGap: CGFloat
+
+    var contentTopReserved: CGFloat {
+        headerHeight + headerContentGap
+    }
+
+    var contentBottomReserved: CGFloat {
+        footerHeight + contentFooterGap
+    }
+
+    func contentHeight(for availableHeight: CGFloat) -> CGFloat {
+        max(0, availableHeight - contentTopReserved - contentBottomReserved)
+    }
 }
 
 struct WidgetLayoutMetrics: Equatable {
@@ -27,6 +49,15 @@ struct WidgetLayoutMetrics: Equatable {
     let activityCellSize: CGFloat
     let activityCellSpacing: CGFloat
     let contentSpacing: CGFloat
+
+    var scaffoldGeometry: WidgetScaffoldGeometry {
+        WidgetScaffoldGeometry(
+            headerHeight: headerHeight,
+            footerHeight: footerHeight,
+            headerContentGap: contentSpacing,
+            contentFooterGap: contentSpacing
+        )
+    }
 
     static let small = WidgetLayoutMetrics(
         contentInsets: EdgeInsets(top: 13, leading: 13, bottom: 13, trailing: 13),

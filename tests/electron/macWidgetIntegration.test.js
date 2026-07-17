@@ -123,21 +123,49 @@ test('Widget build provenance fields are injected into the extension Info.plist'
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_KIND = com\.tokenmonitor\.dashboard;/);
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_GIT_REVISION = unknown;/);
   assert.match(widgetInfo, /<key>TMWidgetSchemaVersion<\/key>\s*<string>3<\/string>/);
-  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>6<\/string>/);
+  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>7<\/string>/);
 });
 
 test('Widget layout uses fixed scaffold metrics without changing schema or kind', () => {
   assert.match(widgetViewModelSource, /struct WidgetLayoutMetrics/);
+  assert.match(widgetViewModelSource, /struct WidgetScaffoldGeometry/);
   assert.match(widgetViewModelSource, /static let small = WidgetLayoutMetrics/);
   assert.match(widgetViewModelSource, /static let medium = WidgetLayoutMetrics/);
   assert.match(widgetViewModelSource, /static let large = WidgetLayoutMetrics/);
   assert.match(widgetViewModelSource, /contentInsets: EdgeInsets\(top: 24, leading: 18, bottom: 22, trailing: 18\)/);
-  assert.match(widgetSource, /footer:\s*Footer,/);
+  assert.match(widgetSource, /let geometry = metrics\.scaffoldGeometry/);
+  assert.match(widgetSource, /ZStack\(alignment: \.topLeading\)/);
+  assert.match(widgetSource, /\.padding\(\.top, geometry\.contentTopReserved\)/);
+  assert.match(widgetSource, /\.padding\(\.bottom, geometry\.contentBottomReserved\)/);
+  assert.match(widgetSource, /\.frame\(maxWidth: \.infinity, maxHeight: \.infinity, alignment: \.topLeading\)/);
+  assert.match(widgetSource, /\.frame\(maxWidth: \.infinity, maxHeight: \.infinity, alignment: \.bottomLeading\)/);
+  assert.match(widgetSource, /measureWidgetLayoutRegion\(\.header\)/);
+  assert.match(widgetSource, /measureWidgetLayoutRegion\(\.content\)/);
+  assert.match(widgetSource, /measureWidgetLayoutRegion\(\.footer\)/);
   assert.match(widgetSource, /\.frame\(height: metrics\.footerHeight\)/);
-  assert.match(widgetSource, /\.frame\(width: metrics\.pageControlWidth, alignment: \.leading\)/);
-  assert.match(widgetSource, /Image\(systemName: "arrow\.up\.right"\)[\s\S]*\.frame\(width: 20, height: 20\)/);
+  assert.match(widgetSource, /\.frame\(width: metrics\.pageControlWidth, height: WidgetDesignTokens\.pageControlHeight, alignment: \.leading\)/);
+  assert.match(widgetSource, /Image\(systemName: "arrow\.up\.right"\)[\s\S]*\.frame\(width: WidgetDesignTokens\.openButtonSize, height: WidgetDesignTokens\.openButtonSize\)/);
   assert.match(widgetInfo, /<key>TMWidgetSchemaVersion<\/key>\s*<string>3<\/string>/);
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_KIND = com\.tokenmonitor\.dashboard;/);
+});
+
+test('Widget scaffold keeps header and footer outside page content switches', () => {
+  const scaffoldStart = widgetSource.indexOf('private func scaffold<Header: View, Content: View, Footer: View>');
+  const scaffoldEnd = widgetSource.indexOf('\n    private var familyScope', scaffoldStart);
+  assert.ok(scaffoldStart >= 0 && scaffoldEnd > scaffoldStart, 'scaffold should exist');
+  const scaffoldSource = widgetSource.slice(scaffoldStart, scaffoldEnd);
+  const pageBodyStart = widgetSource.indexOf('private func pageBody');
+  const pageBodyEnd = widgetSource.indexOf('\n    private func overview', pageBodyStart);
+  const pageBodySource = widgetSource.slice(pageBodyStart, pageBodyEnd);
+
+  assert.match(scaffoldSource, /header[\s\S]*\.measureWidgetLayoutRegion\(\.header\)/);
+  assert.match(scaffoldSource, /footer[\s\S]*\.measureWidgetLayoutRegion\(\.footer\)/);
+  assert.doesNotMatch(pageBodySource, /header\(/);
+  assert.doesNotMatch(pageBodySource, /footer\(/);
+  assert.doesNotMatch(pageBodySource, /WidgetPageControl/);
+  assert.doesNotMatch(widgetSource, /fixedSize\s*\([^)]*vertical:\s*true/);
+  assert.doesNotMatch(widgetSource, /\.offset\(y:\s*-/);
+  assert.match(widgetSource, /\.supportedFamilies\(\[\.systemSmall, \.systemMedium, \.systemLarge\]\)/);
 });
 
 test('Small activity layout avoids clipped side labels and fixed-width heatmap overflow', () => {

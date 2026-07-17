@@ -50,6 +50,45 @@ struct WidgetBackground: View {
     }
 }
 
+private enum WidgetLayoutRegion: String {
+    case header
+    case content
+    case footer
+}
+
+#if DEBUG
+private struct WidgetLayoutRegionFrame: Equatable {
+    let region: WidgetLayoutRegion
+    let frame: CGRect
+}
+
+private struct WidgetLayoutRegionPreferenceKey: PreferenceKey {
+    static var defaultValue: [WidgetLayoutRegionFrame] = []
+
+    static func reduce(value: inout [WidgetLayoutRegionFrame], nextValue: () -> [WidgetLayoutRegionFrame]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+#endif
+
+private extension View {
+    @ViewBuilder
+    func measureWidgetLayoutRegion(_ region: WidgetLayoutRegion) -> some View {
+        #if DEBUG
+        background(
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: WidgetLayoutRegionPreferenceKey.self,
+                    value: [WidgetLayoutRegionFrame(region: region, frame: proxy.frame(in: .local))]
+                )
+            }
+        )
+        #else
+        self
+        #endif
+    }
+}
+
 struct TokenMonitorWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let entry: TokenMonitorEntry
@@ -62,7 +101,9 @@ struct TokenMonitorWidgetView: View {
                 statusState(title: "Waiting for data", detail: "Open Token Monitor once")
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(metrics.contentInsets)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var metrics: WidgetLayoutMetrics {
@@ -117,17 +158,27 @@ struct TokenMonitorWidgetView: View {
         footer: Footer,
         metrics: WidgetLayoutMetrics
     ) -> some View {
-        VStack(alignment: .leading, spacing: metrics.contentSpacing) {
+        let geometry = metrics.scaffoldGeometry
+
+        return ZStack(alignment: .topLeading) {
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(.top, geometry.contentTopReserved)
+                .padding(.bottom, geometry.contentBottomReserved)
+                .clipped()
+                .measureWidgetLayoutRegion(.content)
+
             header
                 .frame(height: metrics.headerHeight)
                 .frame(maxWidth: .infinity, alignment: .leading)
-
-            content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .measureWidgetLayoutRegion(.header)
 
             footer
                 .frame(height: metrics.footerHeight)
                 .frame(maxWidth: .infinity, alignment: .bottomLeading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .measureWidgetLayoutRegion(.footer)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -142,6 +193,7 @@ struct TokenMonitorWidgetView: View {
             Spacer(minLength: 4)
             WidgetPeriodControl(selection: entry.period, style: .compact)
         }
+        .frame(height: metrics.headerHeight, alignment: .center)
     }
 
     private func mediumHeader(snapshot: WidgetSnapshot) -> some View {
@@ -150,6 +202,7 @@ struct TokenMonitorWidgetView: View {
             Spacer(minLength: 6)
             WidgetPeriodControl(selection: entry.period, style: .segmented)
         }
+        .frame(height: metrics.headerHeight, alignment: .center)
     }
 
     private var brand: some View {
@@ -381,20 +434,21 @@ struct TokenMonitorWidgetView: View {
         HStack(spacing: 6) {
             if let familyScope {
                 WidgetPageControl(page: page, family: familyScope)
-                    .frame(width: metrics.pageControlWidth, alignment: .leading)
+                    .frame(width: metrics.pageControlWidth, height: WidgetDesignTokens.pageControlHeight, alignment: .leading)
             } else {
                 pageLabel(page: page)
-                    .frame(width: metrics.pageControlWidth, alignment: .leading)
+                    .frame(width: metrics.pageControlWidth, height: WidgetDesignTokens.pageControlHeight, alignment: .leading)
             }
             Spacer(minLength: 4)
             Link(destination: TokenMonitorWidgetConfiguration.url(for: page)) {
                 Image(systemName: "arrow.up.right")
                     .font(.system(size: WidgetDesignTokens.secondarySize, weight: .semibold))
                     .foregroundStyle(.secondary)
-                    .frame(width: 20, height: 20)
+                    .frame(width: WidgetDesignTokens.openButtonSize, height: WidgetDesignTokens.openButtonSize)
             }
             .buttonStyle(.plain)
         }
+        .frame(height: metrics.footerHeight)
     }
 
     private func statusState(title: String, detail: String) -> some View {
@@ -427,6 +481,7 @@ struct TokenMonitorWidgetView: View {
         .font(.system(size: WidgetDesignTokens.microSize, weight: .medium))
         .padding(.horizontal, 7)
         .padding(.vertical, 4)
+        .frame(height: WidgetDesignTokens.pageControlHeight, alignment: .center)
         .background(.primary.opacity(WidgetDesignTokens.panelOpacity), in: Capsule())
         .overlay(Capsule().stroke(.primary.opacity(WidgetDesignTokens.dividerOpacity), lineWidth: 0.6))
     }
@@ -589,6 +644,7 @@ struct WidgetPeriodControl: View {
                 periodLabel(selection, selected: true)
             }
             .buttonStyle(.plain)
+            .frame(height: WidgetDesignTokens.periodControlHeight, alignment: .center)
             .accessibilityLabel("\(selection.accessibilityName)，已选择")
             .accessibilityHint("切换到\(selection.next.accessibilityName)")
         case .segmented:
@@ -601,6 +657,7 @@ struct WidgetPeriodControl: View {
                     .accessibilityLabel(period == selection ? "\(period.accessibilityName)，已选择" : "切换到\(period.accessibilityName)")
                 }
             }
+            .frame(height: WidgetDesignTokens.periodControlHeight, alignment: .center)
         }
     }
 
@@ -610,6 +667,7 @@ struct WidgetPeriodControl: View {
             .foregroundStyle(selected ? .primary : .tertiary)
             .padding(.horizontal, selected ? 6 : 3)
             .padding(.vertical, 3)
+            .frame(height: WidgetDesignTokens.periodControlHeight, alignment: .center)
             .background(Color.primary.opacity(selected ? WidgetDesignTokens.panelOpacity * 1.8 : 0), in: Capsule())
             .overlay(Capsule().stroke(.primary.opacity(selected ? WidgetDesignTokens.dividerOpacity : 0), lineWidth: 0.6))
             .lineLimit(1)
@@ -632,6 +690,7 @@ struct WidgetPageControl: View {
             .font(.system(size: WidgetDesignTokens.microSize, weight: .medium))
             .padding(.horizontal, 7)
             .padding(.vertical, 4)
+            .frame(height: WidgetDesignTokens.pageControlHeight, alignment: .center)
             .background(.primary.opacity(WidgetDesignTokens.panelOpacity), in: Capsule())
             .overlay(Capsule().stroke(.primary.opacity(WidgetDesignTokens.dividerOpacity), lineWidth: 0.6))
         }
