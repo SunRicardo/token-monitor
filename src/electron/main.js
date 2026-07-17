@@ -17,6 +17,7 @@ const {
   writePrivateJsonAtomic
 } = require('../shared/credentialStore');
 const { installSafeStdout } = require('../shared/safeStdio');
+const { initializeStorageProfile } = require('./storageProfile');
 const { appVersion } = require('../shared/appVersion');
 const { exportFileSet, exportSignature, EXPORT_FILENAMES } = require('../shared/exporter');
 const motionPreferenceApi = require('./motionPreference');
@@ -25,6 +26,17 @@ const motionPreferenceApi = require('./motionPreference');
 // a closed parent pipe turns the next log call into an unhandled 'error'
 // event and Electron pops a "JavaScript error in the main process" dialog.
 installSafeStdout();
+if (!app.isPackaged) loadDotEnv();
+let storageRuntime;
+try {
+  storageRuntime = initializeStorageProfile(app);
+  if (storageRuntime.cloneStatus !== 'not-required' && storageRuntime.cloneStatus !== 'already-complete') {
+    console.log(`[storage] development profile: ${storageRuntime.cloneStatus}`);
+  }
+} catch (error) {
+  console.error(`[storage] startup stopped: ${error?.message || 'profile initialization failed'}`);
+  app.exit(1);
+}
 const { DEFAULT_CLIENTS, KNOWN_CLIENTS, clientsCsvForSetting } = require('../shared/clientTracking');
 const { lookupModelPricing, normalizeHistoryIntervalMs } = require('../shared/collector');
 const { createDeviceRuntime } = require('../shared/deviceRuntime');
@@ -110,6 +122,7 @@ const { historyPreview, historyRevision } = require('../shared/history');
 const { readSessionDetail } = require('../shared/sessionDetail');
 const { startDiscordRpc, stopDiscordRpc, updateDiscordRpc } = require('./discordRpc');
 const { resolveMacWidgetSnapshotPath, updateMacWidgetSnapshot } = require('./macWidgetBridge');
+const { parseMacWidgetDeepLink } = require('./macWidgetDeepLink');
 const linuxAutostart = require('./linuxAutostart');
 const { codexAccountIdForProvider, localLiveCodexProvider } = require('./renderer/accountIdentity');
 const {
@@ -171,8 +184,6 @@ const {
 } = require('./windowsBackdropMode');
 const { applyWindowsAccentBlur } = require('./windowsBackdrop');
 
-if (!app.isPackaged) loadDotEnv();
-
 const PACKAGED_APP_NAME = app.isPackaged
   ? path.basename(process.execPath, path.extname(process.execPath))
   : '';
@@ -233,12 +244,13 @@ function normalizeHomeLimitAccountCount(value) {
   return Math.max(1, Math.min(HOME_LIMIT_ACCOUNT_COUNT_MAX, count));
 }
 
-let pendingMacWidgetOpen = false;
+let pendingMacWidgetOpen = null;
 app.on('open-url', (event, url) => {
   const urlScheme = macWidgetConfiguration()?.urlScheme || 'token-monitor';
-  if (url !== `${urlScheme}://widget`) return;
+  const destination = parseMacWidgetDeepLink(url, urlScheme);
+  if (!destination) return;
   event.preventDefault();
-  pendingMacWidgetOpen = true;
+  pendingMacWidgetOpen = destination;
   if (app.isReady()) setImmediate(openMainWindowFromWidget);
 });
 
@@ -626,7 +638,7 @@ function mimoManagedAccountsForCollector() {
 
 function legacyMimoCredentialPath(id) {
   const digest = crypto.createHash('sha256').update(String(id || '')).digest('hex');
-  return path.join(app.getPath('userData'), 'mimo-credentials', `${digest}.cookie`);
+  return path.join(storageRuntime.paths.providerCredentialsRoot, `${digest}.cookie`);
 }
 
 function writeMimoCredential(id, value) {
@@ -738,7 +750,7 @@ function setMimoManagedAccountEnabled(id, enabled) {
 }
 
 function codexManagedRoot() {
-  return path.join(app.getPath('userData'), 'managed-codex-homes');
+  return storageRuntime.paths.managedCodexRoot;
 }
 
 function codexManagedHomePath(accountId) {
@@ -1585,7 +1597,7 @@ function migrateLegacyMimoCredentialFiles(accounts) {
 }
 
 function readSettings() {
-  settingsPath = path.join(app.getPath('userData'), 'settings.json');
+  settingsPath = storageRuntime.paths.settingsPath;
   try {
     const defaults = defaultSettings();
     let saved = {};
@@ -2035,7 +2047,7 @@ function effectiveHubConfig() {
 }
 
 function hubDataFile() {
-  return path.join(app.getPath('userData'), 'hub-devices.json');
+  return storageRuntime.paths.hubDataPath;
 }
 
 function sendHubPush(payload) {
@@ -2332,6 +2344,17 @@ function scheduleMacWidgetSnapshot(stats) {
         if (!config) break;
         await updateMacWidgetSnapshot(nextStats, {
           snapshotPath: config.snapshotPath,
+          snapshotOptions: {
+            presentation: {
+              defaultPeriod: settings?.lastViewState?.period,
+              currencyCode: settings?.currency,
+              currencyRate: effectiveRates?.[normalizeCurrency(settings?.currency)] || 1,
+              compactNumbers: settings?.showCompactTotalTokens !== false,
+              showCost: true,
+              locale: settings?.language,
+              theme: Object.keys(settings?.themeColors || {}).length ? 'custom' : 'system'
+            }
+          },
           logger: (message) => console.warn(message)
         });
       }
@@ -2381,7 +2404,7 @@ let effectiveRates = null;       // { CODE: number }
 let rateRefreshTimer = null;
 
 function exchangeRateCachePath() {
-  return path.join(app.getPath('userData'), 'exchange-rates.json');
+  return path.join(storageRuntime.paths.dataRoot, 'exchange-rates.json');
 }
 
 function readRateCache() {
@@ -2579,7 +2602,16 @@ function showPopover() {
 
 function openMainWindowFromWidget() {
   if (!app.isReady() || !mainWindow || mainWindow.isDestroyed()) return;
-  pendingMacWidgetOpen = false;
+  const destination = pendingMacWidgetOpen || { page: 'overview', view: 'home', settings: false };
+  pendingMacWidgetOpen = null;
+  updateRendererViewState({ breakdown: destination.view });
+  const sendDestination = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    if (destination.settings) mainWindow.webContents.send('settings:open');
+    else mainWindow.webContents.send('view:open', destination.view);
+  };
+  if (mainWindow.webContents.isLoadingMainFrame()) mainWindow.webContents.once('did-finish-load', sendDestination);
+  else sendDestination();
   if (settings?.trayMode && tray) {
     showPopover();
     return;
@@ -3195,7 +3227,7 @@ async function fetchStats(options = {}) {
 }
 
 function managedPricingSidecarPath() {
-  return path.join(app.getPath('userData'), 'tokscale-managed-pricing.json');
+  return path.join(storageRuntime.paths.dataRoot, 'tokscale-managed-pricing.json');
 }
 
 function regenerateTokscalePricing() {

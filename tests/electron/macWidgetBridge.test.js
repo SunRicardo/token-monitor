@@ -140,12 +140,12 @@ test('serializes aggregate stats before writing the snapshot', async () => {
     });
 
     assert.equal(result.ok, true);
-    assert.deepEqual(JSON.parse(await fs.readFile(snapshotPath, 'utf8')), {
-      schemaVersion: 1,
-      generatedAt: '2026-07-16T09:00:00.000Z',
-      today: { totalTokens: 42, costUsd: 0.5 },
-      tools: [],
-      limits: []
-    });
+    const snapshot = JSON.parse(await fs.readFile(snapshotPath, 'utf8'));
+    assert.equal(snapshot.schemaVersion, 2);
+    assert.equal(snapshot.generatedAt, '2026-07-16T09:00:00.000Z');
+    assert.equal(snapshot.overview.totalTokens, 42);
+    assert.equal(snapshot.overview.costUsd, 0.5);
+    assert.deepEqual(snapshot.quota, []);
+    assert.deepEqual(snapshot.models, []);
   });
 });
