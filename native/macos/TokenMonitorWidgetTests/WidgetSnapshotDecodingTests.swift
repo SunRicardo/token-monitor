@@ -160,6 +160,22 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         XCTAssertEqual(WidgetFamilyScope(widgetFamily: .systemLarge), .large)
     }
 
+    func testWidgetLayoutMetricsStabilizeHeaderFooterAndPageControl() {
+        let small = WidgetLayoutMetrics.metrics(for: .systemSmall)
+        let medium = WidgetLayoutMetrics.metrics(for: .systemMedium)
+        let large = WidgetLayoutMetrics.metrics(for: .systemLarge)
+
+        XCTAssertGreaterThan(large.contentInsets.top, medium.contentInsets.top)
+        XCTAssertGreaterThanOrEqual(large.contentInsets.bottom, medium.contentInsets.bottom)
+        XCTAssertGreaterThan(small.footerHeight, 0)
+        XCTAssertGreaterThan(medium.footerHeight, 0)
+        XCTAssertGreaterThan(large.footerHeight, 0)
+        XCTAssertEqual(small.pageControlWidth, 108)
+        XCTAssertEqual(medium.pageControlWidth, 112)
+        XCTAssertEqual(large.pageControlWidth, 112)
+        XCTAssertEqual(WidgetLayoutMetrics.metrics(for: .systemSmall).pageControlWidth, small.pageControlWidth)
+    }
+
     func testWidgetPeriodCycleAndIntentOpenBehavior() {
         XCTAssertEqual(WidgetPeriod.day.next, .month)
         XCTAssertEqual(WidgetPeriod.month.next, .total)

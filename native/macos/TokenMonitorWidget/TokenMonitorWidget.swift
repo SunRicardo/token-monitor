@@ -13,27 +13,6 @@ enum TokenMonitorWidgetConfiguration {
     static let settingsURL = URL(string: "\(urlScheme)://widget-settings")!
 }
 
-enum WidgetDesignTokens {
-    static let smallOuterPadding: CGFloat = 13
-    static let mediumOuterPadding: CGFloat = 14
-    static let largeOuterPadding: CGFloat = 16
-    static let outerPadding: CGFloat = 13
-    static let sectionPadding: CGFloat = 9
-    static let cornerRadius: CGFloat = 12
-    static let smallGap: CGFloat = 5
-    static let mediumGap: CGFloat = 10
-    static let largeGap: CGFloat = 11
-    static let titleSize: CGFloat = 15
-    static let smallPrimarySize: CGFloat = 27
-    static let mediumPrimarySize: CGFloat = 31
-    static let largePrimarySize: CGFloat = 34
-    static let secondarySize: CGFloat = 10
-    static let microSize: CGFloat = 9
-    static let dividerOpacity = 0.14
-    static let panelOpacity = 0.065
-    static let accent = Color.accentColor
-}
-
 struct TokenMonitorWidget: Widget {
     let kind = TokenMonitorWidgetConfiguration.kind
 
@@ -83,15 +62,11 @@ struct TokenMonitorWidgetView: View {
                 statusState(title: "Waiting for data", detail: "Open Token Monitor once")
             }
         }
-        .padding(outerPadding)
+        .padding(metrics.contentInsets)
     }
 
-    private var outerPadding: CGFloat {
-        switch family {
-        case .systemLarge: WidgetDesignTokens.largeOuterPadding
-        case .systemMedium: WidgetDesignTokens.mediumOuterPadding
-        default: WidgetDesignTokens.smallOuterPadding
-        }
+    private var metrics: WidgetLayoutMetrics {
+        WidgetLayoutMetrics.metrics(for: family)
     }
 
     @ViewBuilder
@@ -110,30 +85,51 @@ struct TokenMonitorWidgetView: View {
     }
 
     private func small(_ snapshot: WidgetSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: WidgetDesignTokens.smallGap) {
-            header(snapshot: snapshot, page: entry.page)
-            pageBody(snapshot: snapshot, page: entry.page, layout: .small)
-            Spacer(minLength: 1)
-            footer(page: entry.page, familyScope: familyScope)
-        }
+        scaffold(
+            header: header(snapshot: snapshot, page: entry.page),
+            content: pageBody(snapshot: snapshot, page: entry.page, layout: .small),
+            footer: footer(page: entry.page, familyScope: familyScope),
+            metrics: metrics
+        )
     }
 
     private func medium(_ snapshot: WidgetSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: WidgetDesignTokens.mediumGap) {
-            mediumHeader(snapshot: snapshot)
-            pageBody(snapshot: snapshot, page: entry.page, layout: .medium)
-            Spacer(minLength: 0)
-            footer(page: entry.page, familyScope: familyScope)
-        }
+        scaffold(
+            header: mediumHeader(snapshot: snapshot),
+            content: pageBody(snapshot: snapshot, page: entry.page, layout: .medium),
+            footer: footer(page: entry.page, familyScope: familyScope),
+            metrics: metrics
+        )
     }
 
     private func large(_ snapshot: WidgetSnapshot) -> some View {
-        VStack(alignment: .leading, spacing: WidgetDesignTokens.largeGap) {
-            mediumHeader(snapshot: snapshot)
-            pageBody(snapshot: snapshot, page: entry.page, layout: .large)
-            Spacer(minLength: 0)
-            footer(page: entry.page, familyScope: familyScope)
+        scaffold(
+            header: mediumHeader(snapshot: snapshot),
+            content: pageBody(snapshot: snapshot, page: entry.page, layout: .large),
+            footer: footer(page: entry.page, familyScope: familyScope),
+            metrics: metrics
+        )
+    }
+
+    private func scaffold<Header: View, Content: View, Footer: View>(
+        header: Header,
+        content: Content,
+        footer: Footer,
+        metrics: WidgetLayoutMetrics
+    ) -> some View {
+        VStack(alignment: .leading, spacing: metrics.contentSpacing) {
+            header
+                .frame(height: metrics.headerHeight)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+            footer
+                .frame(height: metrics.footerHeight)
+                .frame(maxWidth: .infinity, alignment: .bottomLeading)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var familyScope: WidgetFamilyScope? {
@@ -329,18 +325,37 @@ struct TokenMonitorWidgetView: View {
 
     private func activity(_ snapshot: WidgetSnapshot, layout: WidgetLayout) -> some View {
         let days = Array(snapshot.activity.days.suffix(layout == .small ? 21 : layout == .medium ? 28 : 42))
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 3), count: layout == .small ? 7 : layout == .medium ? 14 : 14)
-        return HStack(spacing: WidgetDesignTokens.mediumGap) {
-            VStack(alignment: .leading, spacing: 0) {
-                primary("\(snapshot.activity.activeDays)", size: layout == .small ? WidgetDesignTokens.smallPrimarySize : 26)
-                secondary("活跃天数")
-            }
-            if !days.isEmpty {
-                LazyVGrid(columns: columns, spacing: 3) {
-                    ForEach(days) { day in
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(activityColor(day.intensity))
-                            .aspectRatio(1, contentMode: .fit)
+        let columnCount = layout == .small ? 7 : 14
+        let heatmap = ActivityHeatmap(
+            days: days,
+            columns: columnCount,
+            cellSize: metrics.activityCellSize,
+            spacing: metrics.activityCellSpacing
+        )
+        return Group {
+            if layout == .small {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 4) {
+                        Text("活跃")
+                            .font(.system(size: WidgetDesignTokens.secondarySize, weight: .medium))
+                            .foregroundStyle(.secondary)
+                        Text("\(snapshot.activity.activeDays) 天")
+                            .font(.system(size: WidgetDesignTokens.secondarySize, weight: .semibold, design: .monospaced))
+                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+
+                    heatmap
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
+            } else {
+                HStack(spacing: WidgetDesignTokens.mediumGap) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        primary("\(snapshot.activity.activeDays)", size: 26)
+                        secondary("活跃天数")
+                    }
+                    if !days.isEmpty {
+                        heatmap
                     }
                 }
             }
@@ -366,31 +381,37 @@ struct TokenMonitorWidgetView: View {
         HStack(spacing: 6) {
             if let familyScope {
                 WidgetPageControl(page: page, family: familyScope)
+                    .frame(width: metrics.pageControlWidth, alignment: .leading)
             } else {
                 pageLabel(page: page)
+                    .frame(width: metrics.pageControlWidth, alignment: .leading)
             }
             Spacer(minLength: 4)
             Link(destination: TokenMonitorWidgetConfiguration.url(for: page)) {
                 Image(systemName: "arrow.up.right")
                     .font(.system(size: WidgetDesignTokens.secondarySize, weight: .semibold))
                     .foregroundStyle(.secondary)
+                    .frame(width: 20, height: 20)
             }
             .buttonStyle(.plain)
         }
     }
 
     private func statusState(title: String, detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            brand
-            Spacer()
-            Text(title).font(.system(size: 13, weight: .semibold))
-            Text(detail)
-                .font(.system(size: WidgetDesignTokens.secondarySize))
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-            footer(page: entry.page, familyScope: familyScope)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        scaffold(
+            header: brand,
+            content: VStack(alignment: .leading, spacing: 6) {
+                Spacer(minLength: 0)
+                Text(title).font(.system(size: 13, weight: .semibold))
+                Text(detail)
+                    .font(.system(size: WidgetDesignTokens.secondarySize))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                Spacer(minLength: 0)
+            },
+            footer: footer(page: entry.page, familyScope: familyScope),
+            metrics: metrics
+        )
     }
 
     private func pageLabel(page: WidgetPage, showsNextIndicator: Bool = false) -> some View {
@@ -515,10 +536,41 @@ struct TokenMonitorWidgetView: View {
         }
     }
 
+}
+
+struct ActivityHeatmap: View {
+    let days: [WidgetActivityDay]
+    let columns: Int
+    let cellSize: CGFloat
+    let spacing: CGFloat
+
+    var body: some View {
+        if days.isEmpty {
+            EmptyView()
+        } else {
+            LazyVGrid(columns: gridColumns, spacing: spacing) {
+                ForEach(days) { day in
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(activityColor(day.intensity))
+                        .frame(width: cellSize, height: cellSize)
+                }
+            }
+            .frame(width: gridWidth, alignment: .center)
+            .accessibilityLabel("活动热力图")
+        }
+    }
+
+    private var gridColumns: [GridItem] {
+        Array(repeating: GridItem(.fixed(cellSize), spacing: spacing), count: columns)
+    }
+
+    private var gridWidth: CGFloat {
+        CGFloat(columns) * cellSize + CGFloat(max(0, columns - 1)) * spacing
+    }
+
     private func activityColor(_ intensity: Int) -> Color {
         intensity <= 0 ? .primary.opacity(0.06) : WidgetDesignTokens.accent.opacity(0.18 + Double(min(4, intensity)) * 0.17)
     }
-
 }
 
 enum WidgetPeriodControlStyle {

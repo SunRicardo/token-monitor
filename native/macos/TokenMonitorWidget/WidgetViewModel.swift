@@ -1,4 +1,71 @@
 import Foundation
+import SwiftUI
+import WidgetKit
+
+enum WidgetDesignTokens {
+    static let sectionPadding: CGFloat = 9
+    static let cornerRadius: CGFloat = 12
+    static let smallGap: CGFloat = 5
+    static let mediumGap: CGFloat = 10
+    static let largeGap: CGFloat = 8
+    static let titleSize: CGFloat = 15
+    static let smallPrimarySize: CGFloat = 27
+    static let mediumPrimarySize: CGFloat = 31
+    static let largePrimarySize: CGFloat = 34
+    static let secondarySize: CGFloat = 10
+    static let microSize: CGFloat = 9
+    static let dividerOpacity = 0.14
+    static let panelOpacity = 0.065
+    static let accent = Color.accentColor
+}
+
+struct WidgetLayoutMetrics: Equatable {
+    let contentInsets: EdgeInsets
+    let headerHeight: CGFloat
+    let footerHeight: CGFloat
+    let pageControlWidth: CGFloat
+    let activityCellSize: CGFloat
+    let activityCellSpacing: CGFloat
+    let contentSpacing: CGFloat
+
+    static let small = WidgetLayoutMetrics(
+        contentInsets: EdgeInsets(top: 13, leading: 13, bottom: 13, trailing: 13),
+        headerHeight: 20,
+        footerHeight: 25,
+        pageControlWidth: 108,
+        activityCellSize: 7,
+        activityCellSpacing: 3,
+        contentSpacing: WidgetDesignTokens.smallGap
+    )
+
+    static let medium = WidgetLayoutMetrics(
+        contentInsets: EdgeInsets(top: 14, leading: 14, bottom: 14, trailing: 14),
+        headerHeight: 22,
+        footerHeight: 26,
+        pageControlWidth: 112,
+        activityCellSize: 5,
+        activityCellSpacing: 3,
+        contentSpacing: WidgetDesignTokens.mediumGap
+    )
+
+    static let large = WidgetLayoutMetrics(
+        contentInsets: EdgeInsets(top: 24, leading: 18, bottom: 22, trailing: 18),
+        headerHeight: 24,
+        footerHeight: 28,
+        pageControlWidth: 112,
+        activityCellSize: 7,
+        activityCellSpacing: 3,
+        contentSpacing: WidgetDesignTokens.largeGap
+    )
+
+    static func metrics(for family: WidgetFamily) -> WidgetLayoutMetrics {
+        switch family {
+        case .systemLarge: .large
+        case .systemMedium: .medium
+        default: .small
+        }
+    }
+}
 
 enum WidgetLayout {
     case small

@@ -15,6 +15,10 @@ const widgetIntentSource = fs.readFileSync(
   path.join(root, 'native', 'macos', 'TokenMonitorWidget', 'WidgetConfigurationIntent.swift'),
   'utf8'
 );
+const widgetViewModelSource = fs.readFileSync(
+  path.join(root, 'native', 'macos', 'TokenMonitorWidget', 'WidgetViewModel.swift'),
+  'utf8'
+);
 const widgetInfo = fs.readFileSync(
   path.join(root, 'native', 'macos', 'TokenMonitorWidget', 'Info.plist'),
   'utf8'
@@ -119,7 +123,38 @@ test('Widget build provenance fields are injected into the extension Info.plist'
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_KIND = com\.tokenmonitor\.dashboard;/);
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_GIT_REVISION = unknown;/);
   assert.match(widgetInfo, /<key>TMWidgetSchemaVersion<\/key>\s*<string>3<\/string>/);
-  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>5<\/string>/);
+  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>6<\/string>/);
+});
+
+test('Widget layout uses fixed scaffold metrics without changing schema or kind', () => {
+  assert.match(widgetViewModelSource, /struct WidgetLayoutMetrics/);
+  assert.match(widgetViewModelSource, /static let small = WidgetLayoutMetrics/);
+  assert.match(widgetViewModelSource, /static let medium = WidgetLayoutMetrics/);
+  assert.match(widgetViewModelSource, /static let large = WidgetLayoutMetrics/);
+  assert.match(widgetViewModelSource, /contentInsets: EdgeInsets\(top: 24, leading: 18, bottom: 22, trailing: 18\)/);
+  assert.match(widgetSource, /footer:\s*Footer,/);
+  assert.match(widgetSource, /\.frame\(height: metrics\.footerHeight\)/);
+  assert.match(widgetSource, /\.frame\(width: metrics\.pageControlWidth, alignment: \.leading\)/);
+  assert.match(widgetSource, /Image\(systemName: "arrow\.up\.right"\)[\s\S]*\.frame\(width: 20, height: 20\)/);
+  assert.match(widgetInfo, /<key>TMWidgetSchemaVersion<\/key>\s*<string>3<\/string>/);
+  assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_KIND = com\.tokenmonitor\.dashboard;/);
+});
+
+test('Small activity layout avoids clipped side labels and fixed-width heatmap overflow', () => {
+  const activityStart = widgetSource.indexOf('private func activity(_ snapshot: WidgetSnapshot, layout: WidgetLayout)');
+  const activityEnd = widgetSource.indexOf('\n    private func trend', activityStart);
+  assert.ok(activityStart >= 0 && activityEnd > activityStart, 'activity view should exist');
+  const activitySource = widgetSource.slice(activityStart, activityEnd);
+  assert.match(activitySource, /if layout == \.small/);
+  assert.match(activitySource, /VStack\(alignment: \.leading, spacing: 6\)/);
+  assert.match(activitySource, /Text\("活跃"\)/);
+  assert.match(activitySource, /Text\("\\\(snapshot\.activity\.activeDays\) 天"\)/);
+  assert.match(widgetSource, /struct ActivityHeatmap: View/);
+  assert.match(widgetSource, /GridItem\(\.fixed\(cellSize\), spacing: spacing\)/);
+  assert.match(widgetSource, /\.frame\(width: gridWidth, alignment: \.center\)/);
+  assert.doesNotMatch(activitySource, /\.offset\(x:\s*-/);
+  assert.doesNotMatch(activitySource, /\.padding\(\.leading,\s*-/);
+  assert.doesNotMatch(activitySource, /rotationEffect/);
 });
 
 test('macOS Widget integration leaves non-macOS packaging sections unchanged', () => {
