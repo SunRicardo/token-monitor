@@ -116,7 +116,7 @@ function buildQuota(limits) {
     const leftReady = left.status === 'ok' && left.windows.length ? 0 : 1;
     const rightReady = right.status === 'ok' && right.windows.length ? 0 : 1;
     return leftReady - rightReady || left.provider.localeCompare(right.provider);
-  }).slice(0, 3);
+  }).slice(0, 5);
 }
 
 function buildModels(period) {
@@ -147,7 +147,7 @@ function normalizedDaily(history) {
 }
 
 function buildActivity(history, period) {
-  const daily = normalizedDaily(history).slice(-28);
+  const daily = normalizedDaily(history).slice(-42);
   const peak = daily.reduce((max, day) => Math.max(max, day.totalTokens), 0);
   return {
     currentPeriod: period,
@@ -160,7 +160,7 @@ function buildActivity(history, period) {
 }
 
 function buildTrend(history) {
-  const points = normalizedDaily(history).slice(-14);
+  const points = normalizedDaily(history).slice(-28);
   const peakTokens = points.reduce((max, point) => Math.max(max, point.totalTokens), 0);
   return {
     startDate: points[0]?.date || null,

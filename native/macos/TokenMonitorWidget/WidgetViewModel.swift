@@ -25,15 +25,14 @@ enum WidgetDesignTokens {
 struct WidgetScaffoldGeometry: Equatable {
     let headerHeight: CGFloat
     let footerHeight: CGFloat
-    let headerContentGap: CGFloat
-    let contentFooterGap: CGFloat
+    let contentGap: CGFloat
 
     var contentTopReserved: CGFloat {
-        headerHeight + headerContentGap
+        headerHeight + contentGap
     }
 
     var contentBottomReserved: CGFloat {
-        footerHeight + contentFooterGap
+        footerHeight + contentGap
     }
 
     func contentHeight(for availableHeight: CGFloat) -> CGFloat {
@@ -42,51 +41,71 @@ struct WidgetScaffoldGeometry: Equatable {
 }
 
 struct WidgetLayoutMetrics: Equatable {
-    let contentInsets: EdgeInsets
+    let outerTopInset: CGFloat
+    let outerBottomInset: CGFloat
+    let horizontalInset: CGFloat
     let headerHeight: CGFloat
     let footerHeight: CGFloat
+    let contentGap: CGFloat
     let pageControlWidth: CGFloat
-    let activityCellSize: CGFloat
+    let activityMinCellSize: CGFloat
+    let activityMaxCellSize: CGFloat
     let activityCellSpacing: CGFloat
-    let contentSpacing: CGFloat
+
+    var outerInsets: EdgeInsets {
+        EdgeInsets(
+            top: outerTopInset,
+            leading: horizontalInset,
+            bottom: outerBottomInset,
+            trailing: horizontalInset
+        )
+    }
 
     var scaffoldGeometry: WidgetScaffoldGeometry {
         WidgetScaffoldGeometry(
             headerHeight: headerHeight,
             footerHeight: footerHeight,
-            headerContentGap: contentSpacing,
-            contentFooterGap: contentSpacing
+            contentGap: contentGap
         )
     }
 
     static let small = WidgetLayoutMetrics(
-        contentInsets: EdgeInsets(top: 13, leading: 13, bottom: 13, trailing: 13),
+        outerTopInset: 0,
+        outerBottomInset: 0,
+        horizontalInset: 13,
         headerHeight: 20,
         footerHeight: 25,
+        contentGap: WidgetDesignTokens.smallGap,
         pageControlWidth: 108,
-        activityCellSize: 7,
-        activityCellSpacing: 3,
-        contentSpacing: WidgetDesignTokens.smallGap
+        activityMinCellSize: 5,
+        activityMaxCellSize: 7,
+        activityCellSpacing: 3
     )
 
     static let medium = WidgetLayoutMetrics(
-        contentInsets: EdgeInsets(top: 14, leading: 14, bottom: 14, trailing: 14),
+        outerTopInset: 1,
+        outerBottomInset: 1,
+        horizontalInset: 14,
         headerHeight: 22,
         footerHeight: 26,
+        contentGap: WidgetDesignTokens.mediumGap,
         pageControlWidth: 112,
-        activityCellSize: 5,
-        activityCellSpacing: 3,
-        contentSpacing: WidgetDesignTokens.mediumGap
+        activityMinCellSize: 4,
+        activityMaxCellSize: 6,
+        activityCellSpacing: 3
     )
 
     static let large = WidgetLayoutMetrics(
-        contentInsets: EdgeInsets(top: 24, leading: 18, bottom: 22, trailing: 18),
+        outerTopInset: 1,
+        outerBottomInset: 1,
+        horizontalInset: 18,
         headerHeight: 24,
         footerHeight: 28,
+        contentGap: WidgetDesignTokens.largeGap,
         pageControlWidth: 112,
-        activityCellSize: 7,
-        activityCellSpacing: 3,
-        contentSpacing: WidgetDesignTokens.largeGap
+        activityMinCellSize: 5,
+        activityMaxCellSize: 8,
+        activityCellSpacing: 3
     )
 
     static func metrics(for family: WidgetFamily) -> WidgetLayoutMetrics {

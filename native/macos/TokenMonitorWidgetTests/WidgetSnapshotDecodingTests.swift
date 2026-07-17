@@ -165,8 +165,10 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         let medium = WidgetLayoutMetrics.metrics(for: .systemMedium)
         let large = WidgetLayoutMetrics.metrics(for: .systemLarge)
 
-        XCTAssertGreaterThan(large.contentInsets.top, medium.contentInsets.top)
-        XCTAssertGreaterThanOrEqual(large.contentInsets.bottom, medium.contentInsets.bottom)
+        XCTAssertGreaterThan(large.outerTopInset, medium.outerTopInset)
+        XCTAssertGreaterThanOrEqual(large.outerBottomInset, medium.outerBottomInset)
+        XCTAssertEqual(small.outerInsets.leading, small.horizontalInset)
+        XCTAssertEqual(medium.outerInsets.trailing, medium.horizontalInset)
         XCTAssertGreaterThan(small.footerHeight, 0)
         XCTAssertGreaterThan(medium.footerHeight, 0)
         XCTAssertGreaterThan(large.footerHeight, 0)
@@ -185,8 +187,8 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
             let geometry = metrics.scaffoldGeometry
             XCTAssertEqual(geometry.headerHeight, metrics.headerHeight)
             XCTAssertEqual(geometry.footerHeight, metrics.footerHeight)
-            XCTAssertEqual(geometry.contentTopReserved, metrics.headerHeight + metrics.contentSpacing)
-            XCTAssertEqual(geometry.contentBottomReserved, metrics.footerHeight + metrics.contentSpacing)
+            XCTAssertEqual(geometry.contentTopReserved, metrics.headerHeight + metrics.contentGap)
+            XCTAssertEqual(geometry.contentBottomReserved, metrics.footerHeight + metrics.contentGap)
             XCTAssertGreaterThan(geometry.contentHeight(for: 160), 0)
             XCTAssertLessThan(geometry.contentTopReserved + geometry.contentBottomReserved, 160)
 
