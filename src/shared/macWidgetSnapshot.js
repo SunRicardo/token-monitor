@@ -2,7 +2,7 @@
 
 const { KNOWN_CLIENTS } = require('./clientTracking');
 
-const MAC_WIDGET_SCHEMA_VERSION = 3;
+const MAC_WIDGET_SCHEMA_VERSION = 4;
 const KNOWN_TOOLS = new Set(KNOWN_CLIENTS.split(',').filter(Boolean));
 const KNOWN_LIMIT_PROVIDERS = new Set([
   'claude', 'codex', 'cursor', 'antigravity', 'opencode', 'deepseek', 'minimax',
@@ -27,9 +27,15 @@ function nonNegativeNumber(value, fallback = 0) {
 }
 
 function normalizedPercent(value) {
-  const number = finiteNumber(value, NaN);
-  if (!Number.isFinite(number)) return null;
+  const number = optionalFiniteNumber(value);
+  if (number === null) return null;
   return Math.max(0, Math.min(100, number));
+}
+
+function optionalFiniteNumber(value) {
+  if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) return null;
+  const number = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 function normalizedIso(value) {
@@ -95,6 +101,15 @@ function buildLimitWindow(window) {
   };
 }
 
+function buildProviderBalance(provider) {
+  const source = provider?.balance;
+  if (!source || typeof source !== 'object') return null;
+  const amount = optionalFiniteNumber(source.amount);
+  const currency = String(source.currency || '').trim().toUpperCase();
+  if (amount === null || !Object.hasOwn(CURRENCIES, currency)) return null;
+  return { amount, currency };
+}
+
 function buildQuota(limits) {
   const providers = Array.isArray(limits?.providers) ? limits.providers : [];
   const output = [];
@@ -105,18 +120,20 @@ function buildQuota(limits) {
     const windows = Array.isArray(provider.windows)
       ? provider.windows.map(buildLimitWindow).filter(Boolean).slice(0, 2)
       : [];
+    const balance = buildProviderBalance(provider);
     output.push({
       provider: providerId,
       status: normalizedStatus(provider.status),
       updatedAt: normalizedIso(provider.updatedAt),
+      ...(balance ? { balance } : {}),
       windows
     });
   }
   return output.sort((left, right) => {
-    const leftReady = left.status === 'ok' && left.windows.length ? 0 : 1;
-    const rightReady = right.status === 'ok' && right.windows.length ? 0 : 1;
+    const leftReady = left.status === 'ok' && (left.balance || left.windows.length) ? 0 : 1;
+    const rightReady = right.status === 'ok' && (right.balance || right.windows.length) ? 0 : 1;
     return leftReady - rightReady || left.provider.localeCompare(right.provider);
-  }).slice(0, 5);
+  }).slice(0, 10);
 }
 
 function buildModels(period) {
@@ -131,23 +148,37 @@ function buildModels(period) {
   }
   rows.sort((left, right) => right.totalTokens - left.totalTokens || left.displayName.localeCompare(right.displayName));
   const denominator = rows.reduce((sum, row) => sum + row.totalTokens, 0);
-  return rows.slice(0, 5).map((row) => ({
+  return rows.slice(0, 10).map((row) => ({
     ...row,
     sharePercent: denominator > 0 ? Math.max(0, Math.min(100, row.totalTokens / denominator * 100)) : 0
   }));
 }
 
+function normalizedDay(value) {
+  const day = String(value || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return '';
+  const timestamp = Date.parse(`${day}T00:00:00.000Z`);
+  if (!Number.isFinite(timestamp)) return '';
+  return new Date(timestamp).toISOString().slice(0, 10) === day ? day : '';
+}
+
 function normalizedDaily(history) {
   const daily = Array.isArray(history?.daily) ? history.daily : [];
-  return daily.map((entry) => ({
-    date: /^\d{4}-\d{2}-\d{2}$/.test(String(entry?.date || '')) ? String(entry.date) : '',
-    totalTokens: Math.round(nonNegativeNumber(entry?.tokens)),
-    costUsd: nonNegativeNumber(entry?.cost)
-  })).filter((entry) => entry.date).sort((left, right) => left.date.localeCompare(right.date));
+  const byDate = new Map();
+  for (const entry of daily) {
+    const date = normalizedDay(entry?.date);
+    if (!date) continue;
+    byDate.set(date, {
+      date,
+      totalTokens: Math.round(nonNegativeNumber(entry?.tokens)),
+      costUsd: nonNegativeNumber(entry?.cost)
+    });
+  }
+  return Array.from(byDate.values()).sort((left, right) => left.date.localeCompare(right.date));
 }
 
 function buildActivity(history, period) {
-  const daily = normalizedDaily(history).slice(-42);
+  const daily = normalizedDaily(history).slice(-182);
   const peak = daily.reduce((max, day) => Math.max(max, day.totalTokens), 0);
   return {
     currentPeriod: period,

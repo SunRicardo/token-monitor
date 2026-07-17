@@ -27,6 +27,7 @@ const widgetProject = fs.readFileSync(
   path.join(root, 'native', 'macos', 'TokenMonitorWidget.xcodeproj', 'project.pbxproj'),
   'utf8'
 );
+const widgetBuildSource = fs.readFileSync(path.join(root, 'scripts', 'build-macos-widget.js'), 'utf8');
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
 test('publishes final stats to the macOS Widget from the single sendPush outlet', () => {
@@ -122,22 +123,25 @@ test('Widget build provenance fields are injected into the extension Info.plist'
   }
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_KIND = com\.tokenmonitor\.dashboard;/);
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_GIT_REVISION = unknown;/);
-  assert.match(widgetInfo, /<key>TMWidgetSchemaVersion<\/key>\s*<string>3<\/string>/);
-  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>8<\/string>/);
+  assert.match(widgetBuildSource, /const WIDGET_UI_VERSION = 9;/);
+  assert.match(widgetBuildSource, /const WIDGET_SCHEMA_VERSION = 4;/);
+  assert.match(widgetInfo, /<key>TMWidgetSchemaVersion<\/key>\s*<string>4<\/string>/);
+  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>9<\/string>/);
 });
 
-test('Widget layout uses fixed scaffold metrics without changing schema or kind', () => {
+test('Widget layout uses system margins and fixed scaffold metrics without changing kind', () => {
   assert.match(widgetViewModelSource, /struct WidgetLayoutMetrics/);
   assert.match(widgetViewModelSource, /struct WidgetScaffoldGeometry/);
   assert.match(widgetViewModelSource, /static let small = WidgetLayoutMetrics/);
   assert.match(widgetViewModelSource, /static let medium = WidgetLayoutMetrics/);
   assert.match(widgetViewModelSource, /static let large = WidgetLayoutMetrics/);
-  assert.match(widgetViewModelSource, /outerTopInset: 24/);
-  assert.match(widgetViewModelSource, /outerBottomInset: 22/);
-  assert.match(widgetViewModelSource, /horizontalInset: 18/);
+  assert.equal((widgetViewModelSource.match(/outerTopInset: 0/g) || []).length, 3);
+  assert.equal((widgetViewModelSource.match(/outerBottomInset: 0/g) || []).length, 3);
+  assert.equal((widgetViewModelSource.match(/horizontalInset: 0/g) || []).length, 3);
   assert.match(widgetViewModelSource, /contentGap: WidgetDesignTokens\.largeGap/);
   assert.match(widgetSource, /VStack\(spacing: metrics\.contentGap\)/);
   assert.match(widgetSource, /\.padding\(metrics\.outerInsets\)/);
+  assert.doesNotMatch(widgetSource, /\.contentMarginsDisabled\(\)/);
   assert.match(widgetSource, /ViewThatFits\(in: \.vertical\)/);
   assert.doesNotMatch(widgetSource, /\.clipped\(\)/);
   assert.match(widgetSource, /\.frame\(maxWidth: \.infinity, maxHeight: \.infinity, alignment: \.topLeading\)/);
@@ -147,7 +151,7 @@ test('Widget layout uses fixed scaffold metrics without changing schema or kind'
   assert.match(widgetSource, /\.frame\(height: metrics\.footerHeight\)/);
   assert.match(widgetSource, /\.frame\(width: metrics\.pageControlWidth, height: WidgetDesignTokens\.pageControlHeight, alignment: \.leading\)/);
   assert.match(widgetSource, /Image\(systemName: "arrow\.up\.right"\)[\s\S]*\.frame\(width: WidgetDesignTokens\.openButtonSize, height: WidgetDesignTokens\.openButtonSize\)/);
-  assert.match(widgetInfo, /<key>TMWidgetSchemaVersion<\/key>\s*<string>3<\/string>/);
+  assert.match(widgetInfo, /<key>TMWidgetSchemaVersion<\/key>\s*<string>4<\/string>/);
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_KIND = com\.tokenmonitor\.dashboard;/);
 });
 
@@ -178,15 +182,30 @@ test('Activity layout adapts density and heatmap size without clipping the scaff
   assert.ok(activityStart >= 0 && activityEnd > activityStart, 'activity view should exist');
   const activitySource = widgetSource.slice(activityStart, activityEnd);
   assert.match(activitySource, /adaptiveContent \{/);
-  assert.match(widgetSource, /private func activitySpec\(/);
-  assert.match(widgetSource, /maxDays = 42/);
-  assert.match(widgetSource, /Text\("\\\(snapshot\.activity\.activeDays\) 天"\)/);
+  assert.match(widgetSource, /private func activityLayout\(/);
+  assert.match(widgetSource, /case \.small: 6/);
+  assert.match(widgetSource, /case \.medium: 14/);
+  assert.match(widgetSource, /case \.large: 26/);
+  assert.match(widgetSource, /WidgetHeatmapLayoutCalculator\.make\(/);
+  assert.match(widgetSource, /Text\("\\\(spec\.activeDays\) 天"\)/);
   assert.match(widgetSource, /struct ActivityHeatmap: View/);
-  assert.match(widgetSource, /GridItem\(\.fixed\(cellSize\), spacing: spacing\)/);
-  assert.match(widgetSource, /\.frame\(width: gridWidth, alignment: \.center\)/);
+  assert.match(widgetSource, /Grid\(horizontalSpacing: layout\.spacing, verticalSpacing: layout\.spacing\)/);
+  assert.match(widgetSource, /ForEach\(0\.\.<7, id: \\.self\)/);
+  assert.match(widgetSource, /GridRow \{/);
+  assert.match(widgetSource, /\.frame\(width: layout\.renderedWidth, height: layout\.renderedHeight/);
+  assert.doesNotMatch(widgetSource, /LazyVGrid/);
   assert.doesNotMatch(widgetSource, /\.offset\(x:\s*-/);
   assert.doesNotMatch(widgetSource, /\.padding\(\.leading,\s*-/);
   assert.doesNotMatch(widgetSource, /rotationEffect/);
+});
+
+test('Quota and model pages derive row density from measured content height', () => {
+  assert.match(widgetViewModelSource, /enum WidgetListCapacity/);
+  assert.match(widgetViewModelSource, /for density in \[WidgetContentDensity\.regular, \.compact, \.summary\]/);
+  assert.match(widgetViewModelSource, /availableForRows/);
+  assert.equal((widgetSource.match(/WidgetListCapacity\.plan\(/g) || []).length, 2);
+  assert.equal((widgetSource.match(/availableHeight: context\.size\.height/g) || []).length, 2);
+  assert.doesNotMatch(widgetSource, /quotaLimit|modelLimit/);
 });
 
 test('macOS Widget integration leaves non-macOS packaging sections unchanged', () => {
