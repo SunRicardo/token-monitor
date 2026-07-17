@@ -59,7 +59,7 @@ export TOKEN_MONITOR_PROFILE='development-clone'
 
 周期选择存储在 App Group `UserDefaults` 的 `selectedPeriod`，只属于 Widget 展示状态，不写入 Electron `settings.json`，不改变主应用当前页面周期，也不触发数据采集。Small 使用紧凑循环按钮，Medium/Large 使用三段按钮；Intent 直接调用 `WidgetCenter.reloadTimelines(ofKind:)`，与主应用业务数据变化后的 native reload helper 分工独立。
 
-页面配置以每个 Widget 实例的 `TokenMonitorWidgetConfigurationIntent.page` 为唯一真源。左下角胶囊只显示当前页面并给出“右键编辑小组件可更改”的辅助提示，不再显示下拉箭头，也不模拟菜单。公开 WidgetKit API 不提供在 Widget 内直接改写当前实例配置的通用入口，因此没有实现会影响所有实例的全局伪切换。
+页面初始值仍来自每个 Widget 实例的 `TokenMonitorWidgetConfigurationIntent.page`。左下角胶囊是 `Button(intent:)`，点击后按 `主页 → 额度 → 模型 → 活动 → 趋势 → 主页` 循环切换，不启动主应用，也不写入 Electron `settings.json`。页面交互状态保存在 App Group `UserDefaults` 的 `widget.presentation.page.small`、`widget.presentation.page.medium`、`widget.presentation.page.large`，因此 Small、Medium、Large 互相独立；但同尺寸多实例共享同一个页面状态，这是公开 WidgetKit API 下的明确限制。右键“编辑小组件”的页面设置作为交互状态不存在时的回退值；如果已经通过左下角按钮切换过页面，按尺寸保存的交互页面优先。
 
 Widget Kind 固定为 `com.tokenmonitor.dashboard`。Small、Medium 和 Large 共用同一个 Kind，页面差异只由 App Intent 配置决定。旧桌面实例如果仍显示旧 UI，需要删除旧 Widget 后重新添加。
 

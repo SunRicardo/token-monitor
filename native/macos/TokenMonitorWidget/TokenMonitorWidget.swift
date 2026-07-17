@@ -114,7 +114,7 @@ struct TokenMonitorWidgetView: View {
             header(snapshot: snapshot, page: entry.page)
             pageBody(snapshot: snapshot, page: entry.page, layout: .small)
             Spacer(minLength: 1)
-            footer(page: entry.page)
+            footer(page: entry.page, familyScope: familyScope)
         }
     }
 
@@ -123,7 +123,7 @@ struct TokenMonitorWidgetView: View {
             mediumHeader(snapshot: snapshot)
             pageBody(snapshot: snapshot, page: entry.page, layout: .medium)
             Spacer(minLength: 0)
-            footer(page: entry.page)
+            footer(page: entry.page, familyScope: familyScope)
         }
     }
 
@@ -132,8 +132,12 @@ struct TokenMonitorWidgetView: View {
             mediumHeader(snapshot: snapshot)
             pageBody(snapshot: snapshot, page: entry.page, layout: .large)
             Spacer(minLength: 0)
-            footer(page: entry.page)
+            footer(page: entry.page, familyScope: familyScope)
         }
+    }
+
+    private var familyScope: WidgetFamilyScope? {
+        WidgetFamilyScope(widgetFamily: family)
     }
 
     private func header(snapshot: WidgetSnapshot, page: WidgetPage) -> some View {
@@ -358,20 +362,13 @@ struct TokenMonitorWidgetView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 
-    private func footer(page: WidgetPage) -> some View {
+    private func footer(page: WidgetPage, familyScope: WidgetFamilyScope?) -> some View {
         HStack(spacing: 6) {
-            HStack(spacing: 4) {
-                Image(systemName: page.systemImage)
-                Text(LocalizedStringKey(page.title))
-                    .lineLimit(1)
+            if let familyScope {
+                WidgetPageControl(page: page, family: familyScope)
+            } else {
+                pageLabel(page: page)
             }
-            .font(.system(size: WidgetDesignTokens.microSize, weight: .medium))
-            .padding(.horizontal, 7)
-            .padding(.vertical, 4)
-            .background(.primary.opacity(WidgetDesignTokens.panelOpacity), in: Capsule())
-            .overlay(Capsule().stroke(.primary.opacity(WidgetDesignTokens.dividerOpacity), lineWidth: 0.6))
-            .accessibilityLabel("当前页面：\(page.title)")
-            .accessibilityHint("右键编辑小组件可更改显示页面")
             Spacer(minLength: 4)
             Link(destination: TokenMonitorWidgetConfiguration.url(for: page)) {
                 Image(systemName: "arrow.up.right")
@@ -391,9 +388,26 @@ struct TokenMonitorWidgetView: View {
                 .font(.system(size: WidgetDesignTokens.secondarySize))
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
-            footer(page: entry.page)
+            footer(page: entry.page, familyScope: familyScope)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+    }
+
+    private func pageLabel(page: WidgetPage, showsNextIndicator: Bool = false) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: page.systemImage)
+            Text(LocalizedStringKey(page.title))
+                .lineLimit(1)
+            if showsNextIndicator {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: WidgetDesignTokens.microSize - 1, weight: .semibold))
+            }
+        }
+        .font(.system(size: WidgetDesignTokens.microSize, weight: .medium))
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(.primary.opacity(WidgetDesignTokens.panelOpacity), in: Capsule())
+        .overlay(Capsule().stroke(.primary.opacity(WidgetDesignTokens.dividerOpacity), lineWidth: 0.6))
     }
 
     private func panel<Content: View>(@ViewBuilder content: () -> Content) -> some View {
@@ -547,5 +561,30 @@ struct WidgetPeriodControl: View {
             .background(Color.primary.opacity(selected ? WidgetDesignTokens.panelOpacity * 1.8 : 0), in: Capsule())
             .overlay(Capsule().stroke(.primary.opacity(selected ? WidgetDesignTokens.dividerOpacity : 0), lineWidth: 0.6))
             .lineLimit(1)
+    }
+}
+
+struct WidgetPageControl: View {
+    let page: WidgetPage
+    let family: WidgetFamilyScope
+
+    var body: some View {
+        Button(intent: CycleWidgetPageIntent(family: family, currentPage: page)) {
+            HStack(spacing: 4) {
+                Image(systemName: page.systemImage)
+                Text(LocalizedStringKey(page.title))
+                    .lineLimit(1)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: WidgetDesignTokens.microSize - 1, weight: .semibold))
+            }
+            .font(.system(size: WidgetDesignTokens.microSize, weight: .medium))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(.primary.opacity(WidgetDesignTokens.panelOpacity), in: Capsule())
+            .overlay(Capsule().stroke(.primary.opacity(WidgetDesignTokens.dividerOpacity), lineWidth: 0.6))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("当前页面：\(page.title)")
+        .accessibilityHint("切换到\(page.next.title)")
     }
 }

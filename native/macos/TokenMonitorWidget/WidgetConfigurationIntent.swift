@@ -37,6 +37,16 @@ enum WidgetPage: String, AppEnum, CaseIterable {
         case .trend: "chart.xyaxis.line"
         }
     }
+
+    var next: WidgetPage {
+        switch self {
+        case .overview: .quota
+        case .quota: .models
+        case .models: .activity
+        case .activity: .trend
+        case .trend: .overview
+        }
+    }
 }
 
 struct TokenMonitorWidgetConfigurationIntent: WidgetConfigurationIntent {
@@ -90,13 +100,44 @@ enum WidgetPeriod: String, Codable, AppEnum, CaseIterable {
     }
 }
 
+enum WidgetFamilyScope: String, Codable, AppEnum, CaseIterable {
+    case small
+    case medium
+    case large
+
+    static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "小组件尺寸")
+    static let caseDisplayRepresentations: [WidgetFamilyScope: DisplayRepresentation] = [
+        .small: DisplayRepresentation(title: "Small"),
+        .medium: DisplayRepresentation(title: "Medium"),
+        .large: DisplayRepresentation(title: "Large")
+    ]
+
+    init?(widgetFamily: WidgetFamily) {
+        switch widgetFamily {
+        case .systemSmall:
+            self = .small
+        case .systemMedium:
+            self = .medium
+        case .systemLarge:
+            self = .large
+        default:
+            return nil
+        }
+    }
+}
+
 protocol WidgetPresentationStateStoring {
     func selectedPeriod() -> WidgetPeriod
     func setSelectedPeriod(_ period: WidgetPeriod)
+    func selectedPage(for family: WidgetFamilyScope) -> WidgetPage?
+    func setSelectedPage(_ page: WidgetPage, for family: WidgetFamilyScope)
+    func clearSelectedPage(for family: WidgetFamilyScope)
+    func clearSelectedPages()
 }
 
 final class WidgetPresentationStateStore: WidgetPresentationStateStoring {
     static let selectedPeriodKey = "selectedPeriod"
+    static let selectedPageKeyPrefix = "widget.presentation.page"
     static let shared = WidgetPresentationStateStore()
 
     private let defaults: UserDefaults?
@@ -118,6 +159,39 @@ final class WidgetPresentationStateStore: WidgetPresentationStateStoring {
 
     func setSelectedPeriod(_ period: WidgetPeriod) {
         defaults?.set(period.rawValue, forKey: Self.selectedPeriodKey)
+    }
+
+    func selectedPage(for family: WidgetFamilyScope) -> WidgetPage? {
+        guard let defaults else { return nil }
+        let key = pageKey(for: family)
+        guard let raw = defaults.string(forKey: key) else { return nil }
+        guard let page = WidgetPage(rawValue: raw.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            defaults.removeObject(forKey: key)
+            return nil
+        }
+        return page
+    }
+
+    func setSelectedPage(_ page: WidgetPage, for family: WidgetFamilyScope) {
+        defaults?.set(page.rawValue, forKey: pageKey(for: family))
+    }
+
+    func clearSelectedPage(for family: WidgetFamilyScope) {
+        defaults?.removeObject(forKey: pageKey(for: family))
+    }
+
+    func clearSelectedPages() {
+        for family in WidgetFamilyScope.allCases {
+            clearSelectedPage(for: family)
+        }
+    }
+
+    static func selectedPageKey(for family: WidgetFamilyScope) -> String {
+        "\(selectedPageKeyPrefix).\(family.rawValue)"
+    }
+
+    private func pageKey(for family: WidgetFamilyScope) -> String {
+        Self.selectedPageKey(for: family)
     }
 }
 
@@ -163,6 +237,36 @@ struct CycleWidgetPeriodIntent: AppIntent {
         let store = WidgetPresentationStateStore.shared
         let next = store.selectedPeriod().next
         store.setSelectedPeriod(next)
+        WidgetCenter.shared.reloadTimelines(ofKind: WidgetIntentRuntime.widgetKind)
+        return .result()
+    }
+}
+
+struct CycleWidgetPageIntent: AppIntent {
+    static var title: LocalizedStringResource = "切换小组件页面"
+    static var description = IntentDescription("切换当前尺寸小组件显示的页面。")
+    static var openAppWhenRun: Bool { false }
+
+    @Parameter(title: "小组件尺寸", default: .small)
+    var family: WidgetFamilyScope
+
+    @Parameter(title: "当前页面", default: .overview)
+    var currentPage: WidgetPage
+
+    init() {
+        self.family = .small
+        self.currentPage = .overview
+    }
+
+    init(family: WidgetFamilyScope, currentPage: WidgetPage) {
+        self.family = family
+        self.currentPage = currentPage
+    }
+
+    func perform() async throws -> some IntentResult {
+        let store = WidgetPresentationStateStore.shared
+        let current = store.selectedPage(for: family) ?? currentPage
+        store.setSelectedPage(current.next, for: family)
         WidgetCenter.shared.reloadTimelines(ofKind: WidgetIntentRuntime.widgetKind)
         return .result()
     }

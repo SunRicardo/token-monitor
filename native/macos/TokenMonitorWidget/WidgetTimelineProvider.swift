@@ -14,13 +14,15 @@ struct TokenMonitorTimelineProvider: AppIntentTimelineProvider {
 
     func snapshot(for configuration: TokenMonitorWidgetConfigurationIntent, in context: Context) async -> TokenMonitorEntry {
         let period = currentPeriod()
-        return TokenMonitorEntry(date: Date(), snapshot: currentSnapshot(period: period), page: configuration.page, period: period)
+        let page = effectivePage(for: configuration, family: context.family)
+        return TokenMonitorEntry(date: Date(), snapshot: currentSnapshot(period: period), page: page, period: period)
     }
 
     func timeline(for configuration: TokenMonitorWidgetConfigurationIntent, in context: Context) async -> Timeline<TokenMonitorEntry> {
         let now = Date()
         let period = currentPeriod()
-        let entry = TokenMonitorEntry(date: now, snapshot: currentSnapshot(period: period), page: configuration.page, period: period)
+        let page = effectivePage(for: configuration, family: context.family)
+        let entry = TokenMonitorEntry(date: now, snapshot: currentSnapshot(period: period), page: page, period: period)
         return Timeline(entries: [entry], policy: .after(now.addingTimeInterval(15 * 60)))
     }
 
@@ -30,6 +32,13 @@ struct TokenMonitorTimelineProvider: AppIntentTimelineProvider {
 
     private func currentSnapshot(period: WidgetPeriod) -> WidgetSnapshot? {
         WidgetSnapshot.load(appGroup: TokenMonitorWidgetConfiguration.appGroup)?.selecting(period)
+    }
+
+    private func effectivePage(for configuration: TokenMonitorWidgetConfigurationIntent, family: WidgetFamily) -> WidgetPage {
+        guard let scope = WidgetFamilyScope(widgetFamily: family) else {
+            return configuration.page
+        }
+        return WidgetPresentationStateStore.shared.selectedPage(for: scope) ?? configuration.page
     }
 }
 
