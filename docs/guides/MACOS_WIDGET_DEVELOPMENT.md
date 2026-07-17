@@ -63,6 +63,8 @@ export TOKEN_MONITOR_PROFILE='development-clone'
 
 Widget Kind 固定为 `com.tokenmonitor.dashboard`。Small、Medium 和 Large 共用同一个 Kind，页面差异只由 App Intent 配置决定。旧桌面实例如果仍显示旧 UI，需要删除旧 Widget 后重新添加。
 
+三种尺寸共享固定页面骨架：Header 承载 `Σ·` 与周期控件，Content 只承载当前页面主体，Footer 固定承载左下角页面按钮和右下角打开入口。页面切换不得让 Footer 回到页面内容流中；Small 活动页使用“活跃 X 天”横向文案加居中热力图，避免左侧窄栏或负偏移导致裁切。Large 使用独立上下内容 inset，保证顶部 Logo 和底部按钮不贴近系统 Widget 边缘。
+
 ## 构建与测试
 
 编译 extension：
