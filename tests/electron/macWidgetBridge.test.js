@@ -101,6 +101,22 @@ test('resolves only safe macOS App Group snapshot paths', () => {
   }), null);
   assert.equal(resolveMacWidgetSnapshotPath({
     platform: 'darwin',
+    appGroup: 'ABCDEFGHIJ.dev.example.widgettest',
+    home: '/Users/example'
+  }), path.join(
+    '/Users/example',
+    'Library',
+    'Group Containers',
+    'ABCDEFGHIJ.dev.example.widgettest',
+    'snapshot.json'
+  ));
+  assert.equal(resolveMacWidgetSnapshotPath({
+    platform: 'darwin',
+    appGroup: 'SHORT.dev.example.widgettest',
+    home: '/Users/example'
+  }), null);
+  assert.equal(resolveMacWidgetSnapshotPath({
+    platform: 'darwin',
     appGroup: '../../credentials',
     home: '/Users/example'
   }), null);
