@@ -27,5 +27,7 @@
   </dict>
   <key>TokenMonitorAppGroup</key>
   <string>$(TOKEN_MONITOR_APP_GROUP)</string>
+  <key>TokenMonitorURLScheme</key>
+  <string>$(TOKEN_MONITOR_WIDGET_URL_SCHEME)</string>
 </dict>
 </plist>

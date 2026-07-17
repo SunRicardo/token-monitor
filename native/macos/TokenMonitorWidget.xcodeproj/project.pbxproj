@@ -235,6 +235,7 @@
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_VERSION = 5.0;
 				TOKEN_MONITOR_APP_GROUP = group.com.example.tokenmonitor;
+				TOKEN_MONITOR_WIDGET_URL_SCHEME = "token-monitor";
 				TOKEN_MONITOR_WIDGET_BUNDLE_ID = com.javis.tokenmonitor.widget;
 			};
 			name = Debug;
@@ -264,6 +265,7 @@
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_VERSION = 5.0;
 				TOKEN_MONITOR_APP_GROUP = group.com.example.tokenmonitor;
+				TOKEN_MONITOR_WIDGET_URL_SCHEME = "token-monitor";
 				TOKEN_MONITOR_WIDGET_BUNDLE_ID = com.javis.tokenmonitor.widget;
 			};
 			name = Release;
