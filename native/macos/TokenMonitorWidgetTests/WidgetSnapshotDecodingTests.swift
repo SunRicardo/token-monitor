@@ -83,6 +83,14 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         XCTAssertEqual(WidgetPage.quota.title, "额度")
     }
 
+    func testWidgetPageCycleOrderIsStable() {
+        XCTAssertEqual(WidgetPage.overview.next, .quota)
+        XCTAssertEqual(WidgetPage.quota.next, .models)
+        XCTAssertEqual(WidgetPage.models.next, .activity)
+        XCTAssertEqual(WidgetPage.activity.next, .trend)
+        XCTAssertEqual(WidgetPage.trend.next, .overview)
+    }
+
     func testWidgetPeriodStateDefaultsPersistsAndNormalizes() {
         let suite = "token-monitor-widget-period-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -96,12 +104,73 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         XCTAssertEqual(store.selectedPeriod(), .day)
     }
 
+    func testWidgetPageStateDefaultsPersistByFamilyAndNormalize() {
+        let suite = "token-monitor-widget-page-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = WidgetPresentationStateStore(defaults: defaults)
+
+        XCTAssertNil(store.selectedPage(for: .small))
+        XCTAssertNil(store.selectedPage(for: .medium))
+        XCTAssertNil(store.selectedPage(for: .large))
+
+        store.setSelectedPage(.quota, for: .small)
+        store.setSelectedPage(.activity, for: .medium)
+        store.setSelectedPage(.trend, for: .large)
+
+        XCTAssertEqual(store.selectedPage(for: .small), .quota)
+        XCTAssertEqual(store.selectedPage(for: .medium), .activity)
+        XCTAssertEqual(store.selectedPage(for: .large), .trend)
+
+        defaults.set("not-a-page", forKey: WidgetPresentationStateStore.selectedPageKey(for: .medium))
+        XCTAssertNil(store.selectedPage(for: .medium))
+        XCTAssertNil(defaults.string(forKey: WidgetPresentationStateStore.selectedPageKey(for: .medium)))
+
+        store.clearSelectedPage(for: .small)
+        XCTAssertNil(store.selectedPage(for: .small))
+        XCTAssertEqual(store.selectedPage(for: .large), .trend)
+
+        store.clearSelectedPages()
+        XCTAssertNil(store.selectedPage(for: .large))
+    }
+
+    func testWidgetPageAndPeriodStateAreIndependent() {
+        let suite = "token-monitor-widget-presentation-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = WidgetPresentationStateStore(defaults: defaults)
+
+        store.setSelectedPeriod(.month)
+        store.setSelectedPage(.models, for: .medium)
+        XCTAssertEqual(store.selectedPeriod(), .month)
+        XCTAssertEqual(store.selectedPage(for: .medium), .models)
+
+        store.setSelectedPage(.activity, for: .medium)
+        XCTAssertEqual(store.selectedPeriod(), .month)
+        XCTAssertEqual(store.selectedPage(for: .medium), .activity)
+
+        store.setSelectedPeriod(.total)
+        XCTAssertEqual(store.selectedPeriod(), .total)
+        XCTAssertEqual(store.selectedPage(for: .medium), .activity)
+    }
+
+    func testWidgetFamilyScopeMapsSupportedFamiliesOnly() {
+        XCTAssertEqual(WidgetFamilyScope(widgetFamily: .systemSmall), .small)
+        XCTAssertEqual(WidgetFamilyScope(widgetFamily: .systemMedium), .medium)
+        XCTAssertEqual(WidgetFamilyScope(widgetFamily: .systemLarge), .large)
+    }
+
     func testWidgetPeriodCycleAndIntentOpenBehavior() {
         XCTAssertEqual(WidgetPeriod.day.next, .month)
         XCTAssertEqual(WidgetPeriod.month.next, .total)
         XCTAssertEqual(WidgetPeriod.total.next, .day)
         XCTAssertFalse(SetWidgetPeriodIntent.openAppWhenRun)
         XCTAssertFalse(CycleWidgetPeriodIntent.openAppWhenRun)
+        XCTAssertFalse(CycleWidgetPageIntent.openAppWhenRun)
+
+        let pageIntent = CycleWidgetPageIntent(family: .large, currentPage: .trend)
+        XCTAssertEqual(pageIntent.family, .large)
+        XCTAssertEqual(pageIntent.currentPage, .trend)
     }
 
     func testWidgetPeriodSnapshotFallbackDoesNotBlankDay() throws {

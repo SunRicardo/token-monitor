@@ -11,6 +11,10 @@ const widgetSource = fs.readFileSync(
   path.join(root, 'native', 'macos', 'TokenMonitorWidget', 'TokenMonitorWidget.swift'),
   'utf8'
 );
+const widgetIntentSource = fs.readFileSync(
+  path.join(root, 'native', 'macos', 'TokenMonitorWidget', 'WidgetConfigurationIntent.swift'),
+  'utf8'
+);
 const widgetInfo = fs.readFileSync(
   path.join(root, 'native', 'macos', 'TokenMonitorWidget', 'Info.plist'),
   'utf8'
@@ -74,6 +78,27 @@ test('Widget period controls are real App Intent buttons without fake dropdown s
   assert.doesNotMatch(widgetSource, /TOKEN_MONITOR_WIDGET_KIND.*v4|v3-temp|dev/);
 });
 
+test('Widget page control cycles pages with per-family App Intent state', () => {
+  const footerStart = widgetSource.indexOf('private func footer(page: WidgetPage, familyScope: WidgetFamilyScope?)');
+  const footerEnd = widgetSource.indexOf('\n    private func statusState', footerStart);
+  assert.ok(footerStart >= 0 && footerEnd > footerStart, 'footer should exist');
+  const footerSource = widgetSource.slice(footerStart, footerEnd);
+  const pageControlStart = widgetSource.indexOf('struct WidgetPageControl: View');
+  const pageControlEnd = widgetSource.indexOf('\n}', pageControlStart);
+  assert.ok(pageControlStart >= 0 && pageControlEnd > pageControlStart, 'WidgetPageControl should exist');
+  const pageControlSource = widgetSource.slice(pageControlStart, pageControlEnd);
+  assert.match(widgetIntentSource, /struct CycleWidgetPageIntent: AppIntent/);
+  assert.match(widgetIntentSource, /static var openAppWhenRun: Bool \{ false \}/);
+  assert.match(widgetIntentSource, /enum WidgetFamilyScope: String, Codable, AppEnum, CaseIterable/);
+  assert.match(widgetIntentSource, /widget\.presentation\.page/);
+  assert.match(widgetSource, /Button\(intent: CycleWidgetPageIntent\(family: family, currentPage: page\)\)/);
+  assert.match(widgetSource, /Image\(systemName: "chevron\.right"\)/);
+  assert.doesNotMatch(pageControlSource, /Link\(/, 'page control should not be wrapped in a Link');
+  assert.match(footerSource, /Link\(destination: TokenMonitorWidgetConfiguration\.url\(for: page\)\)/);
+  assert.doesNotMatch(widgetIntentSource, /selectedPageKey\s*=\s*"selectedPage"/);
+  assert.doesNotMatch(`${widgetSource}\n${widgetIntentSource}`, /reloadAllTimelines/);
+});
+
 test('local macOS command builds the canonical Token Monitor app identity', () => {
   assert.equal(packageJson.scripts['mac:local'], 'node scripts/build-local-macos.js run');
   assert.equal(packageJson.scripts['mac:local:open'], 'open "/Applications/Token Monitor.app"');
@@ -94,7 +119,7 @@ test('Widget build provenance fields are injected into the extension Info.plist'
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_KIND = com\.tokenmonitor\.dashboard;/);
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_GIT_REVISION = unknown;/);
   assert.match(widgetInfo, /<key>TMWidgetSchemaVersion<\/key>\s*<string>3<\/string>/);
-  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>4<\/string>/);
+  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>5<\/string>/);
 });
 
 test('macOS Widget integration leaves non-macOS packaging sections unchanged', () => {

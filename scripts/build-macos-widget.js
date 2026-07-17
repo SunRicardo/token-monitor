@@ -12,7 +12,7 @@ const DEFAULT_APP_GROUP = 'group.com.example.tokenmonitor';
 const DEFAULT_WIDGET_BUNDLE_ID = 'com.javis.tokenmonitor.widget';
 const DEFAULT_URL_SCHEME = 'token-monitor';
 const DEFAULT_WIDGET_KIND = 'com.tokenmonitor.dashboard';
-const WIDGET_UI_VERSION = 4;
+const WIDGET_UI_VERSION = 5;
 const WIDGET_SCHEMA_VERSION = 3;
 
 function configuredIdentifier(name, fallback) {
