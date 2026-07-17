@@ -176,6 +176,28 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         XCTAssertEqual(WidgetLayoutMetrics.metrics(for: .systemSmall).pageControlWidth, small.pageControlWidth)
     }
 
+    func testWidgetScaffoldGeometryIsFamilyOnlyAndReservesContentRect() {
+        let families = [WidgetLayoutMetrics.small, .medium, .large]
+        let pages = WidgetPage.allCases
+        let periods = WidgetPeriod.allCases
+
+        for metrics in families {
+            let geometry = metrics.scaffoldGeometry
+            XCTAssertEqual(geometry.headerHeight, metrics.headerHeight)
+            XCTAssertEqual(geometry.footerHeight, metrics.footerHeight)
+            XCTAssertEqual(geometry.contentTopReserved, metrics.headerHeight + metrics.contentSpacing)
+            XCTAssertEqual(geometry.contentBottomReserved, metrics.footerHeight + metrics.contentSpacing)
+            XCTAssertGreaterThan(geometry.contentHeight(for: 160), 0)
+            XCTAssertLessThan(geometry.contentTopReserved + geometry.contentBottomReserved, 160)
+
+            for _ in pages {
+                for _ in periods {
+                    XCTAssertEqual(geometry, metrics.scaffoldGeometry)
+                }
+            }
+        }
+    }
+
     func testWidgetPeriodCycleAndIntentOpenBehavior() {
         XCTAssertEqual(WidgetPeriod.day.next, .month)
         XCTAssertEqual(WidgetPeriod.month.next, .total)
