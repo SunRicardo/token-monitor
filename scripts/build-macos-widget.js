@@ -10,6 +10,7 @@ const OUTPUT = path.join(ROOT, 'build', 'macos-widget');
 const DERIVED_DATA = path.join(OUTPUT, 'DerivedData');
 const DEFAULT_APP_GROUP = 'group.com.example.tokenmonitor';
 const DEFAULT_WIDGET_BUNDLE_ID = 'com.javis.tokenmonitor.widget';
+const DEFAULT_URL_SCHEME = 'token-monitor';
 
 function configuredIdentifier(name, fallback) {
   const value = String(process.env[name] || fallback).trim();
@@ -54,6 +55,7 @@ function main() {
 
   const appGroup = configuredIdentifier('TOKEN_MONITOR_APP_GROUP', DEFAULT_APP_GROUP);
   const bundleId = configuredIdentifier('TOKEN_MONITOR_WIDGET_BUNDLE_ID', DEFAULT_WIDGET_BUNDLE_ID);
+  const urlScheme = configuredIdentifier('TOKEN_MONITOR_WIDGET_URL_SCHEME', DEFAULT_URL_SCHEME);
   const developmentTeam = String(process.env.DEVELOPMENT_TEAM || '').trim();
   if (developmentTeam && !/^[A-Z0-9]+$/.test(developmentTeam)) {
     throw new Error('DEVELOPMENT_TEAM contains unsupported characters');
@@ -73,6 +75,7 @@ function main() {
     'ONLY_ACTIVE_ARCH=YES',
     `TOKEN_MONITOR_APP_GROUP=${appGroup}`,
     `TOKEN_MONITOR_WIDGET_BUNDLE_ID=${bundleId}`,
+    `TOKEN_MONITOR_WIDGET_URL_SCHEME=${urlScheme}`,
     `DEVELOPMENT_TEAM=${developmentTeam}`
   ];
   const result = spawnSync('xcodebuild', args, { cwd: ROOT, encoding: 'utf8', stdio: 'inherit' });
@@ -88,6 +91,7 @@ function main() {
   fs.writeFileSync(path.join(OUTPUT, 'widget-config.json'), `${JSON.stringify({
     schemaVersion: 1,
     appGroup,
+    urlScheme,
     snapshotFileName: 'snapshot.json'
   }, null, 2)}\n`);
   console.log(`[mac-widget] staged ${path.relative(ROOT, stagedExtension)} (${bundleId}, ${appGroup})`);

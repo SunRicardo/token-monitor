@@ -7,6 +7,14 @@ const test = require('node:test');
 
 const root = path.resolve(__dirname, '..', '..');
 const mainSource = fs.readFileSync(path.join(root, 'src', 'electron', 'main.js'), 'utf8');
+const widgetSource = fs.readFileSync(
+  path.join(root, 'native', 'macos', 'TokenMonitorWidget', 'TokenMonitorWidget.swift'),
+  'utf8'
+);
+const widgetInfo = fs.readFileSync(
+  path.join(root, 'native', 'macos', 'TokenMonitorWidget', 'Info.plist'),
+  'utf8'
+);
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
 test('publishes final stats to the macOS Widget from the single sendPush outlet', () => {
@@ -25,6 +33,24 @@ test('registers the Widget deep link and embeds the appex in macOS packages', ()
   assert.equal(mac.extraResources[0].to, 'token-monitor-widget.json');
   assert.equal(mac.sign, 'scripts/sign-macos-with-widget.js');
   assert.match(packageJson.scripts['predist:mac'], /build:mac-widget/);
+});
+
+test('uses the packaged product name so a local Widget build has an independent instance lock', () => {
+  assert.match(
+    mainSource,
+    /const APP_NAME = process\.env\.TOKEN_MONITOR_APP_NAME \|\| PACKAGED_APP_NAME \|\| app\.getName\(\) \|\| 'Token Monitor';/
+  );
+  assert.match(mainSource, /app\.setName\(APP_NAME\);\s+if \(process\.platform === 'win32'\)/);
+});
+
+test('supports an isolated local Widget URL scheme without changing the release default', () => {
+  assert.match(mainSource, /macWidgetConfiguration\(\)\?\.urlScheme \|\| 'token-monitor'/);
+  assert.match(widgetSource, /TokenMonitorWidgetConfiguration\.urlScheme/);
+  assert.match(widgetInfo, /<key>TokenMonitorURLScheme<\/key>/);
+  assert.deepEqual(
+    packageJson.build.mac.extendInfo.CFBundleURLTypes[0].CFBundleURLSchemes,
+    ['token-monitor']
+  );
 });
 
 test('macOS Widget integration leaves non-macOS packaging sections unchanged', () => {

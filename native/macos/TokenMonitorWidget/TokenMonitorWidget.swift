@@ -6,6 +6,9 @@ enum TokenMonitorWidgetConfiguration {
     static let appGroup = Bundle.main.object(
         forInfoDictionaryKey: "TokenMonitorAppGroup"
     ) as? String ?? ""
+    static let urlScheme = Bundle.main.object(
+        forInfoDictionaryKey: "TokenMonitorURLScheme"
+    ) as? String ?? "token-monitor"
 }
 
 struct TokenMonitorWidget: Widget {
@@ -14,7 +17,7 @@ struct TokenMonitorWidget: Widget {
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: TokenMonitorTimelineProvider()) { entry in
             TokenMonitorWidgetView(entry: entry)
-                .widgetURL(URL(string: "token-monitor://widget"))
+                .widgetURL(URL(string: "\(TokenMonitorWidgetConfiguration.urlScheme)://widget"))
                 .containerBackground(for: .widget) {
                     Color(nsColor: .windowBackgroundColor)
                 }

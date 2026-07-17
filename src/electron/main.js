@@ -173,7 +173,10 @@ const { applyWindowsAccentBlur } = require('./windowsBackdrop');
 
 if (!app.isPackaged) loadDotEnv();
 
-const APP_NAME = 'Token Monitor';
+const PACKAGED_APP_NAME = app.isPackaged
+  ? path.basename(process.execPath, path.extname(process.execPath))
+  : '';
+const APP_NAME = process.env.TOKEN_MONITOR_APP_NAME || PACKAGED_APP_NAME || app.getName() || 'Token Monitor';
 const APP_ICON_PATH = path.join(__dirname, '..', '..', 'assets', 'icon.png');
 
 const DEFAULT_WINDOW = { width: 340, height: 650 };
@@ -232,7 +235,8 @@ function normalizeHomeLimitAccountCount(value) {
 
 let pendingMacWidgetOpen = false;
 app.on('open-url', (event, url) => {
-  if (url !== 'token-monitor://widget') return;
+  const urlScheme = macWidgetConfiguration()?.urlScheme || 'token-monitor';
+  if (url !== `${urlScheme}://widget`) return;
   event.preventDefault();
   pendingMacWidgetOpen = true;
   if (app.isReady()) setImmediate(openMainWindowFromWidget);
@@ -2280,6 +2284,7 @@ function macWidgetConfiguration() {
   if (cachedMacWidgetConfiguration !== undefined) return cachedMacWidgetConfiguration;
 
   let appGroup = String(process.env.TOKEN_MONITOR_APP_GROUP || '').trim();
+  let urlScheme = String(process.env.TOKEN_MONITOR_WIDGET_URL_SCHEME || 'token-monitor').trim();
   let snapshotFileName = 'snapshot.json';
   const configCandidates = [
     path.join(process.resourcesPath, 'token-monitor-widget.json'),
@@ -2290,6 +2295,7 @@ function macWidgetConfiguration() {
       try {
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         appGroup = String(config.appGroup || '').trim();
+        urlScheme = String(config.urlScheme || urlScheme).trim();
         snapshotFileName = String(config.snapshotFileName || snapshotFileName).trim();
         if (appGroup) break;
       } catch (_) {}
@@ -2306,7 +2312,8 @@ function macWidgetConfiguration() {
   }
   cachedMacWidgetConfiguration = {
     appGroup,
-    snapshotPath
+    snapshotPath,
+    urlScheme: /^[A-Za-z][A-Za-z0-9+.-]*$/.test(urlScheme) ? urlScheme : 'token-monitor'
   };
   return cachedMacWidgetConfiguration;
 }
