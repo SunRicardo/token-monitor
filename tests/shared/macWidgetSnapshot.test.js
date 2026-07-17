@@ -103,6 +103,29 @@ test('keeps day, month and total model data independent', () => {
   assert.deepEqual(snapshot.periods.total.models.map((model) => model.displayName), ['total-model']);
 });
 
+test('keeps enough provider and history rows for adaptive large widget layouts', () => {
+  const stats = sampleStats();
+  stats.limits.providers = Array.from({ length: 7 }, (_, index) => ({
+    provider: ['codex', 'claude', 'cursor', 'antigravity', 'opencode', 'deepseek', 'minimax'][index],
+    status: 'ok',
+    windows: [{ kind: 'weekly', usedPercent: index * 10, resetsAt: '2026-07-20T00:00:00Z' }]
+  }));
+  stats.historyPreview.daily = Array.from({ length: 50 }, (_, index) => ({
+    date: `2026-06-${String(index + 1).padStart(2, '0')}`,
+    tokens: index + 1,
+    cost: 0
+  })).concat(Array.from({ length: 19 }, (_, index) => ({
+    date: `2026-07-${String(index + 1).padStart(2, '0')}`,
+    tokens: 100 + index,
+    cost: 0
+  })));
+
+  const snapshot = buildMacWidgetSnapshot(stats, { now: NOW });
+  assert.equal(snapshot.quota.length, 5);
+  assert.equal(snapshot.activity.days.length, 42);
+  assert.equal(snapshot.trend.points.length, 28);
+});
+
 test('returns a complete empty schema and stale status for missing or old data', () => {
   const empty = buildMacWidgetSnapshot({}, { now: NOW });
   assert.equal(empty.schemaVersion, 3);

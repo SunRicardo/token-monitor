@@ -123,7 +123,7 @@ test('Widget build provenance fields are injected into the extension Info.plist'
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_KIND = com\.tokenmonitor\.dashboard;/);
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_GIT_REVISION = unknown;/);
   assert.match(widgetInfo, /<key>TMWidgetSchemaVersion<\/key>\s*<string>3<\/string>/);
-  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>7<\/string>/);
+  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>8<\/string>/);
 });
 
 test('Widget layout uses fixed scaffold metrics without changing schema or kind', () => {
@@ -132,13 +132,15 @@ test('Widget layout uses fixed scaffold metrics without changing schema or kind'
   assert.match(widgetViewModelSource, /static let small = WidgetLayoutMetrics/);
   assert.match(widgetViewModelSource, /static let medium = WidgetLayoutMetrics/);
   assert.match(widgetViewModelSource, /static let large = WidgetLayoutMetrics/);
-  assert.match(widgetViewModelSource, /contentInsets: EdgeInsets\(top: 24, leading: 18, bottom: 22, trailing: 18\)/);
-  assert.match(widgetSource, /let geometry = metrics\.scaffoldGeometry/);
-  assert.match(widgetSource, /ZStack\(alignment: \.topLeading\)/);
-  assert.match(widgetSource, /\.padding\(\.top, geometry\.contentTopReserved\)/);
-  assert.match(widgetSource, /\.padding\(\.bottom, geometry\.contentBottomReserved\)/);
+  assert.match(widgetViewModelSource, /outerTopInset: 24/);
+  assert.match(widgetViewModelSource, /outerBottomInset: 22/);
+  assert.match(widgetViewModelSource, /horizontalInset: 18/);
+  assert.match(widgetViewModelSource, /contentGap: WidgetDesignTokens\.largeGap/);
+  assert.match(widgetSource, /VStack\(spacing: metrics\.contentGap\)/);
+  assert.match(widgetSource, /\.padding\(metrics\.outerInsets\)/);
+  assert.match(widgetSource, /ViewThatFits\(in: \.vertical\)/);
+  assert.doesNotMatch(widgetSource, /\.clipped\(\)/);
   assert.match(widgetSource, /\.frame\(maxWidth: \.infinity, maxHeight: \.infinity, alignment: \.topLeading\)/);
-  assert.match(widgetSource, /\.frame\(maxWidth: \.infinity, maxHeight: \.infinity, alignment: \.bottomLeading\)/);
   assert.match(widgetSource, /measureWidgetLayoutRegion\(\.header\)/);
   assert.match(widgetSource, /measureWidgetLayoutRegion\(\.content\)/);
   assert.match(widgetSource, /measureWidgetLayoutRegion\(\.footer\)/);
@@ -160,29 +162,31 @@ test('Widget scaffold keeps header and footer outside page content switches', ()
 
   assert.match(scaffoldSource, /header[\s\S]*\.measureWidgetLayoutRegion\(\.header\)/);
   assert.match(scaffoldSource, /footer[\s\S]*\.measureWidgetLayoutRegion\(\.footer\)/);
+  assert.match(scaffoldSource, /VStack\(spacing: metrics\.contentGap\)/);
   assert.doesNotMatch(pageBodySource, /header\(/);
   assert.doesNotMatch(pageBodySource, /footer\(/);
   assert.doesNotMatch(pageBodySource, /WidgetPageControl/);
+  assert.match(pageBodySource, /GeometryReader \{ proxy in/);
   assert.doesNotMatch(widgetSource, /fixedSize\s*\([^)]*vertical:\s*true/);
   assert.doesNotMatch(widgetSource, /\.offset\(y:\s*-/);
   assert.match(widgetSource, /\.supportedFamilies\(\[\.systemSmall, \.systemMedium, \.systemLarge\]\)/);
 });
 
-test('Small activity layout avoids clipped side labels and fixed-width heatmap overflow', () => {
-  const activityStart = widgetSource.indexOf('private func activity(_ snapshot: WidgetSnapshot, layout: WidgetLayout)');
+test('Activity layout adapts density and heatmap size without clipping the scaffold', () => {
+  const activityStart = widgetSource.indexOf('private func activity(_ snapshot: WidgetSnapshot, context: WidgetContentContext)');
   const activityEnd = widgetSource.indexOf('\n    private func trend', activityStart);
   assert.ok(activityStart >= 0 && activityEnd > activityStart, 'activity view should exist');
   const activitySource = widgetSource.slice(activityStart, activityEnd);
-  assert.match(activitySource, /if layout == \.small/);
-  assert.match(activitySource, /VStack\(alignment: \.leading, spacing: 6\)/);
-  assert.match(activitySource, /Text\("活跃"\)/);
-  assert.match(activitySource, /Text\("\\\(snapshot\.activity\.activeDays\) 天"\)/);
+  assert.match(activitySource, /adaptiveContent \{/);
+  assert.match(widgetSource, /private func activitySpec\(/);
+  assert.match(widgetSource, /maxDays = 42/);
+  assert.match(widgetSource, /Text\("\\\(snapshot\.activity\.activeDays\) 天"\)/);
   assert.match(widgetSource, /struct ActivityHeatmap: View/);
   assert.match(widgetSource, /GridItem\(\.fixed\(cellSize\), spacing: spacing\)/);
   assert.match(widgetSource, /\.frame\(width: gridWidth, alignment: \.center\)/);
-  assert.doesNotMatch(activitySource, /\.offset\(x:\s*-/);
-  assert.doesNotMatch(activitySource, /\.padding\(\.leading,\s*-/);
-  assert.doesNotMatch(activitySource, /rotationEffect/);
+  assert.doesNotMatch(widgetSource, /\.offset\(x:\s*-/);
+  assert.doesNotMatch(widgetSource, /\.padding\(\.leading,\s*-/);
+  assert.doesNotMatch(widgetSource, /rotationEffect/);
 });
 
 test('macOS Widget integration leaves non-macOS packaging sections unchanged', () => {
