@@ -31,4 +31,4 @@ npm run mac:local
 
 WidgetKit schedules timeline refreshes; the 15-minute policy is a request, not a real-time guarantee. The extension keeps displaying the last valid snapshot while the main app is closed and shows explicit missing/stale states.
 
-The extension uses `AppIntentConfiguration`, so each Small, Medium, or Large instance owns its own Overview, Quota, Models, Activity, or Trend selection. Snapshot schema v2 is allowlisted and the decoder retains schema v1 compatibility.
+The extension uses `AppIntentConfiguration`, so each Small, Medium, or Large instance owns its own Overview, Quota, Models, Activity, or Trend selection. DAY / MONTH / TOTAL are App Intent buttons backed by App Group presentation state, shared across all Token Monitor widgets without changing the host app settings. Snapshot schema v3 is allowlisted and the decoder retains schema v1/v2 compatibility.

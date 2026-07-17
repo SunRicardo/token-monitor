@@ -36,8 +36,8 @@
   <key>TMWidgetKind</key>
   <string>$(TOKEN_MONITOR_WIDGET_KIND)</string>
   <key>TMWidgetSchemaVersion</key>
-  <string>2</string>
-  <key>TMWidgetUIVersion</key>
   <string>3</string>
+  <key>TMWidgetUIVersion</key>
+  <string>4</string>
 </dict>
 </plist>

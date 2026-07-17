@@ -155,10 +155,13 @@ test('serializes aggregate stats before writing the snapshot', async () => {
 
     assert.equal(result.ok, true);
     const snapshot = JSON.parse(await fs.readFile(snapshotPath, 'utf8'));
-    assert.equal(snapshot.schemaVersion, 2);
+    assert.equal(snapshot.schemaVersion, 3);
     assert.equal(snapshot.generatedAt, '2026-07-16T09:00:00.000Z');
     assert.equal(snapshot.overview.totalTokens, 42);
     assert.equal(snapshot.overview.costUsd, 0.5);
+    assert.equal(snapshot.periods.day.overview.totalTokens, 42);
+    assert.equal(snapshot.periods.month.overview.totalTokens, 0);
+    assert.equal(snapshot.periods.total.overview.totalTokens, 0);
     assert.deepEqual(snapshot.quota, []);
     assert.deepEqual(snapshot.models, []);
   });

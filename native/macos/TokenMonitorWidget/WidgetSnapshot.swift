@@ -8,6 +8,7 @@ struct WidgetSnapshot: Decodable, Equatable {
     let models: [WidgetModel]
     let activity: WidgetActivity
     let trend: WidgetTrend
+    let periods: [WidgetPeriod: WidgetPeriodSnapshot]
     let presentation: WidgetPresentation
     let status: WidgetStatus
 
@@ -31,7 +32,7 @@ struct WidgetSnapshot: Decodable, Equatable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case schemaVersion, generatedAt, overview, quota, models, activity, trend, presentation, status
+        case schemaVersion, generatedAt, periods, overview, quota, models, activity, trend, presentation, status
         case today, tools, limits
     }
 
@@ -40,11 +41,26 @@ struct WidgetSnapshot: Decodable, Equatable {
         schemaVersion = try container.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
         generatedAt = try container.decode(Date.self, forKey: .generatedAt)
         if schemaVersion >= 2 {
-            overview = try container.decodeIfPresent(WidgetOverview.self, forKey: .overview) ?? .empty(generatedAt: generatedAt)
+            let decodedPeriods = (try? container.decodeIfPresent([String: WidgetPeriodSnapshot].self, forKey: .periods)) ?? [:]
+            periods = Dictionary(uniqueKeysWithValues: decodedPeriods.compactMap { key, value in
+                guard let period = WidgetPeriod(rawValue: key) else { return nil }
+                return (period, value)
+            })
+            let fallbackOverview = try container.decodeIfPresent(WidgetOverview.self, forKey: .overview) ?? .empty(generatedAt: generatedAt)
+            let fallbackModels = try container.decodeIfPresent([WidgetModel].self, forKey: .models) ?? []
+            let fallbackActivity = try container.decodeIfPresent(WidgetActivity.self, forKey: .activity) ?? .empty
+            let fallbackTrend = try container.decodeIfPresent(WidgetTrend.self, forKey: .trend) ?? .empty
+            let initialPeriod = periods[.day] ?? WidgetPeriodSnapshot(
+                overview: fallbackOverview,
+                models: fallbackModels,
+                activity: fallbackActivity,
+                trend: fallbackTrend
+            )
+            overview = initialPeriod.overview
+            models = initialPeriod.models
+            activity = initialPeriod.activity
+            trend = initialPeriod.trend
             quota = try container.decodeIfPresent([WidgetQuotaProvider].self, forKey: .quota) ?? []
-            models = try container.decodeIfPresent([WidgetModel].self, forKey: .models) ?? []
-            activity = try container.decodeIfPresent(WidgetActivity.self, forKey: .activity) ?? .empty
-            trend = try container.decodeIfPresent(WidgetTrend.self, forKey: .trend) ?? .empty
             presentation = try container.decodeIfPresent(WidgetPresentation.self, forKey: .presentation) ?? .default
             status = try container.decodeIfPresent(WidgetStatus.self, forKey: .status)
                 ?? WidgetStatus(isStale: false, dataAgeSeconds: 0, providerConfigured: !quota.isEmpty, providerNeedsLogin: false, noData: overview.totalTokens == 0 && models.isEmpty && activity.activeDays == 0)
@@ -56,12 +72,13 @@ struct WidgetSnapshot: Decodable, Equatable {
             models = []
             activity = .empty
             trend = .empty
+            periods = [:]
             presentation = .default
             status = WidgetStatus(isStale: false, dataAgeSeconds: 0, providerConfigured: !limits.isEmpty, providerNeedsLogin: limits.contains { $0.status == "unauthorized" }, noData: today.totalTokens == 0 && today.costUsd == 0 && limits.isEmpty)
         }
     }
 
-    init(schemaVersion: Int, generatedAt: Date, overview: WidgetOverview, quota: [WidgetQuotaProvider], models: [WidgetModel], activity: WidgetActivity, trend: WidgetTrend, presentation: WidgetPresentation, status: WidgetStatus) {
+    init(schemaVersion: Int, generatedAt: Date, overview: WidgetOverview, quota: [WidgetQuotaProvider], models: [WidgetModel], activity: WidgetActivity, trend: WidgetTrend, periods: [WidgetPeriod: WidgetPeriodSnapshot] = [:], presentation: WidgetPresentation, status: WidgetStatus) {
         self.schemaVersion = schemaVersion
         self.generatedAt = generatedAt
         self.overview = overview
@@ -69,8 +86,45 @@ struct WidgetSnapshot: Decodable, Equatable {
         self.models = models
         self.activity = activity
         self.trend = trend
+        self.periods = periods
         self.presentation = presentation
         self.status = status
+    }
+
+    func selecting(_ period: WidgetPeriod) -> WidgetSnapshot {
+        guard let selected = periods[period] else {
+            if period == .day { return self }
+            return WidgetSnapshot(
+                schemaVersion: schemaVersion,
+                generatedAt: generatedAt,
+                overview: WidgetOverview(currentPeriod: period.title.lowercased(), totalTokens: 0, costUsd: 0, primaryTool: nil, updatedAt: generatedAt),
+                quota: quota,
+                models: [],
+                activity: WidgetActivity(currentPeriod: period.title.lowercased(), activeDays: 0, days: []),
+                trend: .empty,
+                periods: periods,
+                presentation: presentation,
+                status: WidgetStatus(isStale: status.isStale, dataAgeSeconds: status.dataAgeSeconds, providerConfigured: status.providerConfigured, providerNeedsLogin: status.providerNeedsLogin, noData: true)
+            )
+        }
+        return WidgetSnapshot(
+            schemaVersion: schemaVersion,
+            generatedAt: generatedAt,
+            overview: selected.overview,
+            quota: quota,
+            models: selected.models,
+            activity: selected.activity,
+            trend: selected.trend,
+            periods: periods,
+            presentation: presentation,
+            status: WidgetStatus(
+                isStale: status.isStale,
+                dataAgeSeconds: status.dataAgeSeconds,
+                providerConfigured: status.providerConfigured,
+                providerNeedsLogin: status.providerNeedsLogin,
+                noData: selected.overview.totalTokens == 0 && selected.models.isEmpty && selected.activity.activeDays == 0
+            )
+        )
     }
 
     static let decoder: JSONDecoder = {
@@ -95,6 +149,29 @@ struct WidgetSnapshot: Decodable, Equatable {
         formatter.formatOptions = [.withInternetDateTime]
         return formatter
     }()
+}
+
+struct WidgetPeriodSnapshot: Decodable, Equatable {
+    let overview: WidgetOverview
+    let models: [WidgetModel]
+    let activity: WidgetActivity
+    let trend: WidgetTrend
+
+    private enum CodingKeys: String, CodingKey { case overview, models, activity, trend }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        overview = try c.decodeIfPresent(WidgetOverview.self, forKey: .overview) ?? .empty(generatedAt: .distantPast)
+        models = try c.decodeIfPresent([WidgetModel].self, forKey: .models) ?? []
+        activity = try c.decodeIfPresent(WidgetActivity.self, forKey: .activity) ?? .empty
+        trend = try c.decodeIfPresent(WidgetTrend.self, forKey: .trend) ?? .empty
+    }
+
+    init(overview: WidgetOverview, models: [WidgetModel], activity: WidgetActivity, trend: WidgetTrend) {
+        self.overview = overview
+        self.models = models
+        self.activity = activity
+        self.trend = trend
+    }
 }
 
 struct WidgetOverview: Decodable, Equatable {

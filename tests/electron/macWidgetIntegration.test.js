@@ -66,6 +66,14 @@ test('uses AppIntent configuration and page-specific deep links', () => {
   assert.doesNotMatch(widgetSource, /StaticConfiguration\(/);
 });
 
+test('Widget period controls are real App Intent buttons without fake dropdown state', () => {
+  assert.match(widgetSource, /Button\(intent: CycleWidgetPeriodIntent\(\)\)/);
+  assert.match(widgetSource, /Button\(intent: SetWidgetPeriodIntent\(period: period\)\)/);
+  assert.doesNotMatch(widgetSource, /onTapGesture/);
+  assert.doesNotMatch(widgetSource, /chevron\.down/);
+  assert.doesNotMatch(widgetSource, /TOKEN_MONITOR_WIDGET_KIND.*v4|v3-temp|dev/);
+});
+
 test('local macOS command builds the canonical Token Monitor app identity', () => {
   assert.equal(packageJson.scripts['mac:local'], 'node scripts/build-local-macos.js run');
   assert.equal(packageJson.scripts['mac:local:open'], 'open "/Applications/Token Monitor.app"');
@@ -85,6 +93,8 @@ test('Widget build provenance fields are injected into the extension Info.plist'
   }
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_KIND = com\.tokenmonitor\.dashboard;/);
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_GIT_REVISION = unknown;/);
+  assert.match(widgetInfo, /<key>TMWidgetSchemaVersion<\/key>\s*<string>3<\/string>/);
+  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>4<\/string>/);
 });
 
 test('macOS Widget integration leaves non-macOS packaging sections unchanged', () => {
