@@ -2,7 +2,7 @@
 
 ## 范围
 
-原生 Widget 位于 `native/macos/`，支持 `systemSmall`、`systemMedium` 和 `systemLarge`。每个实例通过 `AppIntentConfiguration` 独立选择主页、额度、模型、活动或趋势，并通过对应页面深链接打开主应用。
+原生 Widget 位于 `native/macos/`，支持 `systemSmall`、`systemMedium` 和 `systemLarge`。每个实例通过 `AppIntentConfiguration` 独立选择主页、额度、模型、活动或趋势，并通过对应页面深链接打开主应用。`DAY / MONTH / TOTAL` 是 Widget 内的真实 App Intent 周期按钮：点击周期不会启动主应用，只会更新所有 Token Monitor Widget 共享的展示周期。
 
 Widget 不读取 collector、settings 或 provider 凭据。Electron 仅从最终聚合 stats 生成 allowlist 快照并写入 App Group 容器的 `snapshot.json`。
 
@@ -50,14 +50,16 @@ export TOKEN_MONITOR_PROFILE='development-clone'
 ## 数据链路
 
 1. local/client/host 模式都从 `src/electron/main.js` 的 `sendPush()` 进入统一出口。
-2. `src/shared/macWidgetSnapshot.js` 生成 schema version 2 的显式白名单快照。
+2. `src/shared/macWidgetSnapshot.js` 生成 schema version 3 的显式白名单快照。
 3. `src/electron/macWidgetBridge.js` 在 macOS 上执行同目录临时写入、`fsync` 和原子 rename。
 4. 内容变化且写入成功后，Electron 调用打包进 app 的 `TokenMonitorWidgetReloader`，通过公开 `WidgetCenter.reloadTimelines(ofKind:)` 请求刷新。
 5. WidgetKit 通过 `FileManager.containerURL(forSecurityApplicationGroupIdentifier:)` 读取快照。
 
-快照只包含 overview、quota、models、activity、trend、非敏感 presentation 和 status。账号 key、邮箱、姓名、Cookie、API key/token、prompt、conversation/session 内容、Hub 凭据和本地路径不会写入。Swift 端继续兼容 schema v1，并对 v2 缺失字段使用 fallback。
+快照只包含 `periods.day/month/total` 下的 overview、models、activity、trend，以及单份 quota、非敏感 presentation 和 status。旧版 top-level overview/models/activity/trend 继续保留作兼容读取。账号 key、邮箱、姓名、Cookie、API key/token、prompt、conversation/session 内容、Hub 凭据和本地路径不会写入。Swift 端继续兼容 schema v1/v2，并对缺失字段使用 fallback。
 
-页面配置以每个 Widget 实例的 `TokenMonitorWidgetConfigurationIntent.page` 为唯一真源。左下角控件只提示可编辑配置，并通过深链接打开主应用；公开 WidgetKit API 不提供在 Widget 内直接改写当前实例配置的通用入口，因此没有实现会影响所有实例的全局伪切换。
+周期选择存储在 App Group `UserDefaults` 的 `selectedPeriod`，只属于 Widget 展示状态，不写入 Electron `settings.json`，不改变主应用当前页面周期，也不触发数据采集。Small 使用紧凑循环按钮，Medium/Large 使用三段按钮；Intent 直接调用 `WidgetCenter.reloadTimelines(ofKind:)`，与主应用业务数据变化后的 native reload helper 分工独立。
+
+页面配置以每个 Widget 实例的 `TokenMonitorWidgetConfigurationIntent.page` 为唯一真源。左下角胶囊只显示当前页面并给出“右键编辑小组件可更改”的辅助提示，不再显示下拉箭头，也不模拟菜单。公开 WidgetKit API 不提供在 Widget 内直接改写当前实例配置的通用入口，因此没有实现会影响所有实例的全局伪切换。
 
 Widget Kind 固定为 `com.tokenmonitor.dashboard`。Small、Medium 和 Large 共用同一个 Kind，页面差异只由 App Intent 配置决定。旧桌面实例如果仍显示旧 UI，需要删除旧 Widget 后重新添加。
 

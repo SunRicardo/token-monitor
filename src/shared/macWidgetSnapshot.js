@@ -2,7 +2,7 @@
 
 const { KNOWN_CLIENTS } = require('./clientTracking');
 
-const MAC_WIDGET_SCHEMA_VERSION = 2;
+const MAC_WIDGET_SCHEMA_VERSION = 3;
 const KNOWN_TOOLS = new Set(KNOWN_CLIENTS.split(',').filter(Boolean));
 const KNOWN_LIMIT_PROVIDERS = new Set([
   'claude', 'codex', 'cursor', 'antigravity', 'opencode', 'deepseek', 'minimax',
@@ -171,6 +171,22 @@ function buildTrend(history) {
   };
 }
 
+function buildPeriodSnapshot(stats, period, generatedAt) {
+  const current = periodStats(stats, period);
+  const tools = buildTools(current);
+  const models = buildModels(current);
+  const activity = buildActivity(stats?.historyPreview, period);
+  const trend = buildTrend(stats?.historyPreview);
+  const overview = {
+    currentPeriod: period,
+    totalTokens: Math.round(nonNegativeNumber(current.totalTokens)),
+    costUsd: nonNegativeNumber(current.costUsd),
+    primaryTool: tools[0]?.id || null,
+    updatedAt: normalizedIso(stats?.updatedAt) || generatedAt
+  };
+  return { overview, models, activity, trend };
+}
+
 function buildPresentation(source = {}, period = 'today') {
   const currencyCode = String(source.currencyCode || source.currency || 'USD').trim().toUpperCase();
   const safeCurrency = Object.hasOwn(CURRENCIES, currencyCode) ? currencyCode : 'USD';
@@ -187,7 +203,7 @@ function buildPresentation(source = {}, period = 'today') {
   };
 }
 
-function buildStatus({ generatedAt, stats, quota, models, activity, overview, now }) {
+function buildStatus({ generatedAt, stats, quota, periods, now }) {
   const sourceUpdatedAt = normalizedIso(stats?.updatedAt || stats?.generatedAt);
   const sourceTime = sourceUpdatedAt ? Date.parse(sourceUpdatedAt) : now.getTime();
   const dataAgeSeconds = Math.max(0, Math.round((now.getTime() - sourceTime) / 1000));
@@ -197,7 +213,11 @@ function buildStatus({ generatedAt, stats, quota, models, activity, overview, no
     dataAgeSeconds,
     providerConfigured: statuses.some((status) => !['notConfigured', 'disabled'].includes(status)),
     providerNeedsLogin: statuses.some((status) => status === 'unauthorized'),
-    noData: overview.totalTokens === 0 && models.length === 0 && activity.activeDays === 0,
+    noData: Object.values(periods).every((period) => (
+      period.overview.totalTokens === 0
+      && period.models.length === 0
+      && period.activity.activeDays === 0
+    )),
     sourceUpdatedAt,
     snapshotGeneratedAt: generatedAt
   };
@@ -208,30 +228,26 @@ function buildMacWidgetSnapshot(stats, options = {}) {
   const safeNow = Number.isNaN(now.getTime()) ? new Date() : now;
   const generatedAt = safeNow.toISOString();
   const presentation = buildPresentation(options.presentation, options.presentation?.defaultPeriod);
-  const period = normalizedPeriod(presentation.defaultPeriod);
-  const current = periodStats(stats, period);
-  const tools = buildTools(current);
   const quota = buildQuota(stats?.limits);
-  const models = buildModels(current);
-  const activity = buildActivity(stats?.historyPreview, period);
-  const trend = buildTrend(stats?.historyPreview);
-  const overview = {
-    currentPeriod: period,
-    totalTokens: Math.round(nonNegativeNumber(current.totalTokens)),
-    costUsd: nonNegativeNumber(current.costUsd),
-    primaryTool: tools[0]?.id || null,
-    updatedAt: normalizedIso(stats?.updatedAt) || generatedAt
+  const periods = {
+    day: buildPeriodSnapshot(stats, 'today', generatedAt),
+    month: buildPeriodSnapshot(stats, 'month', generatedAt),
+    total: buildPeriodSnapshot(stats, 'allTime', generatedAt)
   };
+  const defaultPeriod = normalizedPeriod(presentation.defaultPeriod);
+  const defaultKey = defaultPeriod === 'month' ? 'month' : defaultPeriod === 'allTime' ? 'total' : 'day';
+  const selected = periods[defaultKey];
   return {
     schemaVersion: MAC_WIDGET_SCHEMA_VERSION,
     generatedAt,
-    overview,
+    periods,
+    overview: selected.overview,
     quota,
-    models,
-    activity,
-    trend,
+    models: selected.models,
+    activity: selected.activity,
+    trend: selected.trend,
     presentation,
-    status: buildStatus({ generatedAt, stats, quota, models, activity, overview, now: safeNow })
+    status: buildStatus({ generatedAt, stats, quota, periods, now: safeNow })
   };
 }
 

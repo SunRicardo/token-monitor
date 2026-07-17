@@ -140,10 +140,7 @@ struct TokenMonitorWidgetView: View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             brand
             Spacer(minLength: 4)
-            Text(page == .overview ? snapshot.overview.currentPeriod.uppercased() : page.title.uppercased())
-                .font(.system(size: WidgetDesignTokens.microSize, weight: .semibold, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            WidgetPeriodControl(selection: entry.period, style: .compact)
         }
     }
 
@@ -151,11 +148,7 @@ struct TokenMonitorWidgetView: View {
         HStack(spacing: 12) {
             brand
             Spacer(minLength: 6)
-            ForEach(["DAY", "MONTH", "TOTAL"], id: \.self) { period in
-                Text(period)
-                    .font(.system(size: WidgetDesignTokens.microSize, weight: period == periodLabel(snapshot.overview.currentPeriod) ? .bold : .medium, design: .monospaced))
-                    .foregroundStyle(period == periodLabel(snapshot.overview.currentPeriod) ? .primary : .tertiary)
-            }
+            WidgetPeriodControl(selection: entry.period, style: .segmented)
         }
     }
 
@@ -195,24 +188,36 @@ struct TokenMonitorWidgetView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             } else if layout == .medium {
                 HStack(spacing: WidgetDesignTokens.mediumGap) {
-                    panel {
-                        VStack(alignment: .leading, spacing: 3) {
-                            sectionLabel("TOTAL TOKENS")
-                            primary(model.primaryValue, size: WidgetDesignTokens.mediumPrimarySize)
-                            secondary(model.secondaryValue)
+                    Link(destination: TokenMonitorWidgetConfiguration.url(for: .overview)) {
+                        panel {
+                            VStack(alignment: .leading, spacing: 3) {
+                                sectionLabel("TOTAL TOKENS")
+                                primary(model.primaryValue, size: WidgetDesignTokens.mediumPrimarySize)
+                                secondary(model.secondaryValue)
+                            }
                         }
                     }
+                    .buttonStyle(.plain)
                     VStack(spacing: 6) {
-                        summaryRow("Quota", quotaSummary(snapshot))
-                        summaryRow("Top model", snapshot.models.first?.displayName ?? "—")
-                        summaryRow("Active days", "\(snapshot.activity.activeDays)")
+                        Link(destination: TokenMonitorWidgetConfiguration.url(for: .quota)) {
+                            summaryRow("Quota", quotaSummary(snapshot))
+                        }
+                        .buttonStyle(.plain)
+                        Link(destination: TokenMonitorWidgetConfiguration.url(for: .models)) {
+                            summaryRow("Top model", snapshot.models.first?.displayName ?? "—")
+                        }
+                        .buttonStyle(.plain)
+                        Link(destination: TokenMonitorWidgetConfiguration.url(for: .activity)) {
+                            summaryRow("Active days", "\(snapshot.activity.activeDays)")
+                        }
+                        .buttonStyle(.plain)
                     }
                     .frame(maxWidth: .infinity)
                 }
             } else {
                 VStack(alignment: .leading, spacing: WidgetDesignTokens.largeGap) {
-                    panel {
-                        VStack(alignment: .leading, spacing: 5) {
+                    Link(destination: TokenMonitorWidgetConfiguration.url(for: .overview)) {
+                        VStack(alignment: .leading, spacing: 3) {
                             sectionLabel("TOTAL TOKENS")
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
                                 primary(snapshot.overview.totalTokens.formatted(.number.grouping(.automatic)), size: WidgetDesignTokens.largePrimarySize)
@@ -223,14 +228,29 @@ struct TokenMonitorWidgetView: View {
                             secondary(model.secondaryValue)
                         }
                     }
+                    .buttonStyle(.plain)
+                    .padding(WidgetDesignTokens.sectionPadding)
+                    .background(.primary.opacity(WidgetDesignTokens.panelOpacity), in: RoundedRectangle(cornerRadius: WidgetDesignTokens.cornerRadius))
                     Divider().opacity(WidgetDesignTokens.dividerOpacity)
-                    largeSummarySection(title: "额度", rows: [quotaSummary(snapshot)])
+                    Link(destination: TokenMonitorWidgetConfiguration.url(for: .quota)) {
+                        largeSummarySection(title: "额度", rows: [quotaSummary(snapshot)])
+                    }
+                    .buttonStyle(.plain)
                     Divider().opacity(WidgetDesignTokens.dividerOpacity)
-                    largeSummarySection(title: "模型", rows: Array(snapshot.models.prefix(3)).map { "\($0.displayName) · \(WidgetFormat.tokens($0.totalTokens, style: snapshot.presentation.numberStyle))" })
+                    Link(destination: TokenMonitorWidgetConfiguration.url(for: .models)) {
+                        largeSummarySection(title: "模型", rows: Array(snapshot.models.prefix(3)).map { "\($0.displayName) · \(WidgetFormat.tokens($0.totalTokens, style: snapshot.presentation.numberStyle))" })
+                    }
+                    .buttonStyle(.plain)
                     Divider().opacity(WidgetDesignTokens.dividerOpacity)
                     HStack {
-                        summaryRow("活跃天数", "\(snapshot.activity.activeDays)")
-                        summaryRow("当前趋势", WidgetFormat.tokens(snapshot.trend.currentTokens, style: snapshot.presentation.numberStyle))
+                        Link(destination: TokenMonitorWidgetConfiguration.url(for: .activity)) {
+                            summaryRow("活跃天数", "\(snapshot.activity.activeDays)")
+                        }
+                        .buttonStyle(.plain)
+                        Link(destination: TokenMonitorWidgetConfiguration.url(for: .trend)) {
+                            summaryRow("当前趋势", WidgetFormat.tokens(snapshot.trend.currentTokens, style: snapshot.presentation.numberStyle))
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -340,21 +360,18 @@ struct TokenMonitorWidgetView: View {
 
     private func footer(page: WidgetPage) -> some View {
         HStack(spacing: 6) {
-            Link(destination: TokenMonitorWidgetConfiguration.settingsURL) {
-                HStack(spacing: 4) {
-                    Image(systemName: page.systemImage)
-                    Text(LocalizedStringKey(page.title))
-                        .lineLimit(1)
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 7, weight: .bold))
-                }
-                .font(.system(size: WidgetDesignTokens.microSize, weight: .medium))
-                .padding(.horizontal, 7)
-                .padding(.vertical, 4)
-                .background(.primary.opacity(WidgetDesignTokens.panelOpacity), in: Capsule())
-                .overlay(Capsule().stroke(.primary.opacity(WidgetDesignTokens.dividerOpacity), lineWidth: 0.6))
+            HStack(spacing: 4) {
+                Image(systemName: page.systemImage)
+                Text(LocalizedStringKey(page.title))
+                    .lineLimit(1)
             }
-            .buttonStyle(.plain)
+            .font(.system(size: WidgetDesignTokens.microSize, weight: .medium))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 4)
+            .background(.primary.opacity(WidgetDesignTokens.panelOpacity), in: Capsule())
+            .overlay(Capsule().stroke(.primary.opacity(WidgetDesignTokens.dividerOpacity), lineWidth: 0.6))
+            .accessibilityLabel("当前页面：\(page.title)")
+            .accessibilityHint("右键编辑小组件可更改显示页面")
             Spacer(minLength: 4)
             Link(destination: TokenMonitorWidgetConfiguration.url(for: page)) {
                 Image(systemName: "arrow.up.right")
@@ -488,7 +505,47 @@ struct TokenMonitorWidgetView: View {
         intensity <= 0 ? .primary.opacity(0.06) : WidgetDesignTokens.accent.opacity(0.18 + Double(min(4, intensity)) * 0.17)
     }
 
-    private func periodLabel(_ period: String) -> String {
-        switch period { case "month": "MONTH"; case "allTime": "TOTAL"; default: "DAY" }
+}
+
+enum WidgetPeriodControlStyle {
+    case compact
+    case segmented
+}
+
+struct WidgetPeriodControl: View {
+    let selection: WidgetPeriod
+    let style: WidgetPeriodControlStyle
+
+    var body: some View {
+        switch style {
+        case .compact:
+            Button(intent: CycleWidgetPeriodIntent()) {
+                periodLabel(selection, selected: true)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(selection.accessibilityName)，已选择")
+            .accessibilityHint("切换到\(selection.next.accessibilityName)")
+        case .segmented:
+            HStack(spacing: 5) {
+                ForEach(WidgetPeriod.allCases, id: \.self) { period in
+                    Button(intent: SetWidgetPeriodIntent(period: period)) {
+                        periodLabel(period, selected: period == selection)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(period == selection ? "\(period.accessibilityName)，已选择" : "切换到\(period.accessibilityName)")
+                }
+            }
+        }
+    }
+
+    private func periodLabel(_ period: WidgetPeriod, selected: Bool) -> some View {
+        Text(period.title)
+            .font(.system(size: WidgetDesignTokens.microSize, weight: selected ? .bold : .medium, design: .monospaced))
+            .foregroundStyle(selected ? .primary : .tertiary)
+            .padding(.horizontal, selected ? 6 : 3)
+            .padding(.vertical, 3)
+            .background(Color.primary.opacity(selected ? WidgetDesignTokens.panelOpacity * 1.8 : 0), in: Capsule())
+            .overlay(Capsule().stroke(.primary.opacity(selected ? WidgetDesignTokens.dividerOpacity : 0), lineWidth: 0.6))
+            .lineLimit(1)
     }
 }
