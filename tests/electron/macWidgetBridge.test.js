@@ -31,7 +31,7 @@ test('atomically replaces the snapshot and removes temporary files', async () =>
       snapshotPath
     });
 
-    assert.deepEqual(result, { ok: true, path: snapshotPath });
+    assert.deepEqual(result, { ok: true, path: snapshotPath, changed: true });
     assert.equal(await fs.readFile(snapshotPath, 'utf8'), '{"schemaVersion":1}\n');
     assert.deepEqual(await fs.readdir(path.dirname(snapshotPath)), ['snapshot.json']);
     assert.equal((await fs.stat(snapshotPath)).mode & 0o777, 0o600);
@@ -79,6 +79,20 @@ test('is a no-op on macOS when no shared-container path is configured', async ()
   assert.deepEqual(await writeMacWidgetSnapshot('snapshot', { platform: 'darwin' }), {
     ok: false,
     reason: 'not-configured'
+  });
+});
+
+test('does not rewrite unchanged snapshots so reload callers can skip refreshes', async () => {
+  await withTempDirectory(async (directory) => {
+    const snapshotPath = path.join(directory, 'snapshot.json');
+    await fs.writeFile(snapshotPath, '{"schemaVersion":2}\n', 'utf8');
+
+    const result = await writeMacWidgetSnapshot('{"schemaVersion":2}\n', {
+      platform: 'darwin',
+      snapshotPath
+    });
+
+    assert.deepEqual(result, { ok: true, path: snapshotPath, changed: false });
   });
 });
 

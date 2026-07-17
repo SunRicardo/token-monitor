@@ -97,6 +97,8 @@ test('embeds only a recognized storage profile for local packages', () => {
     assert.equal(localStorageProfile(), 'development-clone');
     process.env.TOKEN_MONITOR_PROFILE = 'clean';
     assert.equal(localStorageProfile(), 'clean');
+    process.env.TOKEN_MONITOR_PROFILE = 'production';
+    assert.equal(localStorageProfile(), 'production');
     process.env.TOKEN_MONITOR_PROFILE = 'shared-production-data';
     assert.throws(() => localStorageProfile(), /unsupported profile/);
   } finally {

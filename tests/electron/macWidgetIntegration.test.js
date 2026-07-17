@@ -15,6 +15,10 @@ const widgetInfo = fs.readFileSync(
   path.join(root, 'native', 'macos', 'TokenMonitorWidget', 'Info.plist'),
   'utf8'
 );
+const widgetProject = fs.readFileSync(
+  path.join(root, 'native', 'macos', 'TokenMonitorWidget.xcodeproj', 'project.pbxproj'),
+  'utf8'
+);
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 
 test('publishes final stats to the macOS Widget from the single sendPush outlet', () => {
@@ -31,6 +35,7 @@ test('registers the Widget deep link and embeds the appex in macOS packages', ()
   assert.deepEqual(mac.extendInfo.CFBundleURLTypes[0].CFBundleURLSchemes, ['token-monitor']);
   assert.equal(mac.extraFiles[0].to, 'PlugIns/TokenMonitorWidget.appex');
   assert.equal(mac.extraResources[0].to, 'token-monitor-widget.json');
+  assert.equal(mac.extraResources[1].to, 'TokenMonitorWidgetReloader');
   assert.equal(mac.sign, 'scripts/sign-macos-with-widget.js');
   assert.match(packageJson.scripts['predist:mac'], /build:mac-widget/);
 });
@@ -56,7 +61,30 @@ test('supports an isolated local Widget URL scheme without changing the release 
 test('uses AppIntent configuration and page-specific deep links', () => {
   assert.match(widgetSource, /AppIntentConfiguration\(/);
   assert.match(widgetSource, /url\(for: entry\.page\)/);
+  assert.match(widgetSource, /\.systemLarge/);
+  assert.match(widgetSource, /com\.tokenmonitor\.dashboard/);
   assert.doesNotMatch(widgetSource, /StaticConfiguration\(/);
+});
+
+test('local macOS command builds the canonical Token Monitor app identity', () => {
+  assert.equal(packageJson.scripts['mac:local'], 'node scripts/build-local-macos.js run');
+  assert.equal(packageJson.scripts['mac:local:open'], 'open "/Applications/Token Monitor.app"');
+  assert.equal(packageJson.productName, 'Token Monitor');
+  assert.equal(packageJson.build.productName, 'Token Monitor');
+});
+
+test('Widget build provenance fields are injected into the extension Info.plist', () => {
+  for (const key of [
+    'TMWidgetGitRevision',
+    'TMWidgetBuildTimestamp',
+    'TMWidgetSchemaVersion',
+    'TMWidgetUIVersion',
+    'TMWidgetKind'
+  ]) {
+    assert.match(widgetInfo, new RegExp(`<key>${key}</key>`));
+  }
+  assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_KIND = com\.tokenmonitor\.dashboard;/);
+  assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_GIT_REVISION = unknown;/);
 });
 
 test('macOS Widget integration leaves non-macOS packaging sections unchanged', () => {

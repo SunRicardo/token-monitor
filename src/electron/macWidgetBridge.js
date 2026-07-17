@@ -46,6 +46,11 @@ async function writeMacWidgetSnapshot(serializedSnapshot, options = {}) {
   const tempPath = `${snapshotPath}.${process.pid}.${randomUUID()}.tmp`;
   let handle;
   try {
+    let changed = true;
+    try {
+      changed = await fsApi.readFile(snapshotPath, 'utf8') !== String(serializedSnapshot);
+    } catch (_) {}
+    if (!changed) return { ok: true, path: snapshotPath, changed: false };
     await fsApi.mkdir(directory, { recursive: true });
     handle = await fsApi.open(tempPath, 'w', 0o600);
     await handle.writeFile(String(serializedSnapshot), 'utf8');
@@ -54,7 +59,7 @@ async function writeMacWidgetSnapshot(serializedSnapshot, options = {}) {
     handle = null;
     await fsApi.rename(tempPath, snapshotPath);
     await syncDirectory(fsApi, directory);
-    return { ok: true, path: snapshotPath };
+    return { ok: true, path: snapshotPath, changed: true };
   } catch (error) {
     try { await handle?.close(); } catch (_) {}
     try { await fsApi.unlink(tempPath); } catch (_) {}

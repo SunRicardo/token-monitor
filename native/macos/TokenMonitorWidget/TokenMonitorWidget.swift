@@ -2,7 +2,7 @@ import SwiftUI
 import WidgetKit
 
 enum TokenMonitorWidgetConfiguration {
-    static let kind = "TokenMonitorWidget"
+    static let kind = Bundle.main.object(forInfoDictionaryKey: "TMWidgetKind") as? String ?? "com.tokenmonitor.dashboard"
     static let appGroup = Bundle.main.object(forInfoDictionaryKey: "TokenMonitorAppGroup") as? String ?? ""
     static let urlScheme = Bundle.main.object(forInfoDictionaryKey: "TokenMonitorURLScheme") as? String ?? "token-monitor"
 
@@ -14,14 +14,19 @@ enum TokenMonitorWidgetConfiguration {
 }
 
 enum WidgetDesignTokens {
+    static let smallOuterPadding: CGFloat = 13
+    static let mediumOuterPadding: CGFloat = 14
+    static let largeOuterPadding: CGFloat = 16
     static let outerPadding: CGFloat = 13
     static let sectionPadding: CGFloat = 9
     static let cornerRadius: CGFloat = 12
     static let smallGap: CGFloat = 5
     static let mediumGap: CGFloat = 10
+    static let largeGap: CGFloat = 11
     static let titleSize: CGFloat = 15
     static let smallPrimarySize: CGFloat = 27
     static let mediumPrimarySize: CGFloat = 31
+    static let largePrimarySize: CGFloat = 34
     static let secondarySize: CGFloat = 10
     static let microSize: CGFloat = 9
     static let dividerOpacity = 0.14
@@ -44,7 +49,7 @@ struct TokenMonitorWidget: Widget {
         }
         .configurationDisplayName("Token Monitor")
         .description("Choose Overview, Quota, Models, Activity, or Trend for each widget.")
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
 
@@ -78,7 +83,15 @@ struct TokenMonitorWidgetView: View {
                 statusState(title: "Waiting for data", detail: "Open Token Monitor once")
             }
         }
-        .padding(WidgetDesignTokens.outerPadding)
+        .padding(outerPadding)
+    }
+
+    private var outerPadding: CGFloat {
+        switch family {
+        case .systemLarge: WidgetDesignTokens.largeOuterPadding
+        case .systemMedium: WidgetDesignTokens.mediumOuterPadding
+        default: WidgetDesignTokens.smallOuterPadding
+        }
     }
 
     @ViewBuilder
@@ -87,10 +100,12 @@ struct TokenMonitorWidgetView: View {
             statusState(title: "No usage yet", detail: "Open Token Monitor to collect data")
         } else if snapshot.isStale(at: entry.date) {
             statusState(title: "Data may be stale", detail: "Updated \(snapshot.generatedAt.formatted(.relative(presentation: .named)))")
-        } else if family == .systemMedium {
-            medium(snapshot)
         } else {
-            small(snapshot)
+            switch family {
+            case .systemLarge: large(snapshot)
+            case .systemMedium: medium(snapshot)
+            default: small(snapshot)
+            }
         }
     }
 
@@ -107,6 +122,15 @@ struct TokenMonitorWidgetView: View {
         VStack(alignment: .leading, spacing: WidgetDesignTokens.mediumGap) {
             mediumHeader(snapshot: snapshot)
             pageBody(snapshot: snapshot, page: entry.page, layout: .medium)
+            Spacer(minLength: 0)
+            footer(page: entry.page)
+        }
+    }
+
+    private func large(_ snapshot: WidgetSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: WidgetDesignTokens.largeGap) {
+            mediumHeader(snapshot: snapshot)
+            pageBody(snapshot: snapshot, page: entry.page, layout: .large)
             Spacer(minLength: 0)
             footer(page: entry.page)
         }
@@ -169,7 +193,7 @@ struct TokenMonitorWidgetView: View {
                         .foregroundStyle(.tertiary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-            } else {
+            } else if layout == .medium {
                 HStack(spacing: WidgetDesignTokens.mediumGap) {
                     panel {
                         VStack(alignment: .leading, spacing: 3) {
@@ -185,15 +209,39 @@ struct TokenMonitorWidgetView: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
+            } else {
+                VStack(alignment: .leading, spacing: WidgetDesignTokens.largeGap) {
+                    panel {
+                        VStack(alignment: .leading, spacing: 5) {
+                            sectionLabel("TOTAL TOKENS")
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                primary(snapshot.overview.totalTokens.formatted(.number.grouping(.automatic)), size: WidgetDesignTokens.largePrimarySize)
+                                Text("≈ \(model.primaryValue)")
+                                    .font(.system(size: WidgetDesignTokens.secondarySize, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                            }
+                            secondary(model.secondaryValue)
+                        }
+                    }
+                    Divider().opacity(WidgetDesignTokens.dividerOpacity)
+                    largeSummarySection(title: "额度", rows: [quotaSummary(snapshot)])
+                    Divider().opacity(WidgetDesignTokens.dividerOpacity)
+                    largeSummarySection(title: "模型", rows: Array(snapshot.models.prefix(3)).map { "\($0.displayName) · \(WidgetFormat.tokens($0.totalTokens, style: snapshot.presentation.numberStyle))" })
+                    Divider().opacity(WidgetDesignTokens.dividerOpacity)
+                    HStack {
+                        summaryRow("活跃天数", "\(snapshot.activity.activeDays)")
+                        summaryRow("当前趋势", WidgetFormat.tokens(snapshot.trend.currentTokens, style: snapshot.presentation.numberStyle))
+                    }
+                }
             }
         }
     }
 
     private func quota(_ snapshot: WidgetSnapshot, layout: WidgetLayout) -> some View {
-        let providers = Array(snapshot.quota.prefix(layout == .small ? 1 : 3))
+        let providers = Array(snapshot.quota.prefix(layout == .small ? 1 : layout == .medium ? 3 : 5))
         return VStack(alignment: .leading, spacing: layout == .small ? 6 : 5) {
             if providers.isEmpty {
-                emptyMessage("Not configured")
+                emptyMessage("未配置额度来源")
             } else {
                 ForEach(providers) { provider in
                     let remaining = provider.windows.first?.remainingPercent
@@ -226,10 +274,10 @@ struct TokenMonitorWidgetView: View {
     }
 
     private func models(_ snapshot: WidgetSnapshot, layout: WidgetLayout) -> some View {
-        let rows = Array(snapshot.models.prefix(layout == .small ? 2 : 3))
+        let rows = Array(snapshot.models.prefix(layout == .small ? 2 : layout == .medium ? 3 : 5))
         return VStack(alignment: .leading, spacing: layout == .small ? 7 : 5) {
             if rows.isEmpty {
-                emptyMessage("No model data")
+                emptyMessage("模型排行为空")
             } else {
                 ForEach(rows) { model in
                     VStack(alignment: .leading, spacing: 2) {
@@ -244,7 +292,7 @@ struct TokenMonitorWidgetView: View {
                                 .font(.system(size: WidgetDesignTokens.microSize, design: .monospaced))
                                 .foregroundStyle(.secondary)
                         }
-                        if layout == .medium { modelBar(model.sharePercent) }
+                        if layout != .small { modelBar(model.sharePercent) }
                         Text(WidgetFormat.tokens(model.totalTokens, style: snapshot.presentation.numberStyle))
                             .font(.system(size: WidgetDesignTokens.microSize, design: .monospaced))
                             .foregroundStyle(.tertiary)
@@ -256,12 +304,12 @@ struct TokenMonitorWidgetView: View {
     }
 
     private func activity(_ snapshot: WidgetSnapshot, layout: WidgetLayout) -> some View {
-        let days = Array(snapshot.activity.days.suffix(layout == .small ? 21 : 28))
-        let columns = Array(repeating: GridItem(.flexible(), spacing: 3), count: layout == .small ? 7 : 14)
+        let days = Array(snapshot.activity.days.suffix(layout == .small ? 21 : layout == .medium ? 28 : 42))
+        let columns = Array(repeating: GridItem(.flexible(), spacing: 3), count: layout == .small ? 7 : layout == .medium ? 14 : 14)
         return HStack(spacing: WidgetDesignTokens.mediumGap) {
             VStack(alignment: .leading, spacing: 0) {
                 primary("\(snapshot.activity.activeDays)", size: layout == .small ? WidgetDesignTokens.smallPrimarySize : 26)
-                secondary("Active days")
+                secondary("活跃天数")
             }
             if !days.isEmpty {
                 LazyVGrid(columns: columns, spacing: 3) {
@@ -281,10 +329,10 @@ struct TokenMonitorWidgetView: View {
             HStack(alignment: .firstTextBaseline) {
                 primary(WidgetFormat.tokens(snapshot.trend.currentTokens, style: snapshot.presentation.numberStyle), size: layout == .small ? 22 : 25)
                 Spacer()
-                if layout == .medium { secondary("Peak \(WidgetFormat.tokens(snapshot.trend.peakTokens, style: snapshot.presentation.numberStyle))") }
+                if layout != .small { secondary("峰值 \(WidgetFormat.tokens(snapshot.trend.peakTokens, style: snapshot.presentation.numberStyle))") }
             }
             sparkline(snapshot.trend.points)
-                .frame(height: layout == .small ? 34 : 42)
+                .frame(height: layout == .small ? 34 : layout == .medium ? 42 : 112)
             secondary([snapshot.trend.startDate, snapshot.trend.endDate].compactMap { $0 }.joined(separator: " — "))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
@@ -352,6 +400,23 @@ struct TokenMonitorWidgetView: View {
         .background(.primary.opacity(WidgetDesignTokens.panelOpacity), in: RoundedRectangle(cornerRadius: 7))
     }
 
+    private func largeSummarySection(title: String, rows: [String]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            sectionLabel(title)
+            if rows.isEmpty {
+                emptyMessage("暂无数据")
+            } else {
+                ForEach(Array(rows.prefix(5).enumerated()), id: \.offset) { _, row in
+                    Text(row)
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .truncationMode(.tail)
+                }
+            }
+        }
+    }
+
     private func sectionLabel(_ text: String) -> some View {
         Text(text).font(.system(size: WidgetDesignTokens.microSize, weight: .semibold, design: .monospaced)).foregroundStyle(.secondary)
     }
@@ -377,8 +442,10 @@ struct TokenMonitorWidgetView: View {
     }
 
     private func quotaSummary(_ snapshot: WidgetSnapshot) -> String {
-        guard let provider = snapshot.quota.first else { return "Not configured" }
-        return provider.windows.first?.remainingPercent.map { "\(Int($0.rounded()))%" } ?? provider.displayStatus
+        guard let provider = snapshot.quota.first else { return "未配置" }
+        let label = WidgetFormat.provider(provider.provider)
+        let status = provider.windows.first?.remainingPercent.map { "\(Int($0.rounded()))% left" } ?? provider.displayStatus
+        return "\(label) \(status)"
     }
 
     private func quotaBar(_ remaining: Double) -> some View {

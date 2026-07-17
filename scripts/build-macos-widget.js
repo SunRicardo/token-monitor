@@ -11,11 +11,31 @@ const DERIVED_DATA = path.join(OUTPUT, 'DerivedData');
 const DEFAULT_APP_GROUP = 'group.com.example.tokenmonitor';
 const DEFAULT_WIDGET_BUNDLE_ID = 'com.javis.tokenmonitor.widget';
 const DEFAULT_URL_SCHEME = 'token-monitor';
+const DEFAULT_WIDGET_KIND = 'com.tokenmonitor.dashboard';
+const WIDGET_UI_VERSION = 3;
+const WIDGET_SCHEMA_VERSION = 2;
 
 function configuredIdentifier(name, fallback) {
   const value = String(process.env[name] || fallback).trim();
   if (!/^[A-Za-z0-9.-]+$/.test(value)) throw new Error(`${name} contains unsupported characters`);
   return value;
+}
+
+function gitRevision() {
+  const result = spawnSync('git', ['rev-parse', '--short=12', 'HEAD'], {
+    cwd: ROOT,
+    encoding: 'utf8'
+  });
+  if (result.status !== 0) return 'unknown';
+  return String(result.stdout || '').trim() || 'unknown';
+}
+
+function buildTimestamp(now = new Date()) {
+  return now.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+function bundleVersion(timestamp) {
+  return timestamp.replace(/\D/g, '').slice(0, 14);
 }
 
 function xmlEscape(value) {
@@ -47,6 +67,18 @@ ${extension ? '  <key>com.apple.security.app-sandbox</key>\n  <true/>\n' : `  <k
 `;
 }
 
+function xcconfigLine(key, value) {
+  return `${key} = ${String(value).replaceAll('\n', '')}`;
+}
+
+function sanitizedBuildOutput(text) {
+  return String(text || '')
+    .replace(/TOKEN_MONITOR_APP_GROUP = .+/g, 'TOKEN_MONITOR_APP_GROUP = [redacted]')
+    .replace(/TOKEN_MONITOR_WIDGET_BUNDLE_ID = .+/g, 'TOKEN_MONITOR_WIDGET_BUNDLE_ID = [redacted]')
+    .replace(/--bundle-identifier [^ ]+/g, '--bundle-identifier [redacted]')
+    .replace(/bundle-identifier [^ ]+/g, 'bundle-identifier [redacted]');
+}
+
 function main() {
   if (process.platform !== 'darwin') {
     console.log('[mac-widget] skipped: xcodebuild is only available on macOS');
@@ -56,6 +88,10 @@ function main() {
   const appGroup = configuredIdentifier('TOKEN_MONITOR_APP_GROUP', DEFAULT_APP_GROUP);
   const bundleId = configuredIdentifier('TOKEN_MONITOR_WIDGET_BUNDLE_ID', DEFAULT_WIDGET_BUNDLE_ID);
   const urlScheme = configuredIdentifier('TOKEN_MONITOR_WIDGET_URL_SCHEME', DEFAULT_URL_SCHEME);
+  const widgetKind = configuredIdentifier('TOKEN_MONITOR_WIDGET_KIND', DEFAULT_WIDGET_KIND);
+  const revision = String(process.env.TOKEN_MONITOR_WIDGET_GIT_REVISION || gitRevision()).trim();
+  const timestamp = String(process.env.TOKEN_MONITOR_WIDGET_BUILD_TIMESTAMP || buildTimestamp()).trim();
+  const currentProjectVersion = bundleVersion(timestamp);
   const developmentTeam = String(process.env.DEVELOPMENT_TEAM || '').trim();
   if (developmentTeam && !/^[A-Z0-9]+$/.test(developmentTeam)) {
     throw new Error('DEVELOPMENT_TEAM contains unsupported characters');
@@ -63,38 +99,70 @@ function main() {
 
   fs.rmSync(OUTPUT, { recursive: true, force: true });
   fs.mkdirSync(OUTPUT, { recursive: true });
+  const xcconfigPath = path.join(OUTPUT, 'local-widget-build.xcconfig');
+  fs.writeFileSync(xcconfigPath, `${[
+    xcconfigLine('CURRENT_PROJECT_VERSION', currentProjectVersion),
+    xcconfigLine('TOKEN_MONITOR_APP_GROUP', appGroup),
+    xcconfigLine('TOKEN_MONITOR_WIDGET_BUNDLE_ID', bundleId),
+    xcconfigLine('TOKEN_MONITOR_WIDGET_URL_SCHEME', urlScheme),
+    xcconfigLine('TOKEN_MONITOR_WIDGET_KIND', widgetKind),
+    xcconfigLine('TOKEN_MONITOR_WIDGET_GIT_REVISION', revision),
+    xcconfigLine('TOKEN_MONITOR_WIDGET_BUILD_TIMESTAMP', timestamp),
+    xcconfigLine('DEVELOPMENT_TEAM', developmentTeam)
+  ].join('\n')}\n`, { mode: 0o600 });
 
   const args = [
     '-project', PROJECT,
     '-scheme', 'TokenMonitorWidget',
     '-configuration', 'Release',
     '-derivedDataPath', DERIVED_DATA,
+    '-xcconfig', xcconfigPath,
     'build',
     'CODE_SIGNING_ALLOWED=NO',
     'ARCHS=arm64',
-    'ONLY_ACTIVE_ARCH=YES',
-    `TOKEN_MONITOR_APP_GROUP=${appGroup}`,
-    `TOKEN_MONITOR_WIDGET_BUNDLE_ID=${bundleId}`,
-    `TOKEN_MONITOR_WIDGET_URL_SCHEME=${urlScheme}`,
-    `DEVELOPMENT_TEAM=${developmentTeam}`
+    'ONLY_ACTIVE_ARCH=YES'
   ];
-  const result = spawnSync('xcodebuild', args, { cwd: ROOT, encoding: 'utf8', stdio: 'inherit' });
+  const result = spawnSync('xcodebuild', args, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   if (result.error) throw result.error;
-  if (result.status !== 0) throw new Error(`xcodebuild exited with status ${result.status}`);
+  if (result.status !== 0) {
+    process.stdout.write(sanitizedBuildOutput(result.stdout));
+    process.stderr.write(sanitizedBuildOutput(result.stderr));
+    throw new Error(`xcodebuild exited with status ${result.status}`);
+  }
 
   const builtExtension = path.join(DERIVED_DATA, 'Build', 'Products', 'Release', 'TokenMonitorWidget.appex');
   const stagedExtension = path.join(OUTPUT, 'TokenMonitorWidget.appex');
+  const helperSource = path.join(ROOT, 'scripts', 'TokenMonitorWidgetReloader.swift');
+  const helperBinary = path.join(OUTPUT, 'TokenMonitorWidgetReloader');
   if (!fs.existsSync(builtExtension)) throw new Error(`Widget extension not found: ${builtExtension}`);
   fs.cpSync(builtExtension, stagedExtension, { recursive: true });
+  const helperResult = spawnSync('swiftc', [
+    '-O',
+    '-target', 'arm64-apple-macos14.0',
+    '-o', helperBinary,
+    helperSource
+  ], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  if (helperResult.error) throw helperResult.error;
+  if (helperResult.status !== 0) {
+    process.stdout.write(sanitizedBuildOutput(helperResult.stdout));
+    process.stderr.write(sanitizedBuildOutput(helperResult.stderr));
+    throw new Error(`swiftc exited with status ${helperResult.status}`);
+  }
   fs.writeFileSync(path.join(OUTPUT, 'TokenMonitor.entitlements'), entitlementPlist(appGroup));
   fs.writeFileSync(path.join(OUTPUT, 'TokenMonitorWidget.entitlements'), entitlementPlist(appGroup, true));
   fs.writeFileSync(path.join(OUTPUT, 'widget-config.json'), `${JSON.stringify({
     schemaVersion: 1,
     appGroup,
     urlScheme,
+    widgetKind,
+    widgetUIVersion: WIDGET_UI_VERSION,
+    widgetSchemaVersion: WIDGET_SCHEMA_VERSION,
+    gitRevision: revision,
+    buildTimestamp: timestamp,
+    bundleVersion: currentProjectVersion,
     snapshotFileName: 'snapshot.json'
   }, null, 2)}\n`);
-  console.log(`[mac-widget] staged ${path.relative(ROOT, stagedExtension)} (${bundleId}, ${appGroup})`);
+  console.log(`[mac-widget] staged ${path.relative(ROOT, stagedExtension)} and ${path.relative(ROOT, helperBinary)} (${widgetKind}, ${revision}, ${timestamp})`);
 }
 
 main();

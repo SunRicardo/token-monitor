@@ -44,6 +44,8 @@ function cleanup(root) {
 
 test('resolves production by default and validates explicit profiles', () => {
   assert.equal(resolveStorageProfile({ env: {} }), 'production');
+  assert.equal(resolveStorageProfile({ env: { TOKEN_MONITOR_PROFILE: '' } }), 'production');
+  assert.equal(resolveStorageProfile({ env: { TOKEN_MONITOR_PROFILE: 'production' } }), 'production');
   assert.equal(resolveStorageProfile({ env: { TOKEN_MONITOR_PROFILE: 'development-clone' } }), 'development-clone');
   assert.equal(resolveStorageProfile({ env: { TOKEN_MONITOR_PROFILE: 'clean' } }), 'clean');
   assert.throws(() => resolveStorageProfile({ env: { TOKEN_MONITOR_PROFILE: 'unsafe' } }), /Unsupported/);
