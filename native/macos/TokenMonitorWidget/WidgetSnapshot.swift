@@ -124,13 +124,14 @@ struct WidgetQuotaProvider: Decodable, Equatable, Identifiable {
 
     var displayStatus: String {
         switch status {
-        case "ok": "Available"
-        case "disabled": "Disabled"
-        case "notConfigured": "Not configured"
-        case "unauthorized": "Sign in again"
-        case "rateLimited", "sourceRateLimited": "Rate limited"
-        case "unavailable": "Unavailable"
-        default: "Temporarily unavailable"
+        case "ok": "可用"
+        case "disabled": "已停用"
+        case "notConfigured": "未配置"
+        case "unauthorized", "sessionExpired": "需要重新登录"
+        case "rateLimited", "sourceRateLimited": "请求受限"
+        case "unavailable": "暂不可用"
+        case "stale": "数据可能已过期"
+        default: "暂不可用"
         }
     }
 

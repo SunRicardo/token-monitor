@@ -3,6 +3,7 @@ import Foundation
 enum WidgetLayout {
     case small
     case medium
+    case large
 }
 
 struct WidgetViewModel: Equatable {
@@ -13,7 +14,12 @@ struct WidgetViewModel: Equatable {
     let rows: [String]
 
     static func make(snapshot: WidgetSnapshot, page: WidgetPage, layout: WidgetLayout) -> WidgetViewModel {
-        let rowLimit = layout == .small ? 2 : 3
+        let rowLimit: Int
+        switch layout {
+        case .small: rowLimit = 2
+        case .medium: rowLimit = 3
+        case .large: rowLimit = 5
+        }
         switch page {
         case .overview:
             return WidgetViewModel(
@@ -28,8 +34,8 @@ struct WidgetViewModel: Equatable {
             let remaining = provider?.windows.first?.remainingPercent
             return WidgetViewModel(
                 page: page,
-                title: provider.map { WidgetFormat.provider($0.provider) } ?? "Quota",
-                primaryValue: remaining.map { "\(Int($0.rounded()))% left" } ?? provider?.displayStatus ?? "Not configured",
+                title: provider.map { WidgetFormat.provider($0.provider) } ?? "额度",
+                primaryValue: remaining.map { "\(Int($0.rounded()))% left" } ?? provider?.displayStatus ?? "未配置",
                 secondaryValue: provider?.windows.first?.resetsAt.map(WidgetFormat.reset) ?? "",
                 rows: Array(snapshot.quota.dropFirst().prefix(max(0, rowLimit - 1))).map {
                     "\(WidgetFormat.provider($0.provider)) · \($0.windows.first?.remainingPercent.map { "\(Int($0.rounded()))%" } ?? $0.displayStatus)"
@@ -39,8 +45,8 @@ struct WidgetViewModel: Equatable {
             let models = Array(snapshot.models.prefix(rowLimit))
             return WidgetViewModel(
                 page: page,
-                title: "Models",
-                primaryValue: models.first?.displayName ?? "No model data",
+                title: "模型",
+                primaryValue: models.first?.displayName ?? "暂无模型数据",
                 secondaryValue: models.first.map { "\(WidgetFormat.tokens($0.totalTokens, style: snapshot.presentation.numberStyle)) · \(Int($0.sharePercent.rounded()))%" } ?? "",
                 rows: models.dropFirst().map { "\($0.displayName) · \(Int($0.sharePercent.rounded()))%" }
             )
@@ -49,16 +55,16 @@ struct WidgetViewModel: Equatable {
                 page: page,
                 title: snapshot.activity.currentPeriod.uppercased(),
                 primaryValue: "\(snapshot.activity.activeDays)",
-                secondaryValue: "Active days",
+                secondaryValue: "活跃天数",
                 rows: []
             )
         case .trend:
             return WidgetViewModel(
                 page: page,
-                title: "Trend",
+                title: "趋势",
                 primaryValue: WidgetFormat.tokens(snapshot.trend.currentTokens, style: snapshot.presentation.numberStyle),
-                secondaryValue: snapshot.trend.startDate.flatMap { start in snapshot.trend.endDate.map { "\(start) – \($0)" } } ?? "No trend data",
-                rows: ["Peak · \(WidgetFormat.tokens(snapshot.trend.peakTokens, style: snapshot.presentation.numberStyle))"]
+                secondaryValue: snapshot.trend.startDate.flatMap { start in snapshot.trend.endDate.map { "\(start) – \($0)" } } ?? "暂无趋势数据",
+                rows: ["峰值 · \(WidgetFormat.tokens(snapshot.trend.peakTokens, style: snapshot.presentation.numberStyle))"]
             )
         }
     }

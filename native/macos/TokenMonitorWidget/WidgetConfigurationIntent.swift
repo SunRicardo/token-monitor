@@ -7,22 +7,22 @@ enum WidgetPage: String, AppEnum, CaseIterable {
     case activity
     case trend
 
-    static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "Widget Page")
+    static let typeDisplayRepresentation = TypeDisplayRepresentation(name: "显示页面")
     static let caseDisplayRepresentations: [WidgetPage: DisplayRepresentation] = [
-        .overview: DisplayRepresentation(title: "Overview", image: .init(systemName: "house")),
-        .quota: DisplayRepresentation(title: "Quota", image: .init(systemName: "gauge.with.dots.needle.50percent")),
-        .models: DisplayRepresentation(title: "Models", image: .init(systemName: "cpu")),
-        .activity: DisplayRepresentation(title: "Activity", image: .init(systemName: "square.grid.3x3")),
-        .trend: DisplayRepresentation(title: "Trend", image: .init(systemName: "chart.xyaxis.line"))
+        .overview: DisplayRepresentation(title: "主页", image: .init(systemName: "house")),
+        .quota: DisplayRepresentation(title: "额度", image: .init(systemName: "gauge.with.dots.needle.50percent")),
+        .models: DisplayRepresentation(title: "模型", image: .init(systemName: "cpu")),
+        .activity: DisplayRepresentation(title: "活动", image: .init(systemName: "square.grid.3x3")),
+        .trend: DisplayRepresentation(title: "趋势", image: .init(systemName: "chart.xyaxis.line"))
     ]
 
     var title: String {
         switch self {
-        case .overview: "Overview"
-        case .quota: "Quota"
-        case .models: "Models"
-        case .activity: "Activity"
-        case .trend: "Trend"
+        case .overview: "主页"
+        case .quota: "额度"
+        case .models: "模型"
+        case .activity: "活动"
+        case .trend: "趋势"
         }
     }
 
@@ -38,9 +38,9 @@ enum WidgetPage: String, AppEnum, CaseIterable {
 }
 
 struct TokenMonitorWidgetConfigurationIntent: WidgetConfigurationIntent {
-    static let title: LocalizedStringResource = "Token Monitor Page"
-    static let description = IntentDescription("Choose the page shown by this widget instance.")
+    static let title: LocalizedStringResource = "Token Monitor 页面"
+    static let description = IntentDescription("选择这个小组件实例显示的页面。")
 
-    @Parameter(title: "Display Page", default: .overview)
+    @Parameter(title: "显示页面", default: .overview)
     var page: WidgetPage
 }

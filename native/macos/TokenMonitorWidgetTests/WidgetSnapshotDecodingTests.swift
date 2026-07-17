@@ -19,7 +19,7 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         """)
         XCTAssertEqual(snapshot.schemaVersion, 1)
         XCTAssertEqual(snapshot.overview.totalTokens, 42)
-        XCTAssertEqual(snapshot.quota.first?.displayStatus, "Not configured")
+        XCTAssertEqual(snapshot.quota.first?.displayStatus, "未配置")
         XCTAssertFalse(snapshot.isEmpty)
     }
 
@@ -38,10 +38,11 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
     }
 
     func testStatusMappingNeverExposesInternalEnums() {
-        XCTAssertEqual(provider(status: "notConfigured").displayStatus, "Not configured")
-        XCTAssertEqual(provider(status: "unauthorized").displayStatus, "Sign in again")
-        XCTAssertEqual(provider(status: "unavailable").displayStatus, "Unavailable")
-        XCTAssertEqual(provider(status: "unexpectedInternalValue").displayStatus, "Temporarily unavailable")
+        XCTAssertEqual(provider(status: "notConfigured").displayStatus, "未配置")
+        XCTAssertEqual(provider(status: "unauthorized").displayStatus, "需要重新登录")
+        XCTAssertEqual(provider(status: "sessionExpired").displayStatus, "需要重新登录")
+        XCTAssertEqual(provider(status: "unavailable").displayStatus, "暂不可用")
+        XCTAssertEqual(provider(status: "unexpectedInternalValue").displayStatus, "暂不可用")
     }
 
     func testAllFiveIntentPagesAreIndependentValues() {
@@ -53,15 +54,21 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         XCTAssertNotEqual(first.page, second.page)
     }
 
-    func testSmallAndMediumViewModelsBoundRowsAndPreserveLongNames() throws {
+    func testSmallMediumAndLargeViewModelsBoundRowsAndPreserveLongNames() throws {
         let snapshot = try decode("""
         {"schemaVersion":2,"generatedAt":"2026-07-17T09:00:00Z","overview":{"totalTokens":10},"models":[{"displayName":"A very long provider model name that must stay on one line","totalTokens":7,"sharePercent":70},{"displayName":"Second","totalTokens":2,"sharePercent":20},{"displayName":"Third","totalTokens":1,"sharePercent":10}],"status":{"noData":false}}
         """)
         let small = WidgetViewModel.make(snapshot: snapshot, page: .models, layout: .small)
         let medium = WidgetViewModel.make(snapshot: snapshot, page: .models, layout: .medium)
+        let large = WidgetViewModel.make(snapshot: snapshot, page: .models, layout: .large)
         XCTAssertTrue(small.primaryValue.hasPrefix("A very long"))
         XCTAssertEqual(small.rows.count, 1)
         XCTAssertEqual(medium.rows.count, 2)
+        XCTAssertEqual(large.rows.count, 2)
+    }
+
+    func testWidgetPageDisplayNamesAreLocalized() {
+        XCTAssertEqual(WidgetPage.quota.title, "额度")
     }
 
     func testStaleStatusWinsOverGeneratedAtThreshold() throws {

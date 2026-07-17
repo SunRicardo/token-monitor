@@ -123,6 +123,7 @@ const { readSessionDetail } = require('../shared/sessionDetail');
 const { startDiscordRpc, stopDiscordRpc, updateDiscordRpc } = require('./discordRpc');
 const { resolveMacWidgetSnapshotPath, updateMacWidgetSnapshot } = require('./macWidgetBridge');
 const { parseMacWidgetDeepLink } = require('./macWidgetDeepLink');
+const { DEFAULT_WIDGET_KIND, requestMacWidgetReload } = require('./macWidgetReloader');
 const linuxAutostart = require('./linuxAutostart');
 const { codexAccountIdForProvider, localLiveCodexProvider } = require('./renderer/accountIdentity');
 const {
@@ -2298,6 +2299,7 @@ function macWidgetConfiguration() {
   let appGroup = String(process.env.TOKEN_MONITOR_APP_GROUP || '').trim();
   let urlScheme = String(process.env.TOKEN_MONITOR_WIDGET_URL_SCHEME || 'token-monitor').trim();
   let snapshotFileName = 'snapshot.json';
+  let widgetKind = DEFAULT_WIDGET_KIND;
   const configCandidates = [
     path.join(process.resourcesPath, 'token-monitor-widget.json'),
     path.resolve(__dirname, '..', '..', 'build', 'macos-widget', 'widget-config.json')
@@ -2308,6 +2310,7 @@ function macWidgetConfiguration() {
         const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         appGroup = String(config.appGroup || '').trim();
         urlScheme = String(config.urlScheme || urlScheme).trim();
+        widgetKind = String(config.widgetKind || widgetKind).trim();
         snapshotFileName = String(config.snapshotFileName || snapshotFileName).trim();
         if (appGroup) break;
       } catch (_) {}
@@ -2325,6 +2328,7 @@ function macWidgetConfiguration() {
   cachedMacWidgetConfiguration = {
     appGroup,
     snapshotPath,
+    widgetKind,
     urlScheme: /^[A-Za-z][A-Za-z0-9+.-]*$/.test(urlScheme) ? urlScheme : 'token-monitor'
   };
   return cachedMacWidgetConfiguration;
@@ -2342,7 +2346,7 @@ function scheduleMacWidgetSnapshot(stats) {
         pendingMacWidgetStats = null;
         const config = macWidgetConfiguration();
         if (!config) break;
-        await updateMacWidgetSnapshot(nextStats, {
+        const result = await updateMacWidgetSnapshot(nextStats, {
           snapshotPath: config.snapshotPath,
           snapshotOptions: {
             presentation: {
@@ -2357,6 +2361,12 @@ function scheduleMacWidgetSnapshot(stats) {
           },
           logger: (message) => console.warn(message)
         });
+        if (result.ok && result.changed !== false) {
+          requestMacWidgetReload({
+            widgetKind: config.widgetKind,
+            logger: (message) => console.warn(message)
+          });
+        }
       }
     } catch (error) {
       console.warn(`[mac-widget] update failed: ${error?.message || error}`);

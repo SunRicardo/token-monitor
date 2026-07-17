@@ -251,8 +251,11 @@
 				SUPPORTED_PLATFORMS = macosx;
 				SWIFT_VERSION = 5.0;
 				TOKEN_MONITOR_APP_GROUP = group.com.example.tokenmonitor;
+				TOKEN_MONITOR_WIDGET_BUILD_TIMESTAMP = 1970-01-01T00:00:00Z;
 				TOKEN_MONITOR_WIDGET_URL_SCHEME = "token-monitor";
 				TOKEN_MONITOR_WIDGET_BUNDLE_ID = com.javis.tokenmonitor.widget;
+				TOKEN_MONITOR_WIDGET_GIT_REVISION = unknown;
+				TOKEN_MONITOR_WIDGET_KIND = com.tokenmonitor.dashboard;
 			};
 			name = Debug;
 		};
@@ -281,8 +284,11 @@
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_VERSION = 5.0;
 				TOKEN_MONITOR_APP_GROUP = group.com.example.tokenmonitor;
+				TOKEN_MONITOR_WIDGET_BUILD_TIMESTAMP = 1970-01-01T00:00:00Z;
 				TOKEN_MONITOR_WIDGET_URL_SCHEME = "token-monitor";
 				TOKEN_MONITOR_WIDGET_BUNDLE_ID = com.javis.tokenmonitor.widget;
+				TOKEN_MONITOR_WIDGET_GIT_REVISION = unknown;
+				TOKEN_MONITOR_WIDGET_KIND = com.tokenmonitor.dashboard;
 			};
 			name = Release;
 		};
