@@ -44,13 +44,19 @@ test('uses the packaged product name so a local Widget build has an independent 
 });
 
 test('supports an isolated local Widget URL scheme without changing the release default', () => {
-  assert.match(mainSource, /macWidgetConfiguration\(\)\?\.urlScheme \|\| 'token-monitor'/);
-  assert.match(widgetSource, /TokenMonitorWidgetConfiguration\.urlScheme/);
+  assert.match(mainSource, /parseMacWidgetDeepLink\(url, urlScheme\)/);
+  assert.match(widgetSource, /static let urlScheme = Bundle\.main\.object/);
   assert.match(widgetInfo, /<key>TokenMonitorURLScheme<\/key>/);
   assert.deepEqual(
     packageJson.build.mac.extendInfo.CFBundleURLTypes[0].CFBundleURLSchemes,
     ['token-monitor']
   );
+});
+
+test('uses AppIntent configuration and page-specific deep links', () => {
+  assert.match(widgetSource, /AppIntentConfiguration\(/);
+  assert.match(widgetSource, /url\(for: entry\.page\)/);
+  assert.doesNotMatch(widgetSource, /StaticConfiguration\(/);
 });
 
 test('macOS Widget integration leaves non-macOS packaging sections unchanged', () => {

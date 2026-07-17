@@ -8,182 +8,146 @@ const {
   serializeMacWidgetSnapshot
 } = require('../../src/shared/macWidgetSnapshot');
 
-const NOW = '2026-07-16T08:30:00.000Z';
+const NOW = '2026-07-17T08:30:00.000Z';
 
-function deepFreeze(value) {
-  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const child of Object.values(value)) deepFreeze(child);
-  return value;
-}
-
-test('builds a stable versioned snapshot from aggregate stats', () => {
-  const snapshot = buildMacWidgetSnapshot({
+function sampleStats() {
+  return {
+    updatedAt: '2026-07-17T08:25:00.000Z',
     periods: {
       today: {
-        totalTokens: 1200.4,
+        totalTokens: 1_200_000,
         costUsd: 1.25,
-        clients: { codex: 1000, claude: 200 },
-        clientCosts: { codex: 1, claude: 0.25 }
-      }
+        clients: { codex: 1_000_000, claude: 200_000 },
+        clientCosts: { codex: 1, claude: 0.25 },
+        models: { 'gpt-5.6': 900_000, 'MiMo V2 Pro': 300_000 },
+        modelCosts: { 'gpt-5.6': 1, 'MiMo V2 Pro': 0.25 }
+      },
+      month: { totalTokens: 9_000_000, costUsd: 8 },
+      allTime: { totalTokens: 20_000_000, costUsd: 16 }
     },
     limits: {
       providers: [{
         provider: 'codex',
         status: 'ok',
-        updatedAt: '2026-07-16T08:00:00Z',
-        windows: [{
-          kind: 'weekly',
-          usedPercent: 35,
-          resetsAt: '2026-07-20T00:00:00Z',
-          windowMinutes: 10080
-        }]
-      }]
-    }
-  }, { now: NOW });
-
-  assert.deepEqual(snapshot, {
-    schemaVersion: 1,
-    generatedAt: NOW,
-    today: { totalTokens: 1200, costUsd: 1.25 },
-    tools: [
-      { id: 'codex', totalTokens: 1000, costUsd: 1 },
-      { id: 'claude', totalTokens: 200, costUsd: 0.25 }
-    ],
-    limits: [{
-      provider: 'codex',
-      status: 'ok',
-      updatedAt: '2026-07-16T08:00:00.000Z',
-      windows: [{
-        kind: 'weekly',
-        usedPercent: 35,
-        remainingPercent: 65,
-        resetsAt: '2026-07-20T00:00:00.000Z',
-        windowMinutes: 10080
-      }]
-    }]
-  });
-  assert.equal(snapshot.schemaVersion, MAC_WIDGET_SCHEMA_VERSION);
-});
-
-test('returns a complete empty snapshot for missing data and limits', () => {
-  assert.deepEqual(buildMacWidgetSnapshot({}, { now: NOW }), {
-    schemaVersion: 1,
-    generatedAt: NOW,
-    today: { totalTokens: 0, costUsd: 0 },
-    tools: [],
-    limits: []
-  });
-});
-
-test('normalizes invalid numeric data and clamps percentages', () => {
-  const snapshot = buildMacWidgetSnapshot({
-    periods: {
-      today: {
-        totalTokens: Infinity,
-        costUsd: -3,
-        clients: { codex: -1, claude: 'not-a-number', cursor: '25' },
-        clientCosts: { cursor: Infinity }
-      }
+        accountEmail: 'private@example.com',
+        windows: [{ kind: 'weekly', usedPercent: 35, resetsAt: '2026-07-20T00:00:00Z' }]
+      }, { provider: 'claude', status: 'notConfigured', windows: [] }]
     },
-    limits: {
-      providers: [{
-        provider: 'claude',
-        status: 'ok',
-        windows: [
-          { kind: 'session', usedPercent: 150, remainingPercent: -10, windowMinutes: -5 },
-          { kind: 'weekly', usedPercent: 'bad', remainingPercent: Infinity },
-          { kind: 'unknown', usedPercent: 10 }
-        ]
-      }]
-    }
-  }, { now: NOW });
-
-  assert.deepEqual(snapshot.today, { totalTokens: 0, costUsd: 0 });
-  assert.deepEqual(snapshot.tools, [{ id: 'cursor', totalTokens: 25, costUsd: 0 }]);
-  assert.deepEqual(snapshot.limits[0].windows, [
-    { kind: 'session', usedPercent: 100, remainingPercent: 0, resetsAt: null, windowMinutes: 0 },
-    { kind: 'weekly', usedPercent: null, remainingPercent: null, resetsAt: null, windowMinutes: null }
-  ]);
-});
-
-test('preserves multiple provider accounts without exporting account identity', () => {
-  const snapshot = buildMacWidgetSnapshot({
-    limits: {
-      providers: [
-        { provider: 'codex', status: 'ok', accountEmail: 'first@example.com', accountKey: 'secret-a' },
-        { provider: 'codex', status: 'unauthorized', accountName: 'Second Person', accountKey: 'secret-b' }
-      ]
-    }
-  }, { now: NOW });
-
-  assert.equal(snapshot.limits.length, 2);
-  assert.deepEqual(snapshot.limits.map(({ provider, status }) => ({ provider, status })), [
-    { provider: 'codex', status: 'ok' },
-    { provider: 'codex', status: 'unauthorized' }
-  ]);
-  const json = JSON.stringify(snapshot);
-  for (const secret of ['first@example.com', 'secret-a', 'Second Person', 'secret-b']) {
-    assert.ok(!json.includes(secret));
-  }
-});
-
-test('uses allowlists so sensitive and unknown fields never enter the serialized snapshot', () => {
-  const sensitiveValues = [
-    'sk-private-api-key',
-    'session-cookie-value',
-    'person@example.com',
-    'private prompt contents',
-    'conversation transcript',
-    '/Users/person/.config/credentials.json'
-  ];
-  const stats = {
-    apiKey: sensitiveValues[0],
-    cookie: sensitiveValues[1],
-    accountEmail: sensitiveValues[2],
-    prompt: sensitiveValues[3],
-    conversation: sensitiveValues[4],
-    credentialPath: sensitiveValues[5],
-    periods: {
-      today: {
-        totalTokens: 10,
-        clients: { codex: 10, 'person@example.com': 999 },
-        sessions: { secret: { prompt: sensitiveValues[3] } }
-      }
-    },
-    limits: {
-      providers: [{
-        provider: 'codex',
-        status: 'ok',
-        token: sensitiveValues[0],
-        cookie: sensitiveValues[1],
-        accountEmail: sensitiveValues[2],
-        credentialPath: sensitiveValues[5],
-        windows: [{ kind: 'session', usedPercent: 20, label: sensitiveValues[2] }]
-      }, {
-        provider: sensitiveValues[2],
-        status: 'ok'
-      }]
+    historyPreview: {
+      daily: [
+        { date: '2026-07-15', tokens: 100, cost: 0.1, perClient: { secret: 1 } },
+        { date: '2026-07-16', tokens: 200, cost: 0.2 },
+        { date: '2026-07-17', tokens: 50, cost: 0.05 }
+      ],
+      summary: { activeDays: 3, favoriteModel: 'private-model' }
     }
   };
+}
+
+test('builds schema v2 overview, quota, models, activity, trend and presentation', () => {
+  const snapshot = buildMacWidgetSnapshot(sampleStats(), {
+    now: NOW,
+    presentation: {
+      defaultPeriod: 'today', currencyCode: 'CNY', currencyRate: 7.1,
+      compactNumbers: true, showCost: true, locale: 'zh-CN', theme: 'custom'
+    }
+  });
+
+  assert.equal(snapshot.schemaVersion, MAC_WIDGET_SCHEMA_VERSION);
+  assert.deepEqual(snapshot.overview, {
+    currentPeriod: 'today', totalTokens: 1_200_000, costUsd: 1.25,
+    primaryTool: 'codex', updatedAt: '2026-07-17T08:25:00.000Z'
+  });
+  assert.deepEqual(snapshot.quota[0].windows[0], {
+    kind: 'weekly', usedPercent: 35, remainingPercent: 65,
+    resetsAt: '2026-07-20T00:00:00.000Z', windowMinutes: null
+  });
+  assert.deepEqual(snapshot.models.map((model) => [model.displayName, model.totalTokens, model.sharePercent]), [
+    ['gpt-5.6', 900_000, 75], ['MiMo V2 Pro', 300_000, 25]
+  ]);
+  assert.equal(snapshot.activity.activeDays, 3);
+  assert.deepEqual(snapshot.activity.days.map((day) => day.intensity), [2, 4, 1]);
+  assert.equal(snapshot.trend.currentTokens, 50);
+  assert.equal(snapshot.trend.peakTokens, 200);
+  assert.deepEqual(snapshot.presentation, {
+    defaultPeriod: 'today', currencyCode: 'CNY', currencySymbol: '¥', currencyRate: 7.1,
+    numberStyle: 'compact', showCost: true, locale: 'zh-CN', theme: 'custom'
+  });
+  assert.equal(snapshot.status.noData, false);
+  assert.equal(snapshot.status.isStale, false);
+});
+
+test('chooses the configured period without duplicating aggregation logic', () => {
+  const snapshot = buildMacWidgetSnapshot(sampleStats(), {
+    now: NOW,
+    presentation: { defaultPeriod: 'month' }
+  });
+  assert.equal(snapshot.overview.currentPeriod, 'month');
+  assert.equal(snapshot.overview.totalTokens, 9_000_000);
+});
+
+test('returns a complete empty schema and stale status for missing or old data', () => {
+  const empty = buildMacWidgetSnapshot({}, { now: NOW });
+  assert.equal(empty.schemaVersion, 2);
+  assert.equal(empty.overview.totalTokens, 0);
+  assert.deepEqual(empty.quota, []);
+  assert.deepEqual(empty.models, []);
+  assert.equal(empty.status.noData, true);
+
+  const stale = buildMacWidgetSnapshot({ updatedAt: '2026-07-17T07:00:00Z' }, { now: NOW });
+  assert.equal(stale.status.isStale, true);
+  assert.equal(stale.status.dataAgeSeconds, 5400);
+});
+
+test('normalizes invalid values, statuses, names, and percentages', () => {
+  const snapshot = buildMacWidgetSnapshot({
+    periods: { today: {
+      totalTokens: Infinity,
+      costUsd: -1,
+      models: { '/Users/person/private.db': 50, 'safe-model': 25, 'person@example.com': 10 }
+    } },
+    limits: { providers: [{ provider: 'claude', status: 'internalState', windows: [
+      { kind: 'session', usedPercent: 150, remainingPercent: -10, windowMinutes: -5 },
+      { kind: 'unknown', usedPercent: 10 }
+    ] }] }
+  }, { now: NOW });
+  assert.equal(snapshot.overview.totalTokens, 0);
+  assert.deepEqual(snapshot.models.map((model) => model.displayName), ['safe-model']);
+  assert.equal(snapshot.quota[0].status, 'error');
+  assert.deepEqual(snapshot.quota[0].windows[0], {
+    kind: 'session', usedPercent: 100, remainingPercent: 0, resetsAt: null, windowMinutes: 0
+  });
+});
+
+test('uses explicit allowlists so secrets, identities and raw history never enter App Group', () => {
+  const sensitive = [
+    'sk-private-api-key', 'session-cookie-value', 'private@example.com',
+    'private prompt contents', 'conversation transcript', '/Users/person/private.db'
+  ];
+  const stats = sampleStats();
+  Object.assign(stats, {
+    apiKey: sensitive[0], cookie: sensitive[1], prompt: sensitive[3],
+    conversation: sensitive[4], credentialPath: sensitive[5]
+  });
+  stats.periods.today.sessions = { secret: { prompt: sensitive[3] } };
+  stats.historyPreview.daily[0].prompt = sensitive[3];
+  stats.limits.providers[0].token = sensitive[0];
+  stats.limits.providers[0].cookie = sensitive[1];
 
   const serialized = serializeMacWidgetSnapshot(stats, { now: NOW });
-  for (const sensitive of sensitiveValues) assert.ok(!serialized.includes(sensitive));
-  assert.deepEqual(JSON.parse(serialized).tools, [{ id: 'codex', totalTokens: 10, costUsd: 0 }]);
+  for (const value of sensitive) assert.equal(serialized.includes(value), false);
+  assert.equal(serialized.endsWith('\n'), true);
+  assert.equal(JSON.parse(serialized).schemaVersion, 2);
 });
 
-test('does not mutate the input object', () => {
-  const stats = deepFreeze({
-    periods: { today: { totalTokens: 5, clients: { codex: 5 }, clientCosts: { codex: 0.01 } } },
-    limits: { providers: [{ provider: 'codex', status: 'ok', windows: [{ kind: 'session', usedPercent: 1 }] }] }
-  });
-  const before = JSON.stringify(stats);
-  assert.doesNotThrow(() => buildMacWidgetSnapshot(stats, { now: NOW }));
-  assert.equal(JSON.stringify(stats), before);
-});
-
-test('serializer emits valid newline-terminated JSON with the schema version', () => {
-  const serialized = serializeMacWidgetSnapshot(null, { now: NOW });
-  assert.ok(serialized.endsWith('\n'));
-  assert.equal(JSON.parse(serialized).schemaVersion, MAC_WIDGET_SCHEMA_VERSION);
+test('provider status summarizes configuration and login requirements without identity', () => {
+  const snapshot = buildMacWidgetSnapshot({
+    limits: { providers: [
+      { provider: 'codex', status: 'unauthorized', accountKey: 'private-key' },
+      { provider: 'claude', status: 'notConfigured' }
+    ] }
+  }, { now: NOW });
+  assert.equal(snapshot.status.providerConfigured, true);
+  assert.equal(snapshot.status.providerNeedsLogin, true);
+  assert.equal(JSON.stringify(snapshot).includes('private-key'), false);
 });

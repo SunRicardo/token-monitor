@@ -104,6 +104,15 @@ function localWidgetURLScheme() {
   return value;
 }
 
+function localStorageProfile() {
+  const value = String(process.env.TOKEN_MONITOR_PROFILE || '').trim();
+  if (!value) return null;
+  if (!['production', 'development-clone', 'clean'].includes(value)) {
+    throw new Error('TOKEN_MONITOR_PROFILE contains an unsupported profile');
+  }
+  return value;
+}
+
 module.exports = async function signMacAppWithWidget(options) {
   const extensionPath = path.join(
     options.app,
@@ -122,12 +131,20 @@ module.exports = async function signMacAppWithWidget(options) {
   if (!identity) throw new Error('macOS signing identity is unavailable for Widget extension');
   const localDevelopmentSigning = process.env.TOKEN_MONITOR_LOCAL_DEVELOPMENT_SIGNING === '1';
   const urlScheme = localDevelopmentSigning ? localWidgetURLScheme() : null;
+  const storageProfile = localDevelopmentSigning ? localStorageProfile() : null;
   if (urlScheme) {
     await execFileAsync('plutil', [
       '-replace', 'CFBundleURLTypes.0.CFBundleURLSchemes.0',
       '-string', urlScheme,
       path.join(options.app, 'Contents', 'Info.plist')
     ]);
+  }
+  if (storageProfile) {
+    await fs.writeFile(
+      path.join(options.app, 'Contents', 'Resources', 'token-monitor-storage.json'),
+      `${JSON.stringify({ schemaVersion: 1, profile: storageProfile }, null, 2)}\n`,
+      { encoding: 'utf8', mode: 0o600 }
+    );
   }
 
   const args = extensionSignArgs({
@@ -146,3 +163,4 @@ module.exports.appSignOptions = appSignOptions;
 module.exports.localCodesignWrapperScript = localCodesignWrapperScript;
 module.exports.localMainAppSignArgs = localMainAppSignArgs;
 module.exports.localWidgetURLScheme = localWidgetURLScheme;
+module.exports.localStorageProfile = localStorageProfile;

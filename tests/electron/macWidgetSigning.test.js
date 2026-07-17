@@ -7,6 +7,7 @@ const {
   extensionSignArgs,
   localCodesignWrapperScript,
   localMainAppSignArgs,
+  localStorageProfile,
   localWidgetURLScheme
 } = require('../../scripts/sign-macos-with-widget');
 
@@ -86,5 +87,20 @@ test('accepts only a safe local Widget URL scheme', () => {
   } finally {
     if (previous === undefined) delete process.env.TOKEN_MONITOR_WIDGET_URL_SCHEME;
     else process.env.TOKEN_MONITOR_WIDGET_URL_SCHEME = previous;
+  }
+});
+
+test('embeds only a recognized storage profile for local packages', () => {
+  const previous = process.env.TOKEN_MONITOR_PROFILE;
+  try {
+    process.env.TOKEN_MONITOR_PROFILE = 'development-clone';
+    assert.equal(localStorageProfile(), 'development-clone');
+    process.env.TOKEN_MONITOR_PROFILE = 'clean';
+    assert.equal(localStorageProfile(), 'clean');
+    process.env.TOKEN_MONITOR_PROFILE = 'shared-production-data';
+    assert.throws(() => localStorageProfile(), /unsupported profile/);
+  } finally {
+    if (previous === undefined) delete process.env.TOKEN_MONITOR_PROFILE;
+    else process.env.TOKEN_MONITOR_PROFILE = previous;
   }
 });
