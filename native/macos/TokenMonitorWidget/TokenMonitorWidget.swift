@@ -513,12 +513,8 @@ struct TokenMonitorWidgetView: View {
                         if rows.isEmpty {
                             emptyMessage("暂无数据")
                         } else {
-                            ForEach(Array(rows.prefix(3).enumerated()), id: \.offset) { _, row in
-                                Text(row)
-                                    .font(.system(size: 11, weight: .medium))
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.72)
-                                    .truncationMode(.tail)
+                            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                                largeOverviewRowText(row, isMore: row.hasPrefix("另有"))
                             }
                         }
                     }
@@ -527,6 +523,17 @@ struct TokenMonitorWidgetView: View {
             .buttonStyle(.plain)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private let largeOverviewRowSize: CGFloat = 11
+
+    private func largeOverviewRowText(_ text: String, isMore: Bool) -> some View {
+        Text(text)
+            .font(.system(size: largeOverviewRowSize, weight: isMore ? .regular : .medium))
+            .foregroundStyle(isMore ? .tertiary : .primary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
+            .truncationMode(.tail)
     }
 
     private func quotaSummary(_ snapshot: WidgetSnapshot) -> String {
@@ -546,19 +553,19 @@ struct TokenMonitorWidgetView: View {
                         ForEach(Array(sortedQuotaProviders(snapshot).prefix(3))) { provider in
                             HStack(spacing: 6) {
                                 Text(WidgetFormat.provider(provider.provider))
-                                    .font(.system(size: 11, weight: .semibold))
+                                    .font(.system(size: largeOverviewRowSize, weight: .medium))
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.72)
                                 Spacer(minLength: 3)
                                 Text(WidgetFormat.quotaValue(provider))
-                                    .font(.system(size: WidgetDesignTokens.secondarySize, weight: .medium, design: .monospaced))
+                                    .font(.system(size: largeOverviewRowSize, weight: .medium, design: .monospaced))
                                     .foregroundStyle(provider.status == "ok" ? .primary : .secondary)
                                     .lineLimit(1)
                                     .minimumScaleFactor(0.72)
                             }
                         }
                         if snapshot.quota.count > 3 {
-                            secondary("另有 \(snapshot.quota.count - 3) 项")
+                            largeOverviewRowText("另有 \(snapshot.quota.count - 3) 项", isMore: true)
                         }
                     }
                 }
@@ -881,7 +888,7 @@ struct TokenMonitorWidgetView: View {
     ) -> WidgetHeatmapLayout {
         let maxWeeks = switch context.layout {
         case .small: 16
-        case .medium: 26
+        case .medium: 14
         case .large: 26
         }
         let labelReserve: CGFloat = density == .regular ? 14 : density == .compact ? 12 : 0
@@ -892,13 +899,14 @@ struct TokenMonitorWidgetView: View {
         }
         let heatmapWidth = max(0, context.size.width)
         let heatmapHeight = max(0, context.size.height - labelReserve - summaryReserve - 6)
+        let minCell = context.layout == .medium ? 12 : metrics.activityMinCellSize
 
         return WidgetHeatmapLayoutCalculator.make(
             days: snapshot.activity.days,
             referenceDate: entry.date,
             availableSize: CGSize(width: heatmapWidth, height: heatmapHeight),
             maxWeeks: maxWeeks,
-            minCellSize: metrics.activityMinCellSize,
+            minCellSize: minCell,
             maxCellSize: metrics.activityMaxCellSize,
             spacing: metrics.activityCellSpacing
         )

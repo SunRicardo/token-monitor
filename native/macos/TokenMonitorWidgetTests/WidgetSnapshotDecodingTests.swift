@@ -677,17 +677,21 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
     func testMediumHeatmapUsesFullWidth() throws {
         let reference = try utcDate("2026-07-17")
         let days = try continuousActivityDays(count: 180, ending: "2026-07-17")
-        // Medium should now use maxWeeks=26 and full width
+        // Medium: maxWeeks=14, minCell=12, maxCell=20
+        // Realistic Medium content height≈97pt, minus labelReserve(14)+summaryReserve(16)+6=30 → 67pt
         let layout = WidgetHeatmapLayoutCalculator.make(
             days: days,
             referenceDate: reference,
-            availableSize: CGSize(width: 330, height: 80),
-            maxWeeks: 26,
-            minCellSize: 5,
+            availableSize: CGSize(width: 330, height: 67),
+            maxWeeks: 14,
+            minCellSize: 12,
             maxCellSize: 20,
             spacing: 2
         )
-        XCTAssertGreaterThan(layout.weekCount, 14) // More than old 14-week cap
+        XCTAssertLessThanOrEqual(layout.weekCount, 14)
+        XCTAssertGreaterThanOrEqual(layout.weekCount, 10)
+        // heightFit = (67-12)/7 ≈ 7.9 — calculator doesn't enforce minCellSize as floor
+        // but width-limited cells should be ≥12 when weekCount ≤14
         XCTAssertLessThanOrEqual(layout.renderedWidth, 330.001)
         XCTAssertEqual(layout.cells.count, layout.weekCount * 7)
     }
