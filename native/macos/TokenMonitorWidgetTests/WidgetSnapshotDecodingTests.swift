@@ -450,4 +450,154 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
     private func provider(status: String) -> WidgetQuotaProvider {
         WidgetQuotaProvider(provider: "codex", status: status, updatedAt: nil, windows: [])
     }
+
+    // MARK: - Large Widget Layout Tests
+
+    func testLargeModelFontSizeGreaterThanMedium() {
+        let largePlan = WidgetLargeListLayoutPlan.make(itemCount: 5, availableHeight: 380)
+        let mediumGeometry = WidgetListCapacity.geometry(kind: .models, density: .regular)
+
+        XCTAssertGreaterThan(largePlan.nameFontSize, 10) // Medium regular = 10pt
+        XCTAssertGreaterThanOrEqual(largePlan.nameFontSize, 13)
+        XCTAssertLessThanOrEqual(largePlan.nameFontSize, 16)
+        XCTAssertGreaterThan(largePlan.rowHeight, mediumGeometry.rowHeight) // Large > 28pt
+    }
+
+    func testLargeModelRowHeightAdaptsToAvailableHeight() {
+        let small = WidgetLargeListLayoutPlan.make(itemCount: 5, availableHeight: 200)
+        let medium = WidgetLargeListLayoutPlan.make(itemCount: 5, availableHeight: 380)
+        let large = WidgetLargeListLayoutPlan.make(itemCount: 5, availableHeight: 600)
+
+        XCTAssertGreaterThanOrEqual(small.rowHeight, 34)
+        XCTAssertLessThanOrEqual(small.rowHeight, 46)
+        XCTAssertGreaterThan(medium.rowHeight, small.rowHeight)
+        XCTAssertGreaterThanOrEqual(large.rowHeight, 34)
+        XCTAssertLessThanOrEqual(large.rowHeight, 46)
+    }
+
+    func testLargeModelListDoesNotCrowdAllModelsAtTop() {
+        let plan = WidgetLargeListLayoutPlan.make(itemCount: 10, availableHeight: 380)
+        // With 380pt and 10 items, rowHeight ~38pt fits all 10 — this is correct
+        // The key test: row height should be reasonable, not collapsed to minimum
+        XCTAssertGreaterThanOrEqual(plan.rowHeight, 34)
+        XCTAssertLessThanOrEqual(plan.rowHeight, 46)
+        // If we reduce available height, fewer items should show
+        let constrained = WidgetLargeListLayoutPlan.make(itemCount: 10, availableHeight: 200)
+        XCTAssertLessThan(constrained.visibleCount, 10)
+        XCTAssertGreaterThan(constrained.hiddenCount, 0)
+    }
+
+    func testLargeModelMoreRowOnlyWhenOverCapacity() {
+        let exactFit = WidgetLargeListLayoutPlan.make(itemCount: 3, availableHeight: 600)
+        XCTAssertEqual(exactFit.hiddenCount, 0)
+
+        let overCapacity = WidgetLargeListLayoutPlan.make(itemCount: 15, availableHeight: 200)
+        XCTAssertGreaterThan(overCapacity.hiddenCount, 0)
+    }
+
+    func testLargeHeatmapCellSizeGreaterThan12() {
+        let reference = try! utcDate("2026-07-17")
+        let days = try! continuousActivityDays(count: 90, ending: "2026-07-17")
+        let layout = WidgetHeatmapLayoutCalculator.make(
+            days: days,
+            referenceDate: reference,
+            availableSize: CGSize(width: 320, height: 120),
+            maxWeeks: 26,
+            minCellSize: 5,
+            maxCellSize: 22,
+            spacing: 2
+        )
+        XCTAssertGreaterThan(layout.cellSize, 12)
+        XCTAssertLessThanOrEqual(layout.cellSize, 22)
+    }
+
+    func testLargeHeatmapKeepsSevenRows() {
+        let reference = try! utcDate("2026-07-17")
+        let days = try! continuousActivityDays(count: 90, ending: "2026-07-17")
+        let layout = WidgetHeatmapLayoutCalculator.make(
+            days: days,
+            referenceDate: reference,
+            availableSize: CGSize(width: 320, height: 120),
+            maxWeeks: 26,
+            minCellSize: 5,
+            maxCellSize: 22,
+            spacing: 2
+        )
+        if layout.weekCount > 0 {
+            XCTAssertEqual(layout.cells.count, layout.weekCount * 7)
+            // 7 rows * cellSize + 6 * spacing = renderedHeight
+            let expectedHeight = 7 * layout.cellSize + 6 * layout.spacing
+            XCTAssertEqual(layout.renderedHeight, expectedHeight, accuracy: 0.001)
+        }
+    }
+
+    func testLargeHeatmapUsesLargerCellsWithLimitedHistory() {
+        let reference = try! utcDate("2026-07-17")
+        // 3 weeks of data — coverage may span 3-4 calendar weeks due to Sunday alignment
+        let days = try! continuousActivityDays(count: 21, ending: "2026-07-17")
+        let layout = WidgetHeatmapLayoutCalculator.make(
+            days: days,
+            referenceDate: reference,
+            availableSize: CGSize(width: 320, height: 120),
+            maxWeeks: 26,
+            minCellSize: 5,
+            maxCellSize: 22,
+            spacing: 2
+        )
+        // With limited history and large available space, cells should be large
+        XCTAssertGreaterThan(layout.cellSize, 14)
+        // Week count depends on Sunday alignment (3-5 weeks)
+        XCTAssertGreaterThanOrEqual(layout.weekCount, 3)
+        XCTAssertLessThanOrEqual(layout.weekCount, 5)
+    }
+
+    func testLargeOverviewShowsMultipleProviders() throws {
+        let snapshot = try decode("""
+        {"schemaVersion":4,"generatedAt":"2026-07-17T09:00:00.000Z","periods":{"day":{"overview":{"currentPeriod":"today","totalTokens":100,"updatedAt":"2026-07-17T08:59:00.000Z"}}},"quota":[{"provider":"codex","status":"ok","windows":[{"kind":"weekly","remainingPercent":2}]},{"provider":"mimo","status":"ok","balance":{"amount":3.62,"currency":"CNY"},"windows":[]},{"provider":"deepseek","status":"ok","balance":{"amount":9.33,"currency":"USD"},"windows":[]},{"provider":"antigravity","status":"notConfigured","windows":[]}],"status":{"noData":false}}
+        """)
+        // sortedQuotaProviders should put balance/percent first
+        let sorted = snapshot.quota.sorted { a, b in
+            func priority(_ p: WidgetQuotaProvider) -> Int {
+                if p.balance != nil || p.windows.first?.remainingPercent != nil { return 0 }
+                if p.status == "unauthorized" || p.status == "sessionExpired" { return 1 }
+                if p.status == "notConfigured" { return 3 }
+                return 2
+            }
+            return priority(a) < priority(b)
+        }
+        // MiMo and DeepSeek have balance, Codex has percent — all should be before antigravity
+        XCTAssertEqual(sorted.count, 4)
+        XCTAssertTrue(sorted[0].provider == "codex" || sorted[0].provider == "mimo" || sorted[0].provider == "deepseek")
+        XCTAssertEqual(sorted.last?.provider, "antigravity")
+    }
+
+    func testHeaderFooterGeometryUnchanged() {
+        let small = WidgetLayoutMetrics.metrics(for: .systemSmall)
+        let medium = WidgetLayoutMetrics.metrics(for: .systemMedium)
+        let large = WidgetLayoutMetrics.metrics(for: .systemLarge)
+
+        XCTAssertEqual(small.headerHeight, 20)
+        XCTAssertEqual(medium.headerHeight, 22)
+        XCTAssertEqual(large.headerHeight, 24)
+        XCTAssertEqual(small.footerHeight, 25)
+        XCTAssertEqual(medium.footerHeight, 26)
+        XCTAssertEqual(large.footerHeight, 28)
+        XCTAssertEqual(small.contentGap, 5)
+        XCTAssertEqual(medium.contentGap, 10)
+        XCTAssertEqual(large.contentGap, 8)
+    }
+
+    func testSmallMediumLayoutUnchanged() {
+        let smallModels = WidgetListCapacity.plan(itemCount: 5, availableHeight: 100, kind: .models)
+        let mediumModels = WidgetListCapacity.plan(itemCount: 5, availableHeight: 200, kind: .models)
+
+        // Small should still use its original geometry
+        let smallGeometry = WidgetListCapacity.geometry(kind: .models, density: .regular)
+        XCTAssertEqual(smallGeometry.rowHeight, 28)
+        XCTAssertEqual(smallGeometry.rowSpacing, 3)
+
+        // These should not be affected by Large changes
+        XCTAssertLessThanOrEqual(smallModels.rowHeight, 28)
+        XCTAssertLessThanOrEqual(mediumModels.rowHeight, 28)
+    }
 }

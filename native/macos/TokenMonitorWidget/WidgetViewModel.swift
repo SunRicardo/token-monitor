@@ -129,7 +129,7 @@ struct WidgetLayoutMetrics: Equatable {
         contentGap: WidgetDesignTokens.largeGap,
         pageControlWidth: 112,
         activityMinCellSize: 5,
-        activityMaxCellSize: 12,
+        activityMaxCellSize: 22,
         activityCellSpacing: 2
     )
 
@@ -177,6 +177,72 @@ struct WidgetListLayoutPlan: Equatable {
     let rowHeight: CGFloat
     let rowSpacing: CGFloat
     let moreRowHeight: CGFloat
+}
+
+struct WidgetLargeListLayoutPlan: Equatable {
+    let visibleCount: Int
+    let hiddenCount: Int
+    let rowHeight: CGFloat
+    let rowSpacing: CGFloat
+    let moreRowHeight: CGFloat
+    let nameFontSize: CGFloat
+    let percentFontSize: CGFloat
+    let tokenFontSize: CGFloat
+    let barHeight: CGFloat
+
+    static func make(itemCount: Int, availableHeight: CGFloat) -> WidgetLargeListLayoutPlan {
+        let count = max(0, itemCount)
+        let height = max(0, availableHeight)
+        let spacing: CGFloat = 4
+        let moreHeight: CGFloat = 14
+        let minHeight: CGFloat = 34
+        let maxHeight: CGFloat = 46
+
+        let visibleCount: Int
+        let rowHeight: CGFloat
+        let hiddenCount: Int
+
+        if count == 0 {
+            visibleCount = 0; rowHeight = 0; hiddenCount = 0
+        } else if count == 1 {
+            visibleCount = 1; rowHeight = min(maxHeight, height); hiddenCount = 0
+        } else {
+            let stride = minHeight + spacing
+            let maxFit = stride > 0 ? Int(floor((height + spacing) / stride)) : 0
+            let trialCount = min(count, max(maxFit, 1))
+            let totalSpacing = CGFloat(max(0, trialCount - 1)) * spacing
+            let computedHeight = (height - totalSpacing) / CGFloat(trialCount)
+            let clampedHeight = max(minHeight, min(maxHeight, computedHeight))
+            let needsMore = count > trialCount
+            let moreActualHeight = needsMore ? moreHeight : 0
+            let checkCount = needsMore ? trialCount : trialCount
+            let finalCount = min(count, max(checkCount, 1))
+            let finalTotalSpacing = CGFloat(max(0, finalCount - 1)) * spacing
+            let finalRowHeight = needsMore
+                ? max(minHeight, min(maxHeight, (height - moreActualHeight - finalTotalSpacing) / CGFloat(finalCount)))
+                : clampedHeight
+            visibleCount = finalCount
+            rowHeight = finalRowHeight
+            hiddenCount = count - finalCount
+        }
+
+        let nameSize: CGFloat = rowHeight >= 42 ? 15 : rowHeight >= 38 ? 14 : 13
+        let pctSize: CGFloat = rowHeight >= 42 ? 13 : rowHeight >= 38 ? 12 : 11
+        let tokenSize: CGFloat = rowHeight >= 42 ? 12 : rowHeight >= 38 ? 11 : 10
+        let barH: CGFloat = rowHeight >= 42 ? 4 : 3
+
+        return WidgetLargeListLayoutPlan(
+            visibleCount: visibleCount,
+            hiddenCount: hiddenCount,
+            rowHeight: rowHeight,
+            rowSpacing: spacing,
+            moreRowHeight: moreHeight,
+            nameFontSize: nameSize,
+            percentFontSize: pctSize,
+            tokenFontSize: tokenSize,
+            barHeight: barH
+        )
+    }
 }
 
 enum WidgetListCapacity {
