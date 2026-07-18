@@ -5,24 +5,29 @@ struct TokenMonitorEntry: TimelineEntry {
     let snapshot: WidgetSnapshot?
     let page: WidgetPage
     let period: WidgetPeriod
+    let selectedActivityDate: String?
 }
 
 struct TokenMonitorTimelineProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> TokenMonitorEntry {
-        TokenMonitorEntry(date: Date(), snapshot: .placeholder.selecting(.day), page: .overview, period: .day)
+        TokenMonitorEntry(date: Date(), snapshot: .placeholder.selecting(.day), page: .overview, period: .day, selectedActivityDate: nil)
     }
 
     func snapshot(for configuration: TokenMonitorWidgetConfigurationIntent, in context: Context) async -> TokenMonitorEntry {
         let period = currentPeriod()
         let page = effectivePage(for: configuration, family: context.family)
-        return TokenMonitorEntry(date: Date(), snapshot: currentSnapshot(period: period), page: page, period: period)
+        let snapshot = currentSnapshot(period: period)
+        let selectedActivityDate = selectedActivityDate(in: snapshot, family: context.family)
+        return TokenMonitorEntry(date: Date(), snapshot: snapshot, page: page, period: period, selectedActivityDate: selectedActivityDate)
     }
 
     func timeline(for configuration: TokenMonitorWidgetConfigurationIntent, in context: Context) async -> Timeline<TokenMonitorEntry> {
         let now = Date()
         let period = currentPeriod()
         let page = effectivePage(for: configuration, family: context.family)
-        let entry = TokenMonitorEntry(date: now, snapshot: currentSnapshot(period: period), page: page, period: period)
+        let snapshot = currentSnapshot(period: period)
+        let selectedActivityDate = selectedActivityDate(in: snapshot, family: context.family)
+        let entry = TokenMonitorEntry(date: now, snapshot: snapshot, page: page, period: period, selectedActivityDate: selectedActivityDate)
         return Timeline(entries: [entry], policy: .after(now.addingTimeInterval(15 * 60)))
     }
 
@@ -40,6 +45,18 @@ struct TokenMonitorTimelineProvider: AppIntentTimelineProvider {
         }
         return WidgetPresentationStateStore.shared.effectivePage(configuredPage: configuration.page, for: scope)
     }
+
+    func selectedActivityDate(
+        in snapshot: WidgetSnapshot?,
+        family: WidgetFamily,
+        store: WidgetPresentationStateStoring = WidgetPresentationStateStore.shared
+    ) -> String? {
+        WidgetActivitySelection.resolvedDate(
+            days: snapshot?.activity.days ?? [],
+            family: WidgetFamilyScope(widgetFamily: family),
+            store: store
+        )
+    }
 }
 
 extension WidgetSnapshot {
@@ -56,7 +73,7 @@ extension WidgetSnapshot {
     }
 
     static let placeholder = WidgetSnapshot(
-        schemaVersion: 4,
+        schemaVersion: 5,
         generatedAt: Date(),
         overview: WidgetOverview(currentPeriod: "today", totalTokens: 27_800_000, costUsd: 14.86, primaryTool: "codex", updatedAt: Date()),
         quota: [

@@ -257,7 +257,14 @@ struct WidgetModel: Decodable, Equatable, Identifiable {
 struct WidgetActivityDay: Decodable, Equatable, Identifiable {
     let date: String
     let intensity: Int
+    let totalTokens: Int
     var id: String { date }
+
+    init(date: String, intensity: Int, totalTokens: Int = 0) {
+        self.date = date
+        self.intensity = intensity
+        self.totalTokens = max(0, totalTokens)
+    }
 }
 
 struct WidgetActivity: Decodable, Equatable {
@@ -346,11 +353,12 @@ extension WidgetModel {
 }
 
 extension WidgetActivityDay {
-    private enum CodingKeys: String, CodingKey { case date, intensity }
+    private enum CodingKeys: String, CodingKey { case date, intensity, totalTokens }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         date = c.string(.date)
         intensity = c.int(.intensity)
+        totalTokens = max(0, c.int(.totalTokens))
     }
 }
 

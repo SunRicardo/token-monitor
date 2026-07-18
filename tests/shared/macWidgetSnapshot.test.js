@@ -53,7 +53,7 @@ function sampleStats() {
   };
 }
 
-test('builds schema v4 overview, quota, models, activity, trend and presentation', () => {
+test('builds schema v5 overview, quota, models, activity, trend and presentation', () => {
   const snapshot = buildMacWidgetSnapshot(sampleStats(), {
     now: NOW,
     presentation: {
@@ -63,7 +63,7 @@ test('builds schema v4 overview, quota, models, activity, trend and presentation
   });
 
   assert.equal(snapshot.schemaVersion, MAC_WIDGET_SCHEMA_VERSION);
-  assert.equal(MAC_WIDGET_SCHEMA_VERSION, 4);
+  assert.equal(MAC_WIDGET_SCHEMA_VERSION, 5);
   assert.deepEqual(snapshot.overview, {
     currentPeriod: 'today', totalTokens: 1_200_000, costUsd: 1.25,
     primaryTool: 'codex', updatedAt: '2026-07-17T08:25:00.000Z'
@@ -80,6 +80,7 @@ test('builds schema v4 overview, quota, models, activity, trend and presentation
   ]);
   assert.equal(snapshot.activity.activeDays, 3);
   assert.deepEqual(snapshot.activity.days.map((day) => day.intensity), [2, 4, 1]);
+  assert.deepEqual(snapshot.activity.days.map((day) => day.totalTokens), [100, 200, 50]);
   assert.equal(snapshot.trend.currentTokens, 50);
   assert.equal(snapshot.trend.peakTokens, 200);
   assert.deepEqual(snapshot.presentation, {
@@ -208,7 +209,7 @@ test('accepts only real UTC calendar dates and lets the last duplicate date win'
 
 test('returns a complete empty schema and stale status for missing or old data', () => {
   const empty = buildMacWidgetSnapshot({}, { now: NOW });
-  assert.equal(empty.schemaVersion, 4);
+  assert.equal(empty.schemaVersion, 5);
   assert.equal(empty.overview.totalTokens, 0);
   assert.equal(empty.periods.day.overview.totalTokens, 0);
   assert.equal(empty.periods.month.overview.totalTokens, 0);
@@ -240,6 +241,16 @@ test('normalizes invalid values, statuses, names, and percentages', () => {
   assert.deepEqual(snapshot.quota[0].windows[0], {
     kind: 'session', usedPercent: 100, remainingPercent: 0, resetsAt: null, windowMinutes: 0
   });
+});
+
+test('normalizes negative or invalid activity totals to zero', () => {
+  const snapshot = buildMacWidgetSnapshot({ historyPreview: { daily: [
+    { date: '2026-07-15', tokens: -10 },
+    { date: '2026-07-16', tokens: 'invalid' },
+    { date: '2026-07-17', tokens: 37_400_000 }
+  ] } }, { now: NOW });
+
+  assert.deepEqual(snapshot.activity.days.map((day) => day.totalTokens), [0, 0, 37_400_000]);
 });
 
 test('keeps missing percentages absent instead of coercing them to zero or one hundred', () => {
@@ -293,7 +304,7 @@ test('uses explicit allowlists so secrets, identities and raw history never ente
   for (const value of sensitive) assert.equal(serialized.includes(value), false);
   assert.equal(serialized.endsWith('\n'), true);
   const parsed = JSON.parse(serialized);
-  assert.equal(parsed.schemaVersion, 4);
+  assert.equal(parsed.schemaVersion, 5);
   assert.deepEqual(parsed.quota.find((provider) => provider.provider === 'mimo').balance, {
     amount: 3.62,
     currency: 'CNY'

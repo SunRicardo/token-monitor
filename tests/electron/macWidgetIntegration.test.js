@@ -123,10 +123,10 @@ test('Widget build provenance fields are injected into the extension Info.plist'
   }
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_KIND = com\.tokenmonitor\.dashboard;/);
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_GIT_REVISION = unknown;/);
-  assert.match(widgetBuildSource, /const WIDGET_UI_VERSION = 16;/);
-  assert.match(widgetBuildSource, /const WIDGET_SCHEMA_VERSION = 4;/);
-  assert.match(widgetInfo, /<key>TMWidgetSchemaVersion<\/key>\s*<string>4<\/string>/);
-  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>16<\/string>/);
+  assert.match(widgetBuildSource, /const WIDGET_UI_VERSION = 17;/);
+  assert.match(widgetBuildSource, /const WIDGET_SCHEMA_VERSION = 5;/);
+  assert.match(widgetInfo, /<key>TMWidgetSchemaVersion<\/key>\s*<string>5<\/string>/);
+  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>17<\/string>/);
 });
 
 test('Widget layout uses system margins and fixed scaffold metrics without changing kind', () => {
@@ -151,7 +151,7 @@ test('Widget layout uses system margins and fixed scaffold metrics without chang
   assert.match(widgetSource, /\.frame\(height: metrics\.footerHeight\)/);
   assert.match(widgetSource, /\.frame\(width: metrics\.pageControlWidth, height: WidgetDesignTokens\.pageControlHeight, alignment: \.leading\)/);
   assert.match(widgetSource, /Image\(systemName: "arrow\.up\.right"\)[\s\S]*\.frame\(width: WidgetDesignTokens\.openButtonSize, height: WidgetDesignTokens\.openButtonSize\)/);
-  assert.match(widgetInfo, /<key>TMWidgetSchemaVersion<\/key>\s*<string>4<\/string>/);
+  assert.match(widgetInfo, /<key>TMWidgetSchemaVersion<\/key>\s*<string>5<\/string>/);
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_KIND = com\.tokenmonitor\.dashboard;/);
 });
 
@@ -202,13 +202,38 @@ test('Activity layout adapts density and heatmap size without clipping the scaff
   assert.match(widgetViewModelSource, /struct WidgetMediumActivityLayoutPlan: Equatable/);
   assert.match(widgetViewModelSource, /let summaryWidth: CGFloat/);
   assert.match(widgetViewModelSource, /let heatmapWidth: CGFloat/);
-  assert.match(widgetSource, /\.frame\(width: layout\.cellWidth, height: layout\.cellHeight\)/);
+  assert.match(widgetSource, /width: layout\.cellWidth,[\s\S]*height: layout\.cellHeight/);
   assert.doesNotMatch(widgetSource, /minimumWidthRatio:\s*0\.65/);
   assert.doesNotMatch(widgetSource, /allowsVerticalOverflow:\s*true/);
   assert.doesNotMatch(widgetSource, /LazyVGrid/);
   assert.doesNotMatch(widgetSource, /\.offset\(x:\s*-/);
   assert.doesNotMatch(widgetSource, /\.padding\(\.leading,\s*-/);
   assert.doesNotMatch(widgetSource, /rotationEffect/);
+});
+
+test('Medium and Large activity cells are App Intent buttons with fixed selection details', () => {
+  const heatmapStart = widgetSource.indexOf('struct ActivityHeatmap: View');
+  const heatmapEnd = widgetSource.indexOf('\nenum WidgetPeriodControlStyle', heatmapStart);
+  assert.ok(heatmapStart >= 0 && heatmapEnd > heatmapStart, 'activity heatmap should exist');
+  const heatmapSource = widgetSource.slice(heatmapStart, heatmapEnd);
+  const mediumStart = widgetSource.indexOf('private func mediumActivityView(');
+  const mediumEnd = widgetSource.indexOf('\n    private func selectedDayDetail(', mediumStart);
+  const mediumSource = widgetSource.slice(mediumStart, mediumEnd);
+
+  assert.match(widgetIntentSource, /struct SelectActivityDayIntent: AppIntent/);
+  assert.match(widgetIntentSource, /static var openAppWhenRun: Bool \{ false \}/);
+  assert.match(widgetIntentSource, /widget\.presentation\.activity-day/);
+  assert.match(heatmapSource, /Button\(intent: SelectActivityDayIntent\(family: family, date: cell\.date\)\)/);
+  assert.match(heatmapSource, /cell\.hasActivityData, !cell\.isFuture/);
+  assert.match(heatmapSource, /\.buttonStyle\(\.plain\)/);
+  assert.match(heatmapSource, /\.overlay \{[\s\S]*\.strokeBorder\(\.primary, lineWidth: 2\)/);
+  assert.doesNotMatch(heatmapSource, /Link\(/, 'cell buttons must not be nested in links');
+  assert.match(widgetSource, /context\.layout == \.large \? \.large : nil/);
+  assert.match(widgetSource, /ActivityHeatmap\(layout: spec, family: \.medium, selectedDate: entry\.selectedActivityDate\)/);
+  assert.match(mediumSource, /selectedDayDetail\(snapshot\)[\s\S]*\.frame\(height: 32/);
+  assert.match(widgetSource, /selectedDayDetailLine\(snapshot\)[\s\S]*\.frame\(height: 14/);
+  assert.match(widgetSource, /WidgetFormat\.tokens\(day\.totalTokens, style: snapshot\.presentation\.numberStyle\)/);
+  assert.doesNotMatch(widgetSource, /onHover|@State/);
 });
 
 test('Large overview quota and model rows share the same row component', () => {
