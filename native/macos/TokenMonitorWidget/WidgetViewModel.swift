@@ -154,6 +154,29 @@ enum WidgetContentDensity: CaseIterable, Equatable {
     case summary
 }
 
+struct WidgetMediumActivityLayoutPlan: Equatable {
+    let summaryWidth: CGFloat
+    let heatmapWidth: CGFloat
+    let spacing: CGFloat
+
+    static func make(availableSize: CGSize) -> WidgetMediumActivityLayoutPlan {
+        let spacing: CGFloat = availableSize.width >= 300 ? 12 : 8
+        let contentWidth = max(0, availableSize.width)
+        let usableWidth = max(0, contentWidth - spacing)
+        let targetSummaryWidth = contentWidth * 0.42
+        let minSummaryWidth = min(112, usableWidth)
+        let maxSummaryWidth = usableWidth * 0.48
+        let summaryWidth = max(0, min(maxSummaryWidth, max(minSummaryWidth, targetSummaryWidth)))
+        let heatmapWidth = max(0, usableWidth - summaryWidth)
+
+        return WidgetMediumActivityLayoutPlan(
+            summaryWidth: summaryWidth,
+            heatmapWidth: heatmapWidth,
+            spacing: spacing
+        )
+    }
+}
+
 enum WidgetListKind: Equatable {
     case quota
     case models
@@ -193,10 +216,10 @@ struct WidgetLargeListLayoutPlan: Equatable {
     static func make(itemCount: Int, availableHeight: CGFloat) -> WidgetLargeListLayoutPlan {
         let count = max(0, itemCount)
         let height = max(0, availableHeight)
-        let spacing: CGFloat = 4
-        let moreHeight: CGFloat = 14
-        let minHeight: CGFloat = 34
-        let maxHeight: CGFloat = 46
+        let spacing: CGFloat = 3
+        let moreHeight: CGFloat = 12
+        let minHeight: CGFloat = 30
+        let maxHeight: CGFloat = 38
 
         let visibleCount: Int
         let rowHeight: CGFloat
@@ -226,10 +249,10 @@ struct WidgetLargeListLayoutPlan: Equatable {
             hiddenCount = count - finalCount
         }
 
-        let nameSize: CGFloat = rowHeight >= 42 ? 15 : rowHeight >= 38 ? 14 : 13
-        let pctSize: CGFloat = rowHeight >= 42 ? 13 : rowHeight >= 38 ? 12 : 11
-        let tokenSize: CGFloat = rowHeight >= 42 ? 12 : rowHeight >= 38 ? 11 : 10
-        let barH: CGFloat = rowHeight >= 42 ? 4 : 3
+        let nameSize: CGFloat = 11
+        let pctSize: CGFloat = 10
+        let tokenSize: CGFloat = 9
+        let barH: CGFloat = rowHeight >= 34 ? 3 : 2
 
         return WidgetLargeListLayoutPlan(
             visibleCount: visibleCount,
@@ -303,20 +326,25 @@ struct WidgetHeatmapCell: Equatable, Identifiable {
 
 struct WidgetHeatmapLayout: Equatable {
     let weekCount: Int
-    let cellSize: CGFloat
+    let cellWidth: CGFloat
+    let cellHeight: CGFloat
     let spacing: CGFloat
     let cells: [WidgetHeatmapCell]
     let startDate: String?
     let endDate: String?
 
+    var cellSize: CGFloat {
+        min(cellWidth, cellHeight)
+    }
+
     var renderedWidth: CGFloat {
         guard weekCount > 0 else { return 0 }
-        return CGFloat(weekCount) * cellSize + CGFloat(weekCount - 1) * spacing
+        return CGFloat(weekCount) * cellWidth + CGFloat(weekCount - 1) * spacing
     }
 
     var renderedHeight: CGFloat {
         guard weekCount > 0 else { return 0 }
-        return 7 * cellSize + 6 * spacing
+        return 7 * cellHeight + 6 * spacing
     }
 
     var activeDays: Int {
@@ -339,6 +367,34 @@ enum WidgetHeatmapLayoutCalculator {
         maxCellSize: CGFloat,
         spacing: CGFloat
     ) -> WidgetHeatmapLayout {
+        make(
+            days: days,
+            referenceDate: referenceDate,
+            availableSize: availableSize,
+            maxWeeks: maxWeeks,
+            minCellWidth: minCellSize,
+            minCellHeight: minCellSize,
+            maxCellWidth: maxCellSize,
+            maxCellHeight: maxCellSize,
+            spacing: spacing,
+            minimumWidthRatio: nil,
+            allowsVerticalOverflow: false
+        )
+    }
+
+    static func make(
+        days: [WidgetActivityDay],
+        referenceDate: Date,
+        availableSize: CGSize,
+        maxWeeks: Int,
+        minCellWidth: CGFloat,
+        minCellHeight: CGFloat,
+        maxCellWidth: CGFloat,
+        maxCellHeight: CGFloat,
+        spacing: CGFloat,
+        minimumWidthRatio: CGFloat?,
+        allowsVerticalOverflow: Bool
+    ) -> WidgetHeatmapLayout {
         let normalizedSpacing = max(0, spacing)
         let normalizedMaxWeeks = max(0, maxWeeks)
         guard normalizedMaxWeeks > 0, availableSize.width > 0, availableSize.height > 0 else {
@@ -359,7 +415,7 @@ enum WidgetHeatmapLayoutCalculator {
         let coverageWeeks = max(1, coverageDays / 7 + 1)
         let widthCapacity = maxWeekCapacity(
             width: availableSize.width,
-            minCellSize: max(0.1, minCellSize),
+            minCellSize: max(0.1, minCellWidth),
             spacing: normalizedSpacing
         )
         let weekCount = min(normalizedMaxWeeks, coverageWeeks, widthCapacity)
@@ -367,9 +423,54 @@ enum WidgetHeatmapLayoutCalculator {
 
         let widthFit = (availableSize.width - CGFloat(weekCount - 1) * normalizedSpacing) / CGFloat(weekCount)
         let heightFit = (availableSize.height - 6 * normalizedSpacing) / 7
-        let cellSize = max(0, min(maxCellSize, widthFit, heightFit))
-        guard cellSize > 0 else { return empty(spacing: normalizedSpacing) }
+        if minimumWidthRatio == nil,
+           allowsVerticalOverflow == false,
+           minCellWidth == minCellHeight,
+           maxCellWidth == maxCellHeight {
+            let cellSize = max(0, min(maxCellWidth, widthFit, heightFit))
+            guard cellSize > 0 else { return empty(spacing: normalizedSpacing) }
+            return makeLayout(
+                weekCount: weekCount,
+                cellWidth: cellSize,
+                cellHeight: cellSize,
+                spacing: normalizedSpacing,
+                values: values,
+                reference: reference,
+                referenceSunday: referenceSunday
+            )
+        }
+        let targetWidthFit: CGFloat
+        if let minimumWidthRatio {
+            let boundedRatio = max(0, min(1, minimumWidthRatio))
+            targetWidthFit = (availableSize.width * boundedRatio - CGFloat(weekCount - 1) * normalizedSpacing) / CGFloat(weekCount)
+        } else {
+            targetWidthFit = 0
+        }
+        let cellWidth = max(0, min(maxCellWidth, widthFit, max(minCellWidth, targetWidthFit)))
+        let unconstrainedCellHeight = allowsVerticalOverflow ? max(minCellHeight, heightFit) : heightFit
+        let cellHeight = max(0, min(maxCellHeight, unconstrainedCellHeight))
+        guard cellWidth > 0, cellHeight > 0 else { return empty(spacing: normalizedSpacing) }
 
+        return makeLayout(
+            weekCount: weekCount,
+            cellWidth: cellWidth,
+            cellHeight: cellHeight,
+            spacing: normalizedSpacing,
+            values: values,
+            reference: reference,
+            referenceSunday: referenceSunday
+        )
+    }
+
+    private static func makeLayout(
+        weekCount: Int,
+        cellWidth: CGFloat,
+        cellHeight: CGFloat,
+        spacing: CGFloat,
+        values: [Date: Int],
+        reference: Date,
+        referenceSunday: Date
+    ) -> WidgetHeatmapLayout {
         let gridStart = calendar.date(byAdding: .day, value: -(weekCount - 1) * 7, to: referenceSunday) ?? referenceSunday
         var cells: [WidgetHeatmapCell] = []
         cells.reserveCapacity(weekCount * 7)
@@ -385,8 +486,9 @@ enum WidgetHeatmapLayoutCalculator {
 
         return WidgetHeatmapLayout(
             weekCount: weekCount,
-            cellSize: cellSize,
-            spacing: normalizedSpacing,
+            cellWidth: cellWidth,
+            cellHeight: cellHeight,
+            spacing: spacing,
             cells: cells,
             startDate: cells.first?.date,
             endDate: cells.last(where: { !$0.isFuture })?.date
@@ -426,7 +528,8 @@ enum WidgetHeatmapLayoutCalculator {
     private static func empty(spacing: CGFloat) -> WidgetHeatmapLayout {
         WidgetHeatmapLayout(
             weekCount: 0,
-            cellSize: 0,
+            cellWidth: 0,
+            cellHeight: 0,
             spacing: spacing,
             cells: [],
             startDate: nil,

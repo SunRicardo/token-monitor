@@ -493,7 +493,22 @@ struct TokenMonitorWidgetView: View {
     }
 
     private func largeOverview(_ snapshot: WidgetSnapshot, model: WidgetViewModel) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        ViewThatFits(in: .vertical) {
+            largeOverviewContent(snapshot, model: model, quotaLimit: 3, modelLimit: 2, showsMoreRows: true)
+            largeOverviewContent(snapshot, model: model, quotaLimit: 2, modelLimit: 2, showsMoreRows: true)
+            largeOverviewContent(snapshot, model: model, quotaLimit: 1, modelLimit: 1, showsMoreRows: false)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func largeOverviewContent(
+        _ snapshot: WidgetSnapshot,
+        model: WidgetViewModel,
+        quotaLimit: Int,
+        modelLimit: Int,
+        showsMoreRows: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
             Link(destination: TokenMonitorWidgetConfiguration.url(for: .overview)) {
                 compactPanel {
                     VStack(alignment: .leading, spacing: 3) {
@@ -504,17 +519,17 @@ struct TokenMonitorWidgetView: View {
                 }
             }
             .buttonStyle(.plain)
-            largeQuotaPreview(snapshot)
+            largeQuotaPreview(snapshot, limit: quotaLimit, showsMoreRows: showsMoreRows)
             Link(destination: TokenMonitorWidgetConfiguration.url(for: .models)) {
                 compactPanel {
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 1) {
                         sectionLabel("模型")
-                        let rows = modelOverviewRows(snapshot, limit: 2)
+                        let rows = modelOverviewRows(snapshot, limit: modelLimit, showsMoreRows: showsMoreRows)
                         if rows.isEmpty {
                             emptyMessage("暂无数据")
                         } else {
                             ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
-                                largeOverviewRowText(row, isMore: row.hasPrefix("另有"))
+                                LargeOverviewListRow(label: row.label, value: row.value, style: row.style)
                             }
                         }
                     }
@@ -522,18 +537,7 @@ struct TokenMonitorWidgetView: View {
             }
             .buttonStyle(.plain)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    }
-
-    private let largeOverviewRowSize: CGFloat = 11
-
-    private func largeOverviewRowText(_ text: String, isMore: Bool) -> some View {
-        Text(text)
-            .font(.system(size: largeOverviewRowSize, weight: isMore ? .regular : .medium))
-            .foregroundStyle(isMore ? .tertiary : .primary)
-            .lineLimit(1)
-            .minimumScaleFactor(0.72)
-            .truncationMode(.tail)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     private func quotaSummary(_ snapshot: WidgetSnapshot) -> String {
@@ -542,30 +546,23 @@ struct TokenMonitorWidgetView: View {
         return "\(label) \(WidgetFormat.quotaValue(provider))"
     }
 
-    private func largeQuotaPreview(_ snapshot: WidgetSnapshot) -> some View {
+    private func largeQuotaPreview(_ snapshot: WidgetSnapshot, limit: Int, showsMoreRows: Bool) -> some View {
         Link(destination: TokenMonitorWidgetConfiguration.url(for: .quota)) {
             compactPanel {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 1) {
                     sectionLabel("额度")
                     if snapshot.quota.isEmpty {
                         emptyMessage("未配置额度来源")
                     } else {
-                        ForEach(Array(sortedQuotaProviders(snapshot).prefix(3))) { provider in
-                            HStack(spacing: 6) {
-                                Text(WidgetFormat.provider(provider.provider))
-                                    .font(.system(size: largeOverviewRowSize, weight: .medium))
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.72)
-                                Spacer(minLength: 3)
-                                Text(WidgetFormat.quotaValue(provider))
-                                    .font(.system(size: largeOverviewRowSize, weight: .medium, design: .monospaced))
-                                    .foregroundStyle(provider.status == "ok" ? .primary : .secondary)
-                                    .lineLimit(1)
-                                    .minimumScaleFactor(0.72)
-                            }
+                        ForEach(Array(sortedQuotaProviders(snapshot).prefix(max(0, limit)))) { provider in
+                            LargeOverviewListRow(
+                                label: WidgetFormat.provider(provider.provider),
+                                value: WidgetFormat.quotaValue(provider),
+                                style: provider.status == "ok" ? .primary : .secondary
+                            )
                         }
-                        if snapshot.quota.count > 3 {
-                            largeOverviewRowText("另有 \(snapshot.quota.count - 3) 项", isMore: true)
+                        if showsMoreRows, snapshot.quota.count > limit {
+                            LargeOverviewListRow(label: "另有 \(snapshot.quota.count - limit) 项", value: "", style: .more)
                         }
                     }
                 }
@@ -586,12 +583,16 @@ struct TokenMonitorWidgetView: View {
         }
     }
 
-    private func modelOverviewRows(_ snapshot: WidgetSnapshot, limit: Int) -> [String] {
-        let rows = Array(snapshot.models.prefix(limit)).map {
-            "\($0.displayName) · \(WidgetFormat.tokens($0.totalTokens, style: snapshot.presentation.numberStyle))"
+    private func modelOverviewRows(_ snapshot: WidgetSnapshot, limit: Int, showsMoreRows: Bool = true) -> [LargeOverviewListRow.Model] {
+        let rows = Array(snapshot.models.prefix(max(0, limit))).map {
+            LargeOverviewListRow.Model(
+                label: $0.displayName,
+                value: WidgetFormat.tokens($0.totalTokens, style: snapshot.presentation.numberStyle),
+                style: .primary
+            )
         }
-        if snapshot.models.count > limit {
-            return rows + ["另有 \(snapshot.models.count - limit) 项"]
+        if showsMoreRows, snapshot.models.count > limit {
+            return rows + [LargeOverviewListRow.Model(label: "另有 \(snapshot.models.count - limit) 项", value: "", style: .more)]
         }
         return rows
     }
@@ -829,25 +830,15 @@ struct TokenMonitorWidgetView: View {
         context: WidgetContentContext,
         density: WidgetContentDensity
     ) -> some View {
+        if context.layout == .medium {
+            return AnyView(mediumActivityView(snapshot, context: context, density: density))
+        }
+
         let spec = activityLayout(snapshot, context: context, density: density)
 
-        return Group {
+        return AnyView(Group {
             if spec.weekCount == 0 {
                 emptyMessage("暂无活动数据")
-            } else if context.layout == .medium {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        primary("\(spec.activeDays)", size: density == .summary ? 20 : 24)
-                        secondary("近 \(spec.weekCount) 周活跃天数")
-                    }
-                    ActivityHeatmap(layout: spec)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                    if density == .regular {
-                        secondary(activityDateRangeText(spec))
-                    } else if density == .compact {
-                        secondary("近 \(spec.weekCount) 周")
-                    }
-                }
             } else {
                 VStack(alignment: .leading, spacing: density == .summary ? 4 : 6) {
                     if context.layout == .small {
@@ -878,7 +869,45 @@ struct TokenMonitorWidgetView: View {
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .topLeading))
+    }
+
+    private func mediumActivityView(
+        _ snapshot: WidgetSnapshot,
+        context: WidgetContentContext,
+        density: WidgetContentDensity
+    ) -> some View {
+        let plan = WidgetMediumActivityLayoutPlan.make(availableSize: context.size)
+        let spec = WidgetHeatmapLayoutCalculator.make(
+            days: snapshot.activity.days,
+            referenceDate: entry.date,
+            availableSize: CGSize(width: plan.heatmapWidth, height: context.size.height),
+            maxWeeks: 14,
+            minCellSize: metrics.activityMinCellSize,
+            maxCellSize: metrics.activityMaxCellSize,
+            spacing: metrics.activityCellSpacing
+        )
+
+        return Group {
+            if spec.weekCount == 0 {
+                emptyMessage("暂无活动数据")
+            } else {
+                HStack(alignment: .center, spacing: plan.spacing) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        primary("\(spec.activeDays)", size: density == .summary ? 22 : 26)
+                        secondary("近 \(spec.weekCount) 周活跃天数")
+                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.76)
+                    .frame(width: plan.summaryWidth, height: context.size.height, alignment: .center)
+
+                    ActivityHeatmap(layout: spec)
+                        .frame(width: plan.heatmapWidth, height: context.size.height, alignment: .center)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     }
 
     private func activityLayout(
@@ -891,22 +920,21 @@ struct TokenMonitorWidgetView: View {
         case .medium: 14
         case .large: 26
         }
-        let labelReserve: CGFloat = density == .regular ? 14 : density == .compact ? 12 : 0
+        let labelReserve: CGFloat = context.layout == .medium ? 0 : density == .regular ? 14 : density == .compact ? 12 : 0
         let summaryReserve: CGFloat = switch context.layout {
         case .small: 16
-        case .medium: 16
+        case .medium: 28
         case .large: 28
         }
         let heatmapWidth = max(0, context.size.width)
         let heatmapHeight = max(0, context.size.height - labelReserve - summaryReserve - 6)
-        let minCell = context.layout == .medium ? 12 : metrics.activityMinCellSize
 
         return WidgetHeatmapLayoutCalculator.make(
             days: snapshot.activity.days,
             referenceDate: entry.date,
             availableSize: CGSize(width: heatmapWidth, height: heatmapHeight),
             maxWeeks: maxWeeks,
-            minCellSize: minCell,
+            minCellSize: metrics.activityMinCellSize,
             maxCellSize: metrics.activityMaxCellSize,
             spacing: metrics.activityCellSpacing
         )
@@ -1018,6 +1046,60 @@ struct TokenMonitorWidgetView: View {
 
 }
 
+private struct LargeOverviewListRow: View {
+    enum Style: Equatable {
+        case primary
+        case secondary
+        case more
+    }
+
+    struct Model: Equatable {
+        let label: String
+        let value: String
+        let style: Style
+    }
+
+    let label: String
+    let value: String
+    let style: Style
+
+    private let rowHeight: CGFloat = 16
+    private let fontSize: CGFloat = 10
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 4) {
+            Text(label)
+                .font(.system(size: fontSize, weight: .medium))
+                .foregroundStyle(foregroundStyle)
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+                .truncationMode(.tail)
+            Spacer(minLength: 2)
+            if !value.isEmpty {
+                Text(value)
+                    .font(.system(size: fontSize, weight: .medium, design: .monospaced))
+                    .foregroundStyle(valueForegroundStyle)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .truncationMode(.tail)
+            }
+        }
+        .frame(height: rowHeight, alignment: .center)
+    }
+
+    private var foregroundStyle: HierarchicalShapeStyle {
+        style == .more ? .tertiary : .primary
+    }
+
+    private var valueForegroundStyle: HierarchicalShapeStyle {
+        switch style {
+        case .primary: .primary
+        case .secondary: .secondary
+        case .more: .tertiary
+        }
+    }
+}
+
 struct ActivityHeatmap: View {
     let layout: WidgetHeatmapLayout
 
@@ -1030,9 +1112,9 @@ struct ActivityHeatmap: View {
                     GridRow {
                         ForEach(0..<layout.weekCount, id: \.self) { week in
                             if let cell = layout.cell(week: week, weekday: weekday) {
-                                RoundedRectangle(cornerRadius: min(2, layout.cellSize / 3))
+                                RoundedRectangle(cornerRadius: min(2, min(layout.cellWidth, layout.cellHeight) / 3))
                                     .fill(cell.isFuture ? Color.clear : activityColor(cell.intensity))
-                                    .frame(width: layout.cellSize, height: layout.cellSize)
+                                    .frame(width: layout.cellWidth, height: layout.cellHeight)
                                     .accessibilityHidden(cell.isFuture)
                             }
                         }

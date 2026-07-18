@@ -123,10 +123,10 @@ test('Widget build provenance fields are injected into the extension Info.plist'
   }
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_KIND = com\.tokenmonitor\.dashboard;/);
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_GIT_REVISION = unknown;/);
-  assert.match(widgetBuildSource, /const WIDGET_UI_VERSION = 13;/);
+  assert.match(widgetBuildSource, /const WIDGET_UI_VERSION = 16;/);
   assert.match(widgetBuildSource, /const WIDGET_SCHEMA_VERSION = 4;/);
   assert.match(widgetInfo, /<key>TMWidgetSchemaVersion<\/key>\s*<string>4<\/string>/);
-  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>13<\/string>/);
+  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>16<\/string>/);
 });
 
 test('Widget layout uses system margins and fixed scaffold metrics without changing kind', () => {
@@ -186,6 +186,10 @@ test('Activity layout adapts density and heatmap size without clipping the scaff
   assert.match(widgetSource, /case \.small: 16/);
   assert.match(widgetSource, /case \.medium: 14/);
   assert.match(widgetSource, /case \.large: 26/);
+  assert.match(widgetSource, /private func mediumActivityView\(/);
+  assert.match(widgetSource, /WidgetMediumActivityLayoutPlan\.make\(availableSize: context\.size\)/);
+  assert.match(widgetSource, /HStack\(alignment: \.center, spacing: plan\.spacing\)/);
+  assert.match(widgetSource, /CGSize\(width: plan\.heatmapWidth, height: context\.size\.height\)/);
   assert.match(widgetSource, /WidgetHeatmapLayoutCalculator\.make\(/);
   assert.match(widgetSource, /Text\("\\\(spec\.activeDays\) 天"\)/);
   assert.match(widgetSource, /struct ActivityHeatmap: View/);
@@ -193,19 +197,60 @@ test('Activity layout adapts density and heatmap size without clipping the scaff
   assert.match(widgetSource, /ForEach\(0\.\.<7, id: \\.self\)/);
   assert.match(widgetSource, /GridRow \{/);
   assert.match(widgetSource, /\.frame\(width: layout\.renderedWidth, height: layout\.renderedHeight/);
+  assert.match(widgetViewModelSource, /let cellWidth: CGFloat/);
+  assert.match(widgetViewModelSource, /let cellHeight: CGFloat/);
+  assert.match(widgetViewModelSource, /struct WidgetMediumActivityLayoutPlan: Equatable/);
+  assert.match(widgetViewModelSource, /let summaryWidth: CGFloat/);
+  assert.match(widgetViewModelSource, /let heatmapWidth: CGFloat/);
+  assert.match(widgetSource, /\.frame\(width: layout\.cellWidth, height: layout\.cellHeight\)/);
+  assert.doesNotMatch(widgetSource, /minimumWidthRatio:\s*0\.65/);
+  assert.doesNotMatch(widgetSource, /allowsVerticalOverflow:\s*true/);
   assert.doesNotMatch(widgetSource, /LazyVGrid/);
   assert.doesNotMatch(widgetSource, /\.offset\(x:\s*-/);
   assert.doesNotMatch(widgetSource, /\.padding\(\.leading,\s*-/);
   assert.doesNotMatch(widgetSource, /rotationEffect/);
 });
 
+test('Large overview quota and model rows share the same row component', () => {
+  const largeOverviewStart = widgetSource.indexOf('private func largeOverview(');
+  const largeOverviewEnd = widgetSource.indexOf('\n    private func quotaSummary', largeOverviewStart);
+  const largeOverviewSource = widgetSource.slice(largeOverviewStart, largeOverviewEnd);
+  const modelRowsStart = widgetSource.indexOf('private func modelOverviewRows');
+  const modelRowsEnd = widgetSource.indexOf('\n    private func summaryLinkRow', modelRowsStart);
+  const modelRowsSource = widgetSource.slice(modelRowsStart, modelRowsEnd);
+
+  assert.match(widgetSource, /private struct LargeOverviewListRow: View/);
+  assert.match(widgetSource, /struct Model: Equatable/);
+  assert.match(widgetSource, /private let rowHeight: CGFloat = 16/);
+  assert.match(widgetSource, /private let fontSize: CGFloat = 10/);
+  assert.match(largeOverviewSource, /ViewThatFits\(in: \.vertical\)/);
+  assert.match(largeOverviewSource, /quotaLimit: 3, modelLimit: 2, showsMoreRows: true/);
+  assert.match(largeOverviewSource, /quotaLimit: 2, modelLimit: 2, showsMoreRows: true/);
+  assert.match(largeOverviewSource, /quotaLimit: 1, modelLimit: 1, showsMoreRows: false/);
+  assert.match(widgetSource, /\.font\(\.system\(size: fontSize, weight: \.medium\)\)/);
+  assert.match(widgetSource, /\.font\(\.system\(size: fontSize, weight: \.medium, design: \.monospaced\)\)/);
+  assert.match(widgetSource, /\.frame\(height: rowHeight, alignment: \.center\)/);
+  assert.match(largeOverviewSource, /LargeOverviewListRow\(label: row\.label, value: row\.value, style: row\.style\)/);
+  assert.ok((widgetSource.match(/LargeOverviewListRow\(/g) || []).length >= 3);
+  assert.match(modelRowsSource, /LargeOverviewListRow\.Model/);
+  assert.doesNotMatch(modelRowsSource, / · /);
+});
+
 test('Quota and model pages derive row density from measured content height', () => {
+  const quotaStart = widgetSource.indexOf('private func quota(_ snapshot: WidgetSnapshot, context: WidgetContentContext)');
+  const quotaEnd = widgetSource.indexOf('\n    private func models', quotaStart);
+  const modelStart = widgetSource.indexOf('private func models(_ snapshot: WidgetSnapshot, context: WidgetContentContext)');
+  const modelEnd = widgetSource.indexOf('\n    private func activity', modelStart);
+  const quotaPageSource = widgetSource.slice(quotaStart, quotaEnd);
+  const modelPageSource = widgetSource.slice(modelStart, modelEnd);
+
   assert.match(widgetViewModelSource, /enum WidgetListCapacity/);
   assert.match(widgetViewModelSource, /for density in \[WidgetContentDensity\.regular, \.compact, \.summary\]/);
   assert.match(widgetViewModelSource, /availableForRows/);
   assert.equal((widgetSource.match(/WidgetListCapacity\.plan\(/g) || []).length, 2);
   assert.equal((widgetSource.match(/availableHeight: context\.size\.height/g) || []).length, 3);
-  assert.doesNotMatch(widgetSource, /quotaLimit|modelLimit/);
+  assert.doesNotMatch(quotaPageSource, /quotaLimit|modelLimit/);
+  assert.doesNotMatch(modelPageSource, /quotaLimit|modelLimit/);
 });
 
 test('macOS Widget integration leaves non-macOS packaging sections unchanged', () => {

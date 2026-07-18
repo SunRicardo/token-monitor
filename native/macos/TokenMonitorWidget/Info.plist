@@ -35,9 +35,9 @@
   <string>$(TOKEN_MONITOR_WIDGET_GIT_REVISION)</string>
   <key>TMWidgetKind</key>
   <string>$(TOKEN_MONITOR_WIDGET_KIND)</string>
-	<key>TMWidgetSchemaVersion</key>
-	<string>4</string>
-		<key>TMWidgetUIVersion</key>
-		<string>13</string>
+  <key>TMWidgetSchemaVersion</key>
+  <string>4</string>
+  <key>TMWidgetUIVersion</key>
+  <string>16</string>
 </dict>
 </plist>

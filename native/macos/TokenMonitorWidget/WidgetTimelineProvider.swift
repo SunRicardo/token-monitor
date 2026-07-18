@@ -38,7 +38,7 @@ struct TokenMonitorTimelineProvider: AppIntentTimelineProvider {
         guard let scope = WidgetFamilyScope(widgetFamily: family) else {
             return configuration.page
         }
-        return WidgetPresentationStateStore.shared.selectedPage(for: scope) ?? configuration.page
+        return WidgetPresentationStateStore.shared.effectivePage(configuredPage: configuration.page, for: scope)
     }
 }
 
