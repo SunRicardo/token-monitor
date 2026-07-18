@@ -495,6 +495,27 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         XCTAssertGreaterThan(overCapacity.hiddenCount, 0)
     }
 
+    func testLargeOverviewShowsMax2Models() throws {
+        let snapshot = try decode("""
+        {"schemaVersion":2,"generatedAt":"2026-07-17T09:00:00Z","overview":{"totalTokens":10},"models":[{"displayName":"A","totalTokens":7,"sharePercent":70},{"displayName":"B","totalTokens":2,"sharePercent":20},{"displayName":"C","totalTokens":1,"sharePercent":10},{"displayName":"D","totalTokens":0,"sharePercent":0},{"displayName":"E","totalTokens":0,"sharePercent":0}],"status":{"noData":false}}
+        """)
+        // modelOverviewRows with limit:2 returns 2 models + "另有 N 项" when count > 2
+        let limit = 2
+        let models = Array(snapshot.models.prefix(limit))
+        XCTAssertEqual(models.count, 2)
+        XCTAssertTrue(snapshot.models.count > limit) // will show "另有 N 项"
+        XCTAssertEqual(snapshot.models.count - limit, 3) // "另有 3 项"
+    }
+
+    func testLargeOverviewShowsAllModelsWhenFewerThanLimit() throws {
+        let snapshot = try decode("""
+        {"schemaVersion":2,"generatedAt":"2026-07-17T09:00:00Z","overview":{"totalTokens":10},"models":[{"displayName":"X","totalTokens":7,"sharePercent":70},{"displayName":"Y","totalTokens":3,"sharePercent":30}],"status":{"noData":false}}
+        """)
+        let limit = 2
+        XCTAssertFalse(snapshot.models.count > limit) // no "另有 N 项"
+        XCTAssertEqual(snapshot.models.count, 2)
+    }
+
     func testLargeHeatmapCellSizeGreaterThan12() {
         let reference = try! utcDate("2026-07-17")
         let days = try! continuousActivityDays(count: 90, ending: "2026-07-17")
@@ -655,19 +676,37 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
 
     func testMediumHeatmapUsesFullWidth() throws {
         let reference = try utcDate("2026-07-17")
-        let days = try continuousActivityDays(count: 90, ending: "2026-07-17")
-        // Simulate medium layout: full width, no 82pt subtraction
-        let fullWidthLayout = WidgetHeatmapLayoutCalculator.make(
+        let days = try continuousActivityDays(count: 180, ending: "2026-07-17")
+        // Medium should now use maxWeeks=26 and full width
+        let layout = WidgetHeatmapLayoutCalculator.make(
             days: days,
             referenceDate: reference,
             availableSize: CGSize(width: 330, height: 80),
-            maxWeeks: 14,
+            maxWeeks: 26,
             minCellSize: 5,
             maxCellSize: 20,
             spacing: 2
         )
-        // With full width, should fit more weeks or have larger cells
-        XCTAssertGreaterThan(fullWidthLayout.weekCount, 0)
-        XCTAssertLessThanOrEqual(fullWidthLayout.renderedWidth, 330.001)
+        XCTAssertGreaterThan(layout.weekCount, 14) // More than old 14-week cap
+        XCTAssertLessThanOrEqual(layout.renderedWidth, 330.001)
+        XCTAssertEqual(layout.cells.count, layout.weekCount * 7)
+    }
+
+    func testSmallHeatmapShowsMoreWeeksThanBefore() throws {
+        let reference = try utcDate("2026-07-17")
+        let days = try continuousActivityDays(count: 120, ending: "2026-07-17")
+        // Small should now use maxWeeks=16 and full width
+        let layout = WidgetHeatmapLayoutCalculator.make(
+            days: days,
+            referenceDate: reference,
+            availableSize: CGSize(width: 155, height: 70),
+            maxWeeks: 16,
+            minCellSize: 5,
+            maxCellSize: 16,
+            spacing: 2
+        )
+        XCTAssertGreaterThan(layout.weekCount, 6) // More than old 6-week cap
+        XCTAssertLessThanOrEqual(layout.renderedWidth, 155.001)
+        XCTAssertEqual(layout.cells.count, layout.weekCount * 7)
     }
 }

@@ -123,10 +123,10 @@ test('Widget build provenance fields are injected into the extension Info.plist'
   }
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_KIND = com\.tokenmonitor\.dashboard;/);
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_GIT_REVISION = unknown;/);
-  assert.match(widgetBuildSource, /const WIDGET_UI_VERSION = 11;/);
+  assert.match(widgetBuildSource, /const WIDGET_UI_VERSION = 12;/);
   assert.match(widgetBuildSource, /const WIDGET_SCHEMA_VERSION = 4;/);
   assert.match(widgetInfo, /<key>TMWidgetSchemaVersion<\/key>\s*<string>4<\/string>/);
-  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>11<\/string>/);
+  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>12<\/string>/);
 });
 
 test('Widget layout uses system margins and fixed scaffold metrics without changing kind', () => {
@@ -183,8 +183,8 @@ test('Activity layout adapts density and heatmap size without clipping the scaff
   const activitySource = widgetSource.slice(activityStart, activityEnd);
   assert.match(activitySource, /adaptiveContent \{/);
   assert.match(widgetSource, /private func activityLayout\(/);
-  assert.match(widgetSource, /case \.small: 6/);
-  assert.match(widgetSource, /case \.medium: 14/);
+  assert.match(widgetSource, /case \.small: 16/);
+  assert.match(widgetSource, /case \.medium: 26/);
   assert.match(widgetSource, /case \.large: 26/);
   assert.match(widgetSource, /WidgetHeatmapLayoutCalculator\.make\(/);
   assert.match(widgetSource, /Text\("\\\(spec\.activeDays\) 天"\)/);
