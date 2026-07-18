@@ -947,8 +947,10 @@ struct TokenMonitorWidgetView: View {
     }
 
     private func selectedActivityDay(in snapshot: WidgetSnapshot) -> WidgetActivityDay? {
-        guard let selectedDate = entry.selectedActivityDate else { return nil }
-        return snapshot.activity.days.first(where: { $0.date == selectedDate })
+        WidgetActivitySelection.detailDay(
+            selectedDate: entry.selectedActivityDate,
+            days: snapshot.activity.days
+        )
     }
 
     private func activityLayout(
@@ -1155,7 +1157,7 @@ struct ActivityHeatmap: View {
                     GridRow {
                         ForEach(0..<layout.weekCount, id: \.self) { week in
                             if let cell = layout.cell(week: week, weekday: weekday) {
-                                if let family, cell.hasActivityData, !cell.isFuture {
+                                if let family, cell.isSelectable {
                                     Button(intent: SelectActivityDayIntent(family: family, date: cell.date)) {
                                         ActivityHeatmapCell(
                                             cell: cell,
@@ -1176,7 +1178,7 @@ struct ActivityHeatmap: View {
                                         color: activityColor(cell.intensity),
                                         isSelected: false
                                     )
-                                    .accessibilityHidden(cell.isFuture || !cell.hasActivityData)
+                                    .accessibilityHidden(!cell.isSelectable)
                                 }
                             }
                         }

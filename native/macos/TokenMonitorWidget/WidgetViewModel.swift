@@ -320,7 +320,7 @@ struct WidgetHeatmapCell: Equatable, Identifiable {
     let date: String
     let intensity: Int
     let totalTokens: Int
-    let hasActivityData: Bool
+    let isSelectable: Bool
     let isFuture: Bool
 
     var id: String { date }
@@ -442,6 +442,7 @@ enum WidgetHeatmapLayoutCalculator {
                 cellHeight: cellSize,
                 spacing: normalizedSpacing,
                 values: values,
+                earliest: earliest,
                 reference: reference,
                 referenceSunday: referenceSunday
             )
@@ -464,6 +465,7 @@ enum WidgetHeatmapLayoutCalculator {
             cellHeight: cellHeight,
             spacing: normalizedSpacing,
             values: values,
+            earliest: earliest,
             reference: reference,
             referenceSunday: referenceSunday
         )
@@ -475,6 +477,7 @@ enum WidgetHeatmapLayoutCalculator {
         cellHeight: CGFloat,
         spacing: CGFloat,
         values: [Date: WidgetActivityDay],
+        earliest: Date,
         reference: Date,
         referenceSunday: Date
     ) -> WidgetHeatmapLayout {
@@ -489,7 +492,7 @@ enum WidgetHeatmapLayoutCalculator {
                 date: format(date),
                 intensity: isFuture ? 0 : activityDay?.intensity ?? 0,
                 totalTokens: isFuture ? 0 : activityDay?.totalTokens ?? 0,
-                hasActivityData: !isFuture && activityDay != nil,
+                isSelectable: !isFuture && date >= earliest,
                 isFuture: isFuture
             ))
         }

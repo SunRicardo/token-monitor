@@ -296,6 +296,10 @@ enum WidgetActivityDate {
     }()
 
     static func isValid(_ value: String) -> Bool {
+        date(from: value) != nil
+    }
+
+    static func date(from value: String) -> Date? {
         let parts = value.split(separator: "-", omittingEmptySubsequences: false)
         guard parts.count == 3,
               parts[0].count == 4,
@@ -304,9 +308,24 @@ enum WidgetActivityDate {
               let year = Int(parts[0]),
               let month = Int(parts[1]),
               let day = Int(parts[2]),
-              let date = calendar.date(from: DateComponents(year: year, month: month, day: day)) else { return false }
+              let date = calendar.date(from: DateComponents(year: year, month: month, day: day)) else { return nil }
         let components = calendar.dateComponents([.year, .month, .day], from: date)
-        return components.year == year && components.month == month && components.day == day
+        guard components.year == year && components.month == month && components.day == day else { return nil }
+        return date
+    }
+
+    static func startOfDay(_ date: Date) -> Date {
+        calendar.startOfDay(for: date)
+    }
+
+    static func sunday(for date: Date) -> Date {
+        let normalized = startOfDay(date)
+        let weekday = calendar.component(.weekday, from: normalized)
+        return calendar.date(byAdding: .day, value: -(weekday - 1), to: normalized) ?? normalized
+    }
+
+    static func addingDays(_ days: Int, to date: Date) -> Date {
+        calendar.date(byAdding: .day, value: days, to: date) ?? date
     }
 }
 
@@ -314,15 +333,41 @@ enum WidgetActivitySelection {
     static func resolvedDate(
         days: [WidgetActivityDay],
         family: WidgetFamilyScope?,
+        referenceDate: Date,
         store: WidgetPresentationStateStoring
     ) -> String? {
         guard let family, family != .small else { return nil }
+        let datedDays = days.compactMap { WidgetActivityDate.date(from: $0.date) }
         guard let selectedDate = store.selectedActivityDay(for: family),
-              days.contains(where: { $0.date == selectedDate }) else {
+              let selected = WidgetActivityDate.date(from: selectedDate),
+              let earliest = datedDays.min() else {
+            store.clearSelectedActivityDay(for: family)
+            return nil
+        }
+        let maxWeeks = family == .medium ? 14 : 26
+        let reference = WidgetActivityDate.startOfDay(referenceDate)
+        let gridStart = WidgetActivityDate.addingDays(
+            -(maxWeeks - 1) * 7,
+            to: WidgetActivityDate.sunday(for: reference)
+        )
+        guard selected >= max(earliest, gridStart), selected <= reference else {
             store.clearSelectedActivityDay(for: family)
             return nil
         }
         return selectedDate
+    }
+
+    static func detailDay(
+        selectedDate: String?,
+        days: [WidgetActivityDay]
+    ) -> WidgetActivityDay? {
+        guard let selectedDate, WidgetActivityDate.isValid(selectedDate) else { return nil }
+        let matches = days.filter { $0.date == selectedDate }
+        return WidgetActivityDay(
+            date: selectedDate,
+            intensity: matches.map(\.intensity).max() ?? 0,
+            totalTokens: matches.map(\.totalTokens).max() ?? 0
+        )
     }
 }
 

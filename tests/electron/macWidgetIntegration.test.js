@@ -123,10 +123,10 @@ test('Widget build provenance fields are injected into the extension Info.plist'
   }
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_KIND = com\.tokenmonitor\.dashboard;/);
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_GIT_REVISION = unknown;/);
-  assert.match(widgetBuildSource, /const WIDGET_UI_VERSION = 18;/);
+  assert.match(widgetBuildSource, /const WIDGET_UI_VERSION = 19;/);
   assert.match(widgetBuildSource, /const WIDGET_SCHEMA_VERSION = 5;/);
   assert.match(widgetInfo, /<key>TMWidgetSchemaVersion<\/key>\s*<string>5<\/string>/);
-  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>18<\/string>/);
+  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>19<\/string>/);
 });
 
 test('Widget layout uses system margins and fixed scaffold metrics without changing kind', () => {
@@ -224,7 +224,8 @@ test('Medium and Large activity cells are App Intent buttons with stable selecti
   assert.match(widgetIntentSource, /static var openAppWhenRun: Bool \{ false \}/);
   assert.match(widgetIntentSource, /widget\.presentation\.activity-day/);
   assert.match(heatmapSource, /Button\(intent: SelectActivityDayIntent\(family: family, date: cell\.date\)\)/);
-  assert.match(heatmapSource, /cell\.hasActivityData, !cell\.isFuture/);
+  assert.match(heatmapSource, /if let family, cell\.isSelectable/);
+  assert.doesNotMatch(heatmapSource, /hasActivityData/);
   assert.match(heatmapSource, /\.buttonStyle\(\.plain\)/);
   assert.match(heatmapSource, /\.overlay \{[\s\S]*\.strokeBorder\(\.primary, lineWidth: 2\)/);
   assert.doesNotMatch(heatmapSource, /Link\(/, 'cell buttons must not be nested in links');
@@ -235,6 +236,7 @@ test('Medium and Large activity cells are App Intent buttons with stable selecti
   assert.match(widgetSource, /private func largeActivityCaptionText\([\s\S]*return activityDateRangeText\(layout\)/);
   assert.doesNotMatch(widgetSource, /selectedDayDetailLine/);
   assert.match(widgetSource, /WidgetFormat\.tokens\(day\.totalTokens, style: snapshot\.presentation\.numberStyle\)/);
+  assert.match(widgetSource, /WidgetActivitySelection\.detailDay\(/);
   assert.doesNotMatch(widgetSource, /onHover|@State/);
 });
 

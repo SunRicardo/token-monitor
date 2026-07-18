@@ -14,11 +14,12 @@ struct TokenMonitorTimelineProvider: AppIntentTimelineProvider {
     }
 
     func snapshot(for configuration: TokenMonitorWidgetConfigurationIntent, in context: Context) async -> TokenMonitorEntry {
+        let now = Date()
         let period = currentPeriod()
         let page = effectivePage(for: configuration, family: context.family)
         let snapshot = currentSnapshot(period: period)
-        let selectedActivityDate = selectedActivityDate(in: snapshot, family: context.family)
-        return TokenMonitorEntry(date: Date(), snapshot: snapshot, page: page, period: period, selectedActivityDate: selectedActivityDate)
+        let selectedActivityDate = selectedActivityDate(in: snapshot, family: context.family, referenceDate: now)
+        return TokenMonitorEntry(date: now, snapshot: snapshot, page: page, period: period, selectedActivityDate: selectedActivityDate)
     }
 
     func timeline(for configuration: TokenMonitorWidgetConfigurationIntent, in context: Context) async -> Timeline<TokenMonitorEntry> {
@@ -26,7 +27,7 @@ struct TokenMonitorTimelineProvider: AppIntentTimelineProvider {
         let period = currentPeriod()
         let page = effectivePage(for: configuration, family: context.family)
         let snapshot = currentSnapshot(period: period)
-        let selectedActivityDate = selectedActivityDate(in: snapshot, family: context.family)
+        let selectedActivityDate = selectedActivityDate(in: snapshot, family: context.family, referenceDate: now)
         let entry = TokenMonitorEntry(date: now, snapshot: snapshot, page: page, period: period, selectedActivityDate: selectedActivityDate)
         return Timeline(entries: [entry], policy: .after(now.addingTimeInterval(15 * 60)))
     }
@@ -49,11 +50,13 @@ struct TokenMonitorTimelineProvider: AppIntentTimelineProvider {
     func selectedActivityDate(
         in snapshot: WidgetSnapshot?,
         family: WidgetFamily,
+        referenceDate: Date = Date(),
         store: WidgetPresentationStateStoring = WidgetPresentationStateStore.shared
     ) -> String? {
         WidgetActivitySelection.resolvedDate(
             days: snapshot?.activity.days ?? [],
             family: WidgetFamilyScope(widgetFamily: family),
+            referenceDate: referenceDate,
             store: store
         )
     }
