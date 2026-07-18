@@ -233,7 +233,12 @@ struct TokenMonitorWidgetView: View {
 
     private func overview(_ snapshot: WidgetSnapshot, context: WidgetContentContext) -> some View {
         let model = WidgetViewModel.make(snapshot: snapshot, page: .overview, layout: context.layout)
-        return adaptiveContent {
+
+        if context.layout == .large {
+            return AnyView(largeOverview(snapshot, model: model))
+        }
+
+        return AnyView(adaptiveContent {
             if context.layout == .small {
                 VStack(alignment: .leading, spacing: 6) {
                     primary(model.primaryValue, size: WidgetDesignTokens.smallPrimarySize)
@@ -243,7 +248,7 @@ struct TokenMonitorWidgetView: View {
                         .font(.system(size: WidgetDesignTokens.microSize, design: .monospaced))
                         .foregroundStyle(.tertiary)
                 }
-            } else if context.layout == .medium {
+            } else {
                 HStack(alignment: .top, spacing: WidgetDesignTokens.mediumGap) {
                     Link(destination: TokenMonitorWidgetConfiguration.url(for: .overview)) {
                         panel {
@@ -262,36 +267,6 @@ struct TokenMonitorWidgetView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .top)
                 }
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    Link(destination: TokenMonitorWidgetConfiguration.url(for: .overview)) {
-                        panel {
-                            VStack(alignment: .leading, spacing: 4) {
-                                sectionLabel("TOTAL TOKENS")
-                                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                    primary(snapshot.overview.totalTokens.formatted(.number.grouping(.automatic)), size: WidgetDesignTokens.largePrimarySize)
-                                    Text("≈ \(model.primaryValue)")
-                                        .font(.system(size: WidgetDesignTokens.secondarySize, weight: .medium, design: .monospaced))
-                                        .foregroundStyle(.secondary)
-                                }
-                                secondary(model.secondaryValue)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    largeQuotaPreview(snapshot)
-                    summaryLinkRow(title: "活跃天数", value: "\(snapshot.activity.activeDays)", page: .activity)
-                    summaryLinkSection(
-                        title: "模型",
-                        rows: modelOverviewRows(snapshot, limit: 5),
-                        page: .models
-                    )
-                    summaryLinkRow(
-                        title: "当前趋势",
-                        value: WidgetFormat.tokens(snapshot.trend.currentTokens, style: snapshot.presentation.numberStyle),
-                        page: .trend
-                    )
-                }
             }
         } compact: {
             if context.layout == .small {
@@ -302,7 +277,7 @@ struct TokenMonitorWidgetView: View {
                         .font(.system(size: WidgetDesignTokens.microSize, design: .monospaced))
                         .foregroundStyle(.tertiary)
                 }
-            } else if context.layout == .medium {
+            } else {
                 HStack(alignment: .top, spacing: 8) {
                     Link(destination: TokenMonitorWidgetConfiguration.url(for: .overview)) {
                         panel {
@@ -320,35 +295,14 @@ struct TokenMonitorWidgetView: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .top)
                 }
-            } else {
-                VStack(alignment: .leading, spacing: 7) {
-                    Link(destination: TokenMonitorWidgetConfiguration.url(for: .overview)) {
-                        panel {
-                            VStack(alignment: .leading, spacing: 3) {
-                                sectionLabel("TOTAL TOKENS")
-                                primary(model.primaryValue, size: 30)
-                                secondary(model.secondaryValue)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    summaryLinkRow(title: "Quota", value: quotaSummary(snapshot), page: .quota)
-                    summaryLinkSection(
-                        title: "模型",
-                        rows: modelOverviewRows(snapshot, limit: 2),
-                        page: .models
-                    )
-                }
             }
         } summary: {
             VStack(alignment: .leading, spacing: 4) {
-                primary(model.primaryValue, size: context.layout == .large ? 28 : 24)
+                primary(model.primaryValue, size: 24)
                 secondary(model.secondaryValue)
-                if context.layout != .small {
-                    summaryLinkRow(title: "Quota", value: quotaSummary(snapshot), page: .quota)
-                }
+                summaryLinkRow(title: "Quota", value: quotaSummary(snapshot), page: .quota)
             }
-        }
+        })
     }
 
     private func quota(_ snapshot: WidgetSnapshot, context: WidgetContentContext) -> some View {
@@ -530,6 +484,28 @@ struct TokenMonitorWidgetView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
+    private func largeOverview(_ snapshot: WidgetSnapshot, model: WidgetViewModel) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Link(destination: TokenMonitorWidgetConfiguration.url(for: .overview)) {
+                panel {
+                    VStack(alignment: .leading, spacing: 4) {
+                        sectionLabel("TOTAL TOKENS")
+                        primary(snapshot.overview.totalTokens.formatted(.number.grouping(.automatic)), size: WidgetDesignTokens.largePrimarySize)
+                        secondary(model.secondaryValue)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            largeQuotaPreview(snapshot)
+            summaryLinkSection(
+                title: "模型",
+                rows: modelOverviewRows(snapshot, limit: 3),
+                page: .models
+            )
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
     private func quotaSummary(_ snapshot: WidgetSnapshot) -> String {
         guard let provider = snapshot.quota.first else { return "未配置" }
         let label = WidgetFormat.provider(provider.provider)
@@ -544,7 +520,7 @@ struct TokenMonitorWidgetView: View {
                     if snapshot.quota.isEmpty {
                         emptyMessage("未配置额度来源")
                     } else {
-                        ForEach(Array(sortedQuotaProviders(snapshot).prefix(4))) { provider in
+                        ForEach(Array(sortedQuotaProviders(snapshot).prefix(3))) { provider in
                             HStack(spacing: 6) {
                                 Text(WidgetFormat.provider(provider.provider))
                                     .font(.system(size: 11, weight: .semibold))
@@ -558,8 +534,8 @@ struct TokenMonitorWidgetView: View {
                                     .minimumScaleFactor(0.72)
                             }
                         }
-                        if snapshot.quota.count > 4 {
-                            secondary("另有 \(snapshot.quota.count - 4) 项")
+                        if snapshot.quota.count > 3 {
+                            secondary("另有 \(snapshot.quota.count - 3) 项")
                         }
                     }
                 }
@@ -829,22 +805,18 @@ struct TokenMonitorWidgetView: View {
             if spec.weekCount == 0 {
                 emptyMessage("暂无活动数据")
             } else if context.layout == .medium {
-                HStack(alignment: .top, spacing: 10) {
-                    VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
                         primary("\(spec.activeDays)", size: density == .summary ? 20 : 24)
                         secondary("近 \(spec.weekCount) 周活跃天数")
                     }
-                    .frame(width: 72, alignment: .leading)
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        ActivityHeatmap(layout: spec)
-                        if density == .regular {
-                            secondary(activityDateRangeText(spec))
-                        } else if density == .compact {
-                            secondary("近 \(spec.weekCount) 周")
-                        }
+                    ActivityHeatmap(layout: spec)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                    if density == .regular {
+                        secondary(activityDateRangeText(spec))
+                    } else if density == .compact {
+                        secondary("近 \(spec.weekCount) 周")
                     }
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
             } else {
                 VStack(alignment: .leading, spacing: density == .summary ? 4 : 6) {
@@ -866,7 +838,7 @@ struct TokenMonitorWidgetView: View {
                     }
 
                     ActivityHeatmap(layout: spec)
-                        .frame(maxWidth: .infinity, alignment: context.layout == .large ? .center : context.layout == .small ? .center : .leading)
+                        .frame(maxWidth: .infinity, alignment: .center)
 
                     if density == .regular {
                         secondary(activityDateRangeText(spec))
@@ -892,12 +864,10 @@ struct TokenMonitorWidgetView: View {
         let labelReserve: CGFloat = density == .regular ? 14 : density == .compact ? 12 : 0
         let summaryReserve: CGFloat = switch context.layout {
         case .small: 16
-        case .medium: 0
+        case .medium: 16
         case .large: 28
         }
-        let heatmapWidth = context.layout == .medium
-            ? max(0, context.size.width - 82)
-            : max(0, context.size.width)
+        let heatmapWidth = max(0, context.size.width)
         let heatmapHeight = max(0, context.size.height - labelReserve - summaryReserve - 6)
 
         return WidgetHeatmapLayoutCalculator.make(

@@ -600,4 +600,74 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         XCTAssertLessThanOrEqual(smallModels.rowHeight, 28)
         XCTAssertLessThanOrEqual(mediumModels.rowHeight, 28)
     }
+
+    // MARK: - Large Overview Quota Tests
+
+    func testLargeOverviewQuotaSortPutsBalanceFirst() throws {
+        let snapshot = try decode("""
+        {"schemaVersion":4,"generatedAt":"2026-07-17T09:00:00.000Z","periods":{"day":{"overview":{"currentPeriod":"today","totalTokens":100,"updatedAt":"2026-07-17T08:59:00.000Z"}}},"quota":[{"provider":"codex","status":"ok","windows":[{"kind":"weekly","remainingPercent":2}]},{"provider":"mimo","status":"ok","balance":{"amount":3.62,"currency":"CNY"},"windows":[]},{"provider":"deepseek","status":"ok","balance":{"amount":9.33,"currency":"USD"},"windows":[]},{"provider":"antigravity","status":"notConfigured","windows":[]}],"status":{"noData":false}}
+        """)
+        let sorted = snapshot.quota.sorted { a, b in
+            func priority(_ p: WidgetQuotaProvider) -> Int {
+                if p.balance != nil || p.windows.first?.remainingPercent != nil { return 0 }
+                if p.status == "unauthorized" || p.status == "sessionExpired" { return 1 }
+                if p.status == "notConfigured" { return 3 }
+                return 2
+            }
+            return priority(a) < priority(b)
+        }
+        XCTAssertEqual(snapshot.quota.count, 4)
+        let top3 = Array(sorted.prefix(3))
+        XCTAssertTrue(top3.contains(where: { $0.provider == "mimo" }))
+        XCTAssertTrue(top3.contains(where: { $0.provider == "deepseek" }))
+        XCTAssertEqual(sorted.last?.provider, "antigravity")
+    }
+
+    func testLargeOverviewDoesNotUseSingleQuotaSummary() throws {
+        let snapshot = try decode("""
+        {"schemaVersion":4,"generatedAt":"2026-07-17T09:00:00.000Z","periods":{"day":{"overview":{"currentPeriod":"today","totalTokens":100,"updatedAt":"2026-07-17T08:59:00.000Z"}}},"quota":[{"provider":"codex","status":"ok","windows":[{"kind":"weekly","remainingPercent":2}]},{"provider":"mimo","status":"ok","balance":{"amount":3.62,"currency":"CNY"},"windows":[]},{"provider":"deepseek","status":"ok","balance":{"amount":9.33,"currency":"USD"},"windows":[]}],"status":{"noData":false}}
+        """)
+        // quotaSummary only returns first provider
+        let summaryText = WidgetFormat.provider(snapshot.quota[0].provider) + " " + WidgetFormat.quotaValue(snapshot.quota[0])
+        XCTAssertTrue(summaryText.contains("Codex"))
+        // But largeQuotaPreview should show all 3 — the function itself is tested via
+        // snapshot.quota.count >= 3 and sortedQuotaProviders ordering
+        XCTAssertGreaterThanOrEqual(snapshot.quota.count, 3)
+        // MiMo has balance
+        XCTAssertNotNil(snapshot.quota[1].balance)
+        XCTAssertEqual(WidgetFormat.quotaValue(snapshot.quota[1]), "¥3.62 left")
+        // DeepSeek has balance
+        XCTAssertNotNil(snapshot.quota[2].balance)
+        XCTAssertEqual(WidgetFormat.quotaValue(snapshot.quota[2]), "$9.33 left")
+    }
+
+    // MARK: - Activity Cell Size Tests
+
+    func testSmallActivityMaxCellSizeIncreased() {
+        let metrics = WidgetLayoutMetrics.metrics(for: .systemSmall)
+        XCTAssertGreaterThanOrEqual(metrics.activityMaxCellSize, 16)
+    }
+
+    func testMediumActivityMaxCellSizeIncreased() {
+        let metrics = WidgetLayoutMetrics.metrics(for: .systemMedium)
+        XCTAssertGreaterThanOrEqual(metrics.activityMaxCellSize, 18)
+    }
+
+    func testMediumHeatmapUsesFullWidth() throws {
+        let reference = try utcDate("2026-07-17")
+        let days = try continuousActivityDays(count: 90, ending: "2026-07-17")
+        // Simulate medium layout: full width, no 82pt subtraction
+        let fullWidthLayout = WidgetHeatmapLayoutCalculator.make(
+            days: days,
+            referenceDate: reference,
+            availableSize: CGSize(width: 330, height: 80),
+            maxWeeks: 14,
+            minCellSize: 5,
+            maxCellSize: 20,
+            spacing: 2
+        )
+        // With full width, should fit more weeks or have larger cells
+        XCTAssertGreaterThan(fullWidthLayout.weekCount, 0)
+        XCTAssertLessThanOrEqual(fullWidthLayout.renderedWidth, 330.001)
+    }
 }

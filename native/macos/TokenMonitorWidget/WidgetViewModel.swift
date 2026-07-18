@@ -103,7 +103,7 @@ struct WidgetLayoutMetrics: Equatable {
         contentGap: WidgetDesignTokens.smallGap,
         pageControlWidth: 108,
         activityMinCellSize: 5,
-        activityMaxCellSize: 9,
+        activityMaxCellSize: 16,
         activityCellSpacing: 2
     )
 
@@ -116,7 +116,7 @@ struct WidgetLayoutMetrics: Equatable {
         contentGap: WidgetDesignTokens.mediumGap,
         pageControlWidth: 112,
         activityMinCellSize: 5,
-        activityMaxCellSize: 10,
+        activityMaxCellSize: 20,
         activityCellSpacing: 2
     )
 
