@@ -38,6 +38,6 @@
 	<key>TMWidgetSchemaVersion</key>
 	<string>4</string>
 		<key>TMWidgetUIVersion</key>
-		<string>10</string>
+		<string>11</string>
 </dict>
 </plist>
