@@ -416,6 +416,14 @@ struct TokenMonitorWidgetView: View {
             .background(.primary.opacity(WidgetDesignTokens.panelOpacity), in: RoundedRectangle(cornerRadius: WidgetDesignTokens.cornerRadius))
     }
 
+    private func compactPanel<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, WidgetDesignTokens.sectionPadding)
+            .padding(.vertical, 6)
+            .background(.primary.opacity(WidgetDesignTokens.panelOpacity), in: RoundedRectangle(cornerRadius: WidgetDesignTokens.cornerRadius))
+    }
+
     private func summaryRow(_ label: String, _ value: String) -> some View {
         HStack(spacing: 6) {
             Text(label).foregroundStyle(.secondary)
@@ -485,10 +493,10 @@ struct TokenMonitorWidgetView: View {
     }
 
     private func largeOverview(_ snapshot: WidgetSnapshot, model: WidgetViewModel) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             Link(destination: TokenMonitorWidgetConfiguration.url(for: .overview)) {
-                panel {
-                    VStack(alignment: .leading, spacing: 4) {
+                compactPanel {
+                    VStack(alignment: .leading, spacing: 3) {
                         sectionLabel("TOTAL TOKENS")
                         primary(snapshot.overview.totalTokens.formatted(.number.grouping(.automatic)), size: WidgetDesignTokens.largePrimarySize)
                         secondary(model.secondaryValue)
@@ -497,11 +505,26 @@ struct TokenMonitorWidgetView: View {
             }
             .buttonStyle(.plain)
             largeQuotaPreview(snapshot)
-            summaryLinkSection(
-                title: "模型",
-                rows: modelOverviewRows(snapshot, limit: 3),
-                page: .models
-            )
+            Link(destination: TokenMonitorWidgetConfiguration.url(for: .models)) {
+                compactPanel {
+                    VStack(alignment: .leading, spacing: 3) {
+                        sectionLabel("模型")
+                        let rows = modelOverviewRows(snapshot, limit: 2)
+                        if rows.isEmpty {
+                            emptyMessage("暂无数据")
+                        } else {
+                            ForEach(Array(rows.prefix(3).enumerated()), id: \.offset) { _, row in
+                                Text(row)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.72)
+                                    .truncationMode(.tail)
+                            }
+                        }
+                    }
+                }
+            }
+            .buttonStyle(.plain)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
@@ -514,8 +537,8 @@ struct TokenMonitorWidgetView: View {
 
     private func largeQuotaPreview(_ snapshot: WidgetSnapshot) -> some View {
         Link(destination: TokenMonitorWidgetConfiguration.url(for: .quota)) {
-            panel {
-                VStack(alignment: .leading, spacing: 4) {
+            compactPanel {
+                VStack(alignment: .leading, spacing: 3) {
                     sectionLabel("额度")
                     if snapshot.quota.isEmpty {
                         emptyMessage("未配置额度来源")
@@ -857,8 +880,8 @@ struct TokenMonitorWidgetView: View {
         density: WidgetContentDensity
     ) -> WidgetHeatmapLayout {
         let maxWeeks = switch context.layout {
-        case .small: 6
-        case .medium: 14
+        case .small: 16
+        case .medium: 26
         case .large: 26
         }
         let labelReserve: CGFloat = density == .regular ? 14 : density == .compact ? 12 : 0
