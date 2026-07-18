@@ -123,10 +123,10 @@ test('Widget build provenance fields are injected into the extension Info.plist'
   }
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_KIND = com\.tokenmonitor\.dashboard;/);
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_GIT_REVISION = unknown;/);
-  assert.match(widgetBuildSource, /const WIDGET_UI_VERSION = 17;/);
+  assert.match(widgetBuildSource, /const WIDGET_UI_VERSION = 18;/);
   assert.match(widgetBuildSource, /const WIDGET_SCHEMA_VERSION = 5;/);
   assert.match(widgetInfo, /<key>TMWidgetSchemaVersion<\/key>\s*<string>5<\/string>/);
-  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>17<\/string>/);
+  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>18<\/string>/);
 });
 
 test('Widget layout uses system margins and fixed scaffold metrics without changing kind', () => {
@@ -211,7 +211,7 @@ test('Activity layout adapts density and heatmap size without clipping the scaff
   assert.doesNotMatch(widgetSource, /rotationEffect/);
 });
 
-test('Medium and Large activity cells are App Intent buttons with fixed selection details', () => {
+test('Medium and Large activity cells are App Intent buttons with stable selection details', () => {
   const heatmapStart = widgetSource.indexOf('struct ActivityHeatmap: View');
   const heatmapEnd = widgetSource.indexOf('\nenum WidgetPeriodControlStyle', heatmapStart);
   assert.ok(heatmapStart >= 0 && heatmapEnd > heatmapStart, 'activity heatmap should exist');
@@ -231,7 +231,9 @@ test('Medium and Large activity cells are App Intent buttons with fixed selectio
   assert.match(widgetSource, /context\.layout == \.large \? \.large : nil/);
   assert.match(widgetSource, /ActivityHeatmap\(layout: spec, family: \.medium, selectedDate: entry\.selectedActivityDate\)/);
   assert.match(mediumSource, /selectedDayDetail\(snapshot\)[\s\S]*\.frame\(height: 32/);
-  assert.match(widgetSource, /selectedDayDetailLine\(snapshot\)[\s\S]*\.frame\(height: 14/);
+  assert.match(widgetSource, /context\.layout == \.large \{[\s\S]*secondary\(largeActivityCaptionText\(snapshot, layout: spec\)\)/);
+  assert.match(widgetSource, /private func largeActivityCaptionText\([\s\S]*return activityDateRangeText\(layout\)/);
+  assert.doesNotMatch(widgetSource, /selectedDayDetailLine/);
   assert.match(widgetSource, /WidgetFormat\.tokens\(day\.totalTokens, style: snapshot\.presentation\.numberStyle\)/);
   assert.doesNotMatch(widgetSource, /onHover|@State/);
 });

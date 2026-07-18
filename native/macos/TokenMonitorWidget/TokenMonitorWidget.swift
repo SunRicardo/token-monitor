@@ -865,15 +865,12 @@ struct TokenMonitorWidgetView: View {
                     )
                         .frame(maxWidth: .infinity, alignment: .center)
 
-                    if density == .regular {
+                    if context.layout == .large {
+                        secondary(largeActivityCaptionText(snapshot, layout: spec))
+                    } else if density == .regular {
                         secondary(activityDateRangeText(spec))
                     } else if density == .compact {
                         secondary("近 \(spec.weekCount) 周")
-                    }
-
-                    if context.layout == .large {
-                        selectedDayDetailLine(snapshot)
-                            .frame(height: 14, alignment: .leading)
                     }
                 }
             }
@@ -939,14 +936,14 @@ struct TokenMonitorWidgetView: View {
         }
     }
 
-    @ViewBuilder
-    private func selectedDayDetailLine(_ snapshot: WidgetSnapshot) -> some View {
+    private func largeActivityCaptionText(
+        _ snapshot: WidgetSnapshot,
+        layout: WidgetHeatmapLayout
+    ) -> String {
         if let day = selectedActivityDay(in: snapshot) {
-            Text("\(day.date) · \(WidgetFormat.tokens(day.totalTokens, style: snapshot.presentation.numberStyle)) tokens")
-                .font(.system(size: WidgetDesignTokens.microSize, weight: .medium, design: .monospaced))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
+            return "\(day.date) · \(WidgetFormat.tokens(day.totalTokens, style: snapshot.presentation.numberStyle)) tokens"
         }
+        return activityDateRangeText(layout)
     }
 
     private func selectedActivityDay(in snapshot: WidgetSnapshot) -> WidgetActivityDay? {
