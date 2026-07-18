@@ -367,22 +367,52 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         XCTAssertEqual(WidgetFamilyScope(widgetFamily: .systemLarge), .large)
     }
 
-    func testTimelineSelectionIgnoresSmallAndClearsDatesMissingFromSnapshot() {
+    func testTimelineSelectionAllowsZeroUsageDatesInsideVisibleCoverage() throws {
         let suite = "token-monitor-widget-resolve-activity-day-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = WidgetPresentationStateStore(defaults: defaults)
-        let days = [WidgetActivityDay(date: "2026-07-16", intensity: 4, totalTokens: 37_400_000)]
+        let reference = try utcDate("2026-07-17")
+        let days = [
+            WidgetActivityDay(date: "2026-07-15", intensity: 4, totalTokens: 37_400_000),
+            WidgetActivityDay(date: "2026-07-17", intensity: 2, totalTokens: 12_000_000)
+        ]
         let date = "2026-07-16"
 
         store.setSelectedActivityDay(date, for: .medium)
-        XCTAssertEqual(WidgetActivitySelection.resolvedDate(days: days, family: .medium, store: store), date)
+        XCTAssertEqual(
+            WidgetActivitySelection.resolvedDate(
+                days: days,
+                family: .medium,
+                referenceDate: reference,
+                store: store
+            ),
+            date
+        )
+        XCTAssertEqual(
+            WidgetActivitySelection.detailDay(selectedDate: date, days: days),
+            WidgetActivityDay(date: date, intensity: 0, totalTokens: 0)
+        )
 
         store.setSelectedActivityDay("2020-01-01", for: .large)
-        XCTAssertNil(WidgetActivitySelection.resolvedDate(days: days, family: .large, store: store))
+        XCTAssertNil(
+            WidgetActivitySelection.resolvedDate(
+                days: days,
+                family: .large,
+                referenceDate: reference,
+                store: store
+            )
+        )
         XCTAssertNil(store.selectedActivityDay(for: .large))
 
-        XCTAssertNil(WidgetActivitySelection.resolvedDate(days: days, family: .small, store: store))
+        XCTAssertNil(
+            WidgetActivitySelection.resolvedDate(
+                days: days,
+                family: .small,
+                referenceDate: reference,
+                store: store
+            )
+        )
     }
 
     func testWidgetLayoutMetricsStabilizeHeaderFooterAndPageControl() {
@@ -492,8 +522,11 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         XCTAssertEqual(layout.cell(week: 0, weekday: 0)?.intensity, 1)
         XCTAssertEqual(layout.cell(week: 0, weekday: 1)?.date, "2026-06-08")
         XCTAssertEqual(layout.cell(week: 0, weekday: 1)?.intensity, 0)
+        XCTAssertEqual(layout.cell(week: 0, weekday: 1)?.totalTokens, 0)
+        XCTAssertEqual(layout.cell(week: 0, weekday: 1)?.isSelectable, true)
         XCTAssertEqual(layout.cell(week: 0, weekday: 2)?.intensity, 4)
         XCTAssertEqual(layout.cell(week: 0, weekday: 4)?.isFuture, true)
+        XCTAssertEqual(layout.cell(week: 0, weekday: 4)?.isSelectable, false)
         XCTAssertEqual(Set(layout.cells.map(\.id)).count, layout.cells.count)
     }
 
