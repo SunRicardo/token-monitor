@@ -858,13 +858,22 @@ struct TokenMonitorWidgetView: View {
                         }
                     }
 
-                    ActivityHeatmap(layout: spec)
+                    ActivityHeatmap(
+                        layout: spec,
+                        family: context.layout == .large ? .large : nil,
+                        selectedDate: entry.selectedActivityDate
+                    )
                         .frame(maxWidth: .infinity, alignment: .center)
 
                     if density == .regular {
                         secondary(activityDateRangeText(spec))
                     } else if density == .compact {
                         secondary("近 \(spec.weekCount) 周")
+                    }
+
+                    if context.layout == .large {
+                        selectedDayDetailLine(snapshot)
+                            .frame(height: 14, alignment: .leading)
                     }
                 }
             }
@@ -893,21 +902,56 @@ struct TokenMonitorWidgetView: View {
                 emptyMessage("暂无活动数据")
             } else {
                 HStack(alignment: .center, spacing: plan.spacing) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        primary("\(spec.activeDays)", size: density == .summary ? 22 : 26)
-                        secondary("近 \(spec.weekCount) 周活跃天数")
-                    }
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.76)
-                    .frame(width: plan.summaryWidth, height: context.size.height, alignment: .center)
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            primary("\(spec.activeDays)", size: density == .summary ? 22 : 26)
+                            secondary("近 \(spec.weekCount) 周活跃天数")
+                        }
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.76)
 
-                    ActivityHeatmap(layout: spec)
+                        Spacer(minLength: 4)
+
+                        selectedDayDetail(snapshot)
+                            .frame(height: 32, alignment: .bottomLeading)
+                    }
+                    .frame(width: plan.summaryWidth, height: context.size.height, alignment: .topLeading)
+
+                    ActivityHeatmap(layout: spec, family: .medium, selectedDate: entry.selectedActivityDate)
                         .frame(width: plan.heatmapWidth, height: context.size.height, alignment: .center)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
+    @ViewBuilder
+    private func selectedDayDetail(_ snapshot: WidgetSnapshot) -> some View {
+        if let day = selectedActivityDay(in: snapshot) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(day.date)
+                Text("\(WidgetFormat.tokens(day.totalTokens, style: snapshot.presentation.numberStyle)) tokens")
+            }
+            .font(.system(size: WidgetDesignTokens.microSize, weight: .medium, design: .monospaced))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+        }
+    }
+
+    @ViewBuilder
+    private func selectedDayDetailLine(_ snapshot: WidgetSnapshot) -> some View {
+        if let day = selectedActivityDay(in: snapshot) {
+            Text("\(day.date) · \(WidgetFormat.tokens(day.totalTokens, style: snapshot.presentation.numberStyle)) tokens")
+                .font(.system(size: WidgetDesignTokens.microSize, weight: .medium, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+    }
+
+    private func selectedActivityDay(in snapshot: WidgetSnapshot) -> WidgetActivityDay? {
+        guard let selectedDate = entry.selectedActivityDate else { return nil }
+        return snapshot.activity.days.first(where: { $0.date == selectedDate })
     }
 
     private func activityLayout(
@@ -1102,6 +1146,8 @@ private struct LargeOverviewListRow: View {
 
 struct ActivityHeatmap: View {
     let layout: WidgetHeatmapLayout
+    let family: WidgetFamilyScope?
+    let selectedDate: String?
 
     var body: some View {
         if layout.cells.isEmpty {
@@ -1112,10 +1158,29 @@ struct ActivityHeatmap: View {
                     GridRow {
                         ForEach(0..<layout.weekCount, id: \.self) { week in
                             if let cell = layout.cell(week: week, weekday: weekday) {
-                                RoundedRectangle(cornerRadius: min(2, min(layout.cellWidth, layout.cellHeight) / 3))
-                                    .fill(cell.isFuture ? Color.clear : activityColor(cell.intensity))
-                                    .frame(width: layout.cellWidth, height: layout.cellHeight)
-                                    .accessibilityHidden(cell.isFuture)
+                                if let family, cell.hasActivityData, !cell.isFuture {
+                                    Button(intent: SelectActivityDayIntent(family: family, date: cell.date)) {
+                                        ActivityHeatmapCell(
+                                            cell: cell,
+                                            width: layout.cellWidth,
+                                            height: layout.cellHeight,
+                                            color: activityColor(cell.intensity),
+                                            isSelected: selectedDate == cell.date
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("\(cell.date)，\(cell.totalTokens) tokens")
+                                    .accessibilityHint(selectedDate == cell.date ? "取消选择" : "显示当日消耗")
+                                } else {
+                                    ActivityHeatmapCell(
+                                        cell: cell,
+                                        width: layout.cellWidth,
+                                        height: layout.cellHeight,
+                                        color: activityColor(cell.intensity),
+                                        isSelected: false
+                                    )
+                                    .accessibilityHidden(cell.isFuture || !cell.hasActivityData)
+                                }
                             }
                         }
                     }
@@ -1128,6 +1193,30 @@ struct ActivityHeatmap: View {
 
     private func activityColor(_ intensity: Int) -> Color {
         intensity <= 0 ? .primary.opacity(0.06) : WidgetDesignTokens.accent.opacity(0.18 + Double(min(4, intensity)) * 0.17)
+    }
+}
+
+private struct ActivityHeatmapCell: View {
+    let cell: WidgetHeatmapCell
+    let width: CGFloat
+    let height: CGFloat
+    let color: Color
+    let isSelected: Bool
+
+    private var cornerRadius: CGFloat {
+        min(2, min(width, height) / 3)
+    }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: cornerRadius)
+            .fill(cell.isFuture ? Color.clear : color)
+            .frame(width: width, height: height)
+            .overlay {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: cornerRadius)
+                        .strokeBorder(.primary, lineWidth: 2)
+                }
+            }
     }
 }
 

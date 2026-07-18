@@ -2,7 +2,7 @@
 
 const { KNOWN_CLIENTS } = require('./clientTracking');
 
-const MAC_WIDGET_SCHEMA_VERSION = 4;
+const MAC_WIDGET_SCHEMA_VERSION = 5;
 const KNOWN_TOOLS = new Set(KNOWN_CLIENTS.split(',').filter(Boolean));
 const KNOWN_LIMIT_PROVIDERS = new Set([
   'claude', 'codex', 'cursor', 'antigravity', 'opencode', 'deepseek', 'minimax',
@@ -185,7 +185,8 @@ function buildActivity(history, period) {
     activeDays: daily.filter((day) => day.totalTokens > 0).length,
     days: daily.map((day) => ({
       date: day.date,
-      intensity: peak > 0 ? Math.max(0, Math.min(4, Math.ceil(day.totalTokens / peak * 4))) : 0
+      intensity: peak > 0 ? Math.max(0, Math.min(4, Math.ceil(day.totalTokens / peak * 4))) : 0,
+      totalTokens: day.totalTokens
     }))
   };
 }

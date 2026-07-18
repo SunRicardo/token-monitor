@@ -137,12 +137,17 @@ protocol WidgetPresentationStateStoring {
     func setLastConfiguredPage(_ page: WidgetPage, for family: WidgetFamilyScope)
     func clearLastConfiguredPage(for family: WidgetFamilyScope)
     func effectivePage(configuredPage: WidgetPage, for family: WidgetFamilyScope) -> WidgetPage
+    func selectedActivityDay(for family: WidgetFamilyScope) -> String?
+    func setSelectedActivityDay(_ date: String, for family: WidgetFamilyScope)
+    func clearSelectedActivityDay(for family: WidgetFamilyScope)
+    func clearSelectedActivityDays()
 }
 
 final class WidgetPresentationStateStore: WidgetPresentationStateStoring {
     static let selectedPeriodKey = "selectedPeriod"
     static let selectedPageKeyPrefix = "widget.presentation.page"
     static let lastConfiguredPageKeyPrefix = "widget.presentation.config-page"
+    static let selectedActivityDayKeyPrefix = "widget.presentation.activity-day"
     static let shared = WidgetPresentationStateStore()
 
     private let defaults: UserDefaults?
@@ -220,10 +225,42 @@ final class WidgetPresentationStateStore: WidgetPresentationStateStoring {
         if configuredPage != lastConfiguredPage {
             setLastConfiguredPage(configuredPage, for: family)
             setSelectedPage(configuredPage, for: family)
+            clearSelectedActivityDay(for: family)
             return configuredPage
         }
 
         return interactivePage ?? configuredPage
+    }
+
+    func selectedActivityDay(for family: WidgetFamilyScope) -> String? {
+        guard family != .small, let defaults else {
+            clearSelectedActivityDay(for: family)
+            return nil
+        }
+        let key = activityDayKey(for: family)
+        guard let date = defaults.string(forKey: key) else { return nil }
+        guard WidgetActivityDate.isValid(date) else {
+            defaults.removeObject(forKey: key)
+            return nil
+        }
+        return date
+    }
+
+    func setSelectedActivityDay(_ date: String, for family: WidgetFamilyScope) {
+        guard family != .small, WidgetActivityDate.isValid(date) else {
+            clearSelectedActivityDay(for: family)
+            return
+        }
+        defaults?.set(date, forKey: activityDayKey(for: family))
+    }
+
+    func clearSelectedActivityDay(for family: WidgetFamilyScope) {
+        defaults?.removeObject(forKey: activityDayKey(for: family))
+    }
+
+    func clearSelectedActivityDays() {
+        clearSelectedActivityDay(for: .medium)
+        clearSelectedActivityDay(for: .large)
     }
 
     static func selectedPageKey(for family: WidgetFamilyScope) -> String {
@@ -234,6 +271,10 @@ final class WidgetPresentationStateStore: WidgetPresentationStateStoring {
         "\(lastConfiguredPageKeyPrefix).\(family.rawValue)"
     }
 
+    static func selectedActivityDayKey(for family: WidgetFamilyScope) -> String {
+        "\(selectedActivityDayKeyPrefix).\(family.rawValue)"
+    }
+
     private func pageKey(for family: WidgetFamilyScope) -> String {
         Self.selectedPageKey(for: family)
     }
@@ -241,11 +282,142 @@ final class WidgetPresentationStateStore: WidgetPresentationStateStoring {
     private func lastConfiguredPageKey(for family: WidgetFamilyScope) -> String {
         Self.lastConfiguredPageKey(for: family)
     }
+
+    private func activityDayKey(for family: WidgetFamilyScope) -> String {
+        Self.selectedActivityDayKey(for: family)
+    }
+}
+
+enum WidgetActivityDate {
+    private static let calendar: Calendar = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }()
+
+    static func isValid(_ value: String) -> Bool {
+        let parts = value.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 3,
+              parts[0].count == 4,
+              parts[1].count == 2,
+              parts[2].count == 2,
+              let year = Int(parts[0]),
+              let month = Int(parts[1]),
+              let day = Int(parts[2]),
+              let date = calendar.date(from: DateComponents(year: year, month: month, day: day)) else { return false }
+        let components = calendar.dateComponents([.year, .month, .day], from: date)
+        return components.year == year && components.month == month && components.day == day
+    }
+}
+
+enum WidgetActivitySelection {
+    static func resolvedDate(
+        days: [WidgetActivityDay],
+        family: WidgetFamilyScope?,
+        store: WidgetPresentationStateStoring
+    ) -> String? {
+        guard let family, family != .small else { return nil }
+        guard let selectedDate = store.selectedActivityDay(for: family),
+              days.contains(where: { $0.date == selectedDate }) else {
+            store.clearSelectedActivityDay(for: family)
+            return nil
+        }
+        return selectedDate
+    }
 }
 
 enum WidgetIntentRuntime {
     static var widgetKind: String {
         Bundle.main.object(forInfoDictionaryKey: "TMWidgetKind") as? String ?? "com.tokenmonitor.dashboard"
+    }
+}
+
+enum WidgetIntentActions {
+    static func selectActivityDay(
+        family: WidgetFamilyScope,
+        date: String,
+        store: WidgetPresentationStateStoring,
+        widgetKind: String,
+        reload: (String) -> Void
+    ) {
+        guard family == .medium || family == .large, WidgetActivityDate.isValid(date) else {
+            store.clearSelectedActivityDay(for: family)
+            reload(widgetKind)
+            return
+        }
+        if store.selectedActivityDay(for: family) == date {
+            store.clearSelectedActivityDay(for: family)
+        } else {
+            store.setSelectedActivityDay(date, for: family)
+        }
+        reload(widgetKind)
+    }
+
+    static func setPeriod(
+        _ period: WidgetPeriod,
+        store: WidgetPresentationStateStoring,
+        widgetKind: String,
+        reload: (String) -> Void
+    ) {
+        guard store.selectedPeriod() != period else { return }
+        store.clearSelectedActivityDays()
+        store.setSelectedPeriod(period)
+        reload(widgetKind)
+    }
+
+    static func cyclePeriod(
+        store: WidgetPresentationStateStoring,
+        widgetKind: String,
+        reload: (String) -> Void
+    ) {
+        store.clearSelectedActivityDays()
+        store.setSelectedPeriod(store.selectedPeriod().next)
+        reload(widgetKind)
+    }
+
+    static func cyclePage(
+        family: WidgetFamilyScope,
+        currentPage: WidgetPage,
+        store: WidgetPresentationStateStoring,
+        widgetKind: String,
+        reload: (String) -> Void
+    ) {
+        store.clearSelectedActivityDay(for: family)
+        let current = store.selectedPage(for: family) ?? currentPage
+        store.setSelectedPage(current.next, for: family)
+        reload(widgetKind)
+    }
+}
+
+struct SelectActivityDayIntent: AppIntent {
+    static var title: LocalizedStringResource = "选择活动日期"
+    static var openAppWhenRun: Bool { false }
+
+    @Parameter(title: "小组件尺寸", default: .medium)
+    var family: WidgetFamilyScope
+
+    @Parameter(title: "日期")
+    var date: String
+
+    init() {
+        family = .medium
+        date = ""
+    }
+
+    init(family: WidgetFamilyScope, date: String) {
+        self.family = family
+        self.date = date
+    }
+
+    func perform() async throws -> some IntentResult {
+        WidgetIntentActions.selectActivityDay(
+            family: family,
+            date: date,
+            store: WidgetPresentationStateStore.shared,
+            widgetKind: WidgetIntentRuntime.widgetKind,
+            reload: { WidgetCenter.shared.reloadTimelines(ofKind: $0) }
+        )
+        return .result()
     }
 }
 
@@ -265,12 +437,12 @@ struct SetWidgetPeriodIntent: AppIntent {
     }
 
     func perform() async throws -> some IntentResult {
-        let store = WidgetPresentationStateStore.shared
-        guard store.selectedPeriod() != period else {
-            return .result()
-        }
-        store.setSelectedPeriod(period)
-        WidgetCenter.shared.reloadTimelines(ofKind: WidgetIntentRuntime.widgetKind)
+        WidgetIntentActions.setPeriod(
+            period,
+            store: WidgetPresentationStateStore.shared,
+            widgetKind: WidgetIntentRuntime.widgetKind,
+            reload: { WidgetCenter.shared.reloadTimelines(ofKind: $0) }
+        )
         return .result()
     }
 }
@@ -282,10 +454,11 @@ struct CycleWidgetPeriodIntent: AppIntent {
     init() {}
 
     func perform() async throws -> some IntentResult {
-        let store = WidgetPresentationStateStore.shared
-        let next = store.selectedPeriod().next
-        store.setSelectedPeriod(next)
-        WidgetCenter.shared.reloadTimelines(ofKind: WidgetIntentRuntime.widgetKind)
+        WidgetIntentActions.cyclePeriod(
+            store: WidgetPresentationStateStore.shared,
+            widgetKind: WidgetIntentRuntime.widgetKind,
+            reload: { WidgetCenter.shared.reloadTimelines(ofKind: $0) }
+        )
         return .result()
     }
 }
@@ -312,10 +485,13 @@ struct CycleWidgetPageIntent: AppIntent {
     }
 
     func perform() async throws -> some IntentResult {
-        let store = WidgetPresentationStateStore.shared
-        let current = store.selectedPage(for: family) ?? currentPage
-        store.setSelectedPage(current.next, for: family)
-        WidgetCenter.shared.reloadTimelines(ofKind: WidgetIntentRuntime.widgetKind)
+        WidgetIntentActions.cyclePage(
+            family: family,
+            currentPage: currentPage,
+            store: WidgetPresentationStateStore.shared,
+            widgetKind: WidgetIntentRuntime.widgetKind,
+            reload: { WidgetCenter.shared.reloadTimelines(ofKind: $0) }
+        )
         return .result()
     }
 }

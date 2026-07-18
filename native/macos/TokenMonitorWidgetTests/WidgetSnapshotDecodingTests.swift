@@ -1,6 +1,15 @@
 import XCTest
 
 final class WidgetSnapshotDecodingTests: XCTestCase {
+    func testDecodesSchemaV5ActivityTokenTotals() throws {
+        let snapshot = try decode("""
+        {"schemaVersion":5,"generatedAt":"2026-07-17T09:00:00.000Z","activity":{"currentPeriod":"month","activeDays":1,"days":[{"date":"2026-07-16","intensity":4,"totalTokens":37400000}]},"status":{"noData":false}}
+        """)
+
+        XCTAssertEqual(snapshot.schemaVersion, 5)
+        XCTAssertEqual(snapshot.activity.days.first, WidgetActivityDay(date: "2026-07-16", intensity: 4, totalTokens: 37_400_000))
+    }
+
     func testDecodesSchemaV4ProviderBalances() throws {
         let snapshot = try decode("""
         {"schemaVersion":4,"generatedAt":"2026-07-17T09:00:00.000Z","periods":{"day":{"overview":{"currentPeriod":"today","totalTokens":100,"updatedAt":"2026-07-17T08:59:00.000Z"}}},"quota":[{"provider":"mimo","status":"ok","balance":{"amount":3.62,"currency":"CNY"},"windows":[]},{"provider":"deepseek","status":"ok","balance":{"amount":9.33,"currency":"USD"},"windows":[]},{"provider":"codex","status":"ok","windows":[{"kind":"weekly","remainingPercent":2}]}],"status":{"noData":false}}
@@ -10,6 +19,14 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         XCTAssertEqual(snapshot.quota[0].balance, WidgetQuotaBalance(amount: 3.62, currency: "CNY"))
         XCTAssertEqual(snapshot.quota[1].balance, WidgetQuotaBalance(amount: 9.33, currency: "USD"))
         XCTAssertNil(snapshot.quota[2].balance)
+    }
+
+    func testSchemaV4ActivityDayDefaultsTokenTotalToZero() throws {
+        let snapshot = try decode("""
+        {"schemaVersion":4,"generatedAt":"2026-07-17T09:00:00.000Z","activity":{"days":[{"date":"2026-07-16","intensity":4}]},"status":{"noData":false}}
+        """)
+
+        XCTAssertEqual(snapshot.activity.days.first?.totalTokens, 0)
     }
 
     func testDecodesSchemaV3AndSelectsPeriods() throws {
@@ -184,6 +201,88 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         XCTAssertNil(store.selectedPage(for: .large))
     }
 
+    func testActivityDayStatePersistsOnlyForMediumAndLarge() {
+        let suite = "token-monitor-widget-activity-day-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = WidgetPresentationStateStore(defaults: defaults)
+
+        store.setSelectedActivityDay("2026-07-16", for: .medium)
+        store.setSelectedActivityDay("2026-07-17", for: .large)
+        store.setSelectedActivityDay("2026-07-15", for: .small)
+
+        XCTAssertEqual(store.selectedActivityDay(for: .medium), "2026-07-16")
+        XCTAssertEqual(store.selectedActivityDay(for: .large), "2026-07-17")
+        XCTAssertNil(store.selectedActivityDay(for: .small))
+        XCTAssertNil(defaults.string(forKey: WidgetPresentationStateStore.selectedActivityDayKey(for: .small)))
+
+        store.clearSelectedActivityDay(for: .medium)
+        XCTAssertNil(store.selectedActivityDay(for: .medium))
+        XCTAssertEqual(store.selectedActivityDay(for: .large), "2026-07-17")
+    }
+
+    func testActivityDayStateClearsInvalidDates() {
+        let suite = "token-monitor-widget-invalid-activity-day-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = WidgetPresentationStateStore(defaults: defaults)
+        let key = WidgetPresentationStateStore.selectedActivityDayKey(for: .medium)
+
+        for invalidDate in ["2026-7-16", "2026-02-29", "not-a-date"] {
+            defaults.set(invalidDate, forKey: key)
+            XCTAssertNil(store.selectedActivityDay(for: .medium))
+            XCTAssertNil(defaults.string(forKey: key))
+        }
+    }
+
+    func testSelectActivityDayActionTogglesAndReloadsSpecifiedKind() {
+        let suite = "token-monitor-widget-select-activity-day-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = WidgetPresentationStateStore(defaults: defaults)
+        var reloadedKinds: [String] = []
+
+        WidgetIntentActions.selectActivityDay(
+            family: .medium,
+            date: "2026-07-16",
+            store: store,
+            widgetKind: "test.widget.kind",
+            reload: { reloadedKinds.append($0) }
+        )
+        XCTAssertEqual(store.selectedActivityDay(for: .medium), "2026-07-16")
+
+        WidgetIntentActions.selectActivityDay(
+            family: .medium,
+            date: "2026-07-16",
+            store: store,
+            widgetKind: "test.widget.kind",
+            reload: { reloadedKinds.append($0) }
+        )
+        XCTAssertNil(store.selectedActivityDay(for: .medium))
+        XCTAssertEqual(reloadedKinds, ["test.widget.kind", "test.widget.kind"])
+    }
+
+    func testPageAndPeriodActionsClearActivitySelection() {
+        let suite = "token-monitor-widget-clear-activity-day-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = WidgetPresentationStateStore(defaults: defaults)
+
+        store.setSelectedActivityDay("2026-07-16", for: .medium)
+        WidgetIntentActions.cyclePage(family: .medium, currentPage: .activity, store: store, widgetKind: "kind", reload: { _ in })
+        XCTAssertNil(store.selectedActivityDay(for: .medium))
+
+        store.setSelectedActivityDay("2026-07-16", for: .medium)
+        store.setSelectedActivityDay("2026-07-17", for: .large)
+        WidgetIntentActions.setPeriod(.month, store: store, widgetKind: "kind", reload: { _ in })
+        XCTAssertNil(store.selectedActivityDay(for: .medium))
+        XCTAssertNil(store.selectedActivityDay(for: .large))
+
+        store.setSelectedActivityDay("2026-07-17", for: .large)
+        WidgetIntentActions.cyclePeriod(store: store, widgetKind: "kind", reload: { _ in })
+        XCTAssertNil(store.selectedActivityDay(for: .large))
+    }
+
     func testWidgetPageAndPeriodStateAreIndependent() {
         let suite = "token-monitor-widget-presentation-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -236,11 +335,14 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         XCTAssertEqual(store.lastConfiguredPage(for: .medium), .overview)
 
         store.setSelectedPage(.quota, for: .medium)
+        store.setSelectedActivityDay("2026-07-16", for: .medium)
         XCTAssertEqual(store.effectivePage(configuredPage: .overview, for: .medium), .quota)
+        XCTAssertEqual(store.selectedActivityDay(for: .medium), "2026-07-16")
 
         XCTAssertEqual(store.effectivePage(configuredPage: .models, for: .medium), .models)
         XCTAssertEqual(store.lastConfiguredPage(for: .medium), .models)
         XCTAssertEqual(store.selectedPage(for: .medium), .models)
+        XCTAssertNil(store.selectedActivityDay(for: .medium))
 
         let pageIntent = CycleWidgetPageIntent(family: .medium, currentPage: store.selectedPage(for: .medium) ?? .overview)
         XCTAssertEqual(pageIntent.currentPage.next, .activity)
@@ -263,6 +365,24 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         XCTAssertEqual(WidgetFamilyScope(widgetFamily: .systemSmall), .small)
         XCTAssertEqual(WidgetFamilyScope(widgetFamily: .systemMedium), .medium)
         XCTAssertEqual(WidgetFamilyScope(widgetFamily: .systemLarge), .large)
+    }
+
+    func testTimelineSelectionIgnoresSmallAndClearsDatesMissingFromSnapshot() {
+        let suite = "token-monitor-widget-resolve-activity-day-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = WidgetPresentationStateStore(defaults: defaults)
+        let days = [WidgetActivityDay(date: "2026-07-16", intensity: 4, totalTokens: 37_400_000)]
+        let date = "2026-07-16"
+
+        store.setSelectedActivityDay(date, for: .medium)
+        XCTAssertEqual(WidgetActivitySelection.resolvedDate(days: days, family: .medium, store: store), date)
+
+        store.setSelectedActivityDay("2020-01-01", for: .large)
+        XCTAssertNil(WidgetActivitySelection.resolvedDate(days: days, family: .large, store: store))
+        XCTAssertNil(store.selectedActivityDay(for: .large))
+
+        XCTAssertNil(WidgetActivitySelection.resolvedDate(days: days, family: .small, store: store))
     }
 
     func testWidgetLayoutMetricsStabilizeHeaderFooterAndPageControl() {
@@ -459,10 +579,14 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         XCTAssertFalse(SetWidgetPeriodIntent.openAppWhenRun)
         XCTAssertFalse(CycleWidgetPeriodIntent.openAppWhenRun)
         XCTAssertFalse(CycleWidgetPageIntent.openAppWhenRun)
+        XCTAssertFalse(SelectActivityDayIntent.openAppWhenRun)
 
         let pageIntent = CycleWidgetPageIntent(family: .large, currentPage: .trend)
         XCTAssertEqual(pageIntent.family, .large)
         XCTAssertEqual(pageIntent.currentPage, .trend)
+        let dayIntent = SelectActivityDayIntent(family: .large, date: "2026-07-16")
+        XCTAssertEqual(dayIntent.family, .large)
+        XCTAssertEqual(dayIntent.date, "2026-07-16")
     }
 
     func testWidgetPeriodSnapshotFallbackDoesNotBlankDay() throws {

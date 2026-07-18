@@ -319,6 +319,8 @@ enum WidgetListCapacity {
 struct WidgetHeatmapCell: Equatable, Identifiable {
     let date: String
     let intensity: Int
+    let totalTokens: Int
+    let hasActivityData: Bool
     let isFuture: Bool
 
     var id: String { date }
@@ -401,10 +403,15 @@ enum WidgetHeatmapLayoutCalculator {
             return empty(spacing: normalizedSpacing)
         }
 
-        var values: [Date: Int] = [:]
+        var values: [Date: WidgetActivityDay] = [:]
         for day in days {
             guard let date = parse(day.date) else { continue }
-            values[date] = max(values[date] ?? 0, min(4, max(0, day.intensity)))
+            let existing = values[date]
+            values[date] = WidgetActivityDay(
+                date: day.date,
+                intensity: max(existing?.intensity ?? 0, min(4, max(0, day.intensity))),
+                totalTokens: max(existing?.totalTokens ?? 0, day.totalTokens)
+            )
         }
         guard let earliest = values.keys.min() else { return empty(spacing: normalizedSpacing) }
 
@@ -467,7 +474,7 @@ enum WidgetHeatmapLayoutCalculator {
         cellWidth: CGFloat,
         cellHeight: CGFloat,
         spacing: CGFloat,
-        values: [Date: Int],
+        values: [Date: WidgetActivityDay],
         reference: Date,
         referenceSunday: Date
     ) -> WidgetHeatmapLayout {
@@ -477,9 +484,12 @@ enum WidgetHeatmapLayoutCalculator {
         for offset in 0..<(weekCount * 7) {
             guard let date = calendar.date(byAdding: .day, value: offset, to: gridStart) else { continue }
             let isFuture = date > reference
+            let activityDay = values[date]
             cells.append(WidgetHeatmapCell(
                 date: format(date),
-                intensity: isFuture ? 0 : values[date] ?? 0,
+                intensity: isFuture ? 0 : activityDay?.intensity ?? 0,
+                totalTokens: isFuture ? 0 : activityDay?.totalTokens ?? 0,
+                hasActivityData: !isFuture && activityDay != nil,
                 isFuture: isFuture
             ))
         }
