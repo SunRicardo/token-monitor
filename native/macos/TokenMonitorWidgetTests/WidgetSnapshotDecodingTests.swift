@@ -202,6 +202,61 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         store.setSelectedPeriod(.total)
         XCTAssertEqual(store.selectedPeriod(), .total)
         XCTAssertEqual(store.selectedPage(for: .medium), .activity)
+        XCTAssertNil(store.lastConfiguredPage(for: .medium))
+    }
+
+    func testWidgetLastConfiguredPagePersistsByFamilyAndNormalizes() {
+        let suite = "token-monitor-widget-config-page-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = WidgetPresentationStateStore(defaults: defaults)
+
+        XCTAssertNil(store.lastConfiguredPage(for: .small))
+        store.setLastConfiguredPage(.models, for: .small)
+        store.setLastConfiguredPage(.activity, for: .large)
+        XCTAssertEqual(store.lastConfiguredPage(for: .small), .models)
+        XCTAssertEqual(store.lastConfiguredPage(for: .large), .activity)
+        XCTAssertNil(store.lastConfiguredPage(for: .medium))
+
+        defaults.set("not-a-page", forKey: WidgetPresentationStateStore.lastConfiguredPageKey(for: .small))
+        XCTAssertNil(store.lastConfiguredPage(for: .small))
+        XCTAssertNil(defaults.string(forKey: WidgetPresentationStateStore.lastConfiguredPageKey(for: .small)))
+
+        store.clearLastConfiguredPage(for: .large)
+        XCTAssertNil(store.lastConfiguredPage(for: .large))
+    }
+
+    func testEffectivePageSyncsRightClickConfigurationWithoutBreakingInteractiveCycle() {
+        let suite = "token-monitor-widget-effective-page-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = WidgetPresentationStateStore(defaults: defaults)
+
+        XCTAssertEqual(store.effectivePage(configuredPage: .overview, for: .medium), .overview)
+        XCTAssertEqual(store.lastConfiguredPage(for: .medium), .overview)
+
+        store.setSelectedPage(.quota, for: .medium)
+        XCTAssertEqual(store.effectivePage(configuredPage: .overview, for: .medium), .quota)
+
+        XCTAssertEqual(store.effectivePage(configuredPage: .models, for: .medium), .models)
+        XCTAssertEqual(store.lastConfiguredPage(for: .medium), .models)
+        XCTAssertEqual(store.selectedPage(for: .medium), .models)
+
+        let pageIntent = CycleWidgetPageIntent(family: .medium, currentPage: store.selectedPage(for: .medium) ?? .overview)
+        XCTAssertEqual(pageIntent.currentPage.next, .activity)
+        XCTAssertEqual(store.selectedPeriod(), .day)
+    }
+
+    func testEffectivePageKeepsExistingInteractivePageOnFirstTimelineAfterUpgrade() {
+        let suite = "token-monitor-widget-upgrade-page-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = WidgetPresentationStateStore(defaults: defaults)
+
+        store.setSelectedPage(.trend, for: .large)
+        XCTAssertEqual(store.effectivePage(configuredPage: .overview, for: .large), .trend)
+        XCTAssertEqual(store.lastConfiguredPage(for: .large), .overview)
+        XCTAssertEqual(store.selectedPage(for: .large), .trend)
     }
 
     func testWidgetFamilyScopeMapsSupportedFamiliesOnly() {
@@ -346,6 +401,7 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
             XCTAssertEqual(layout.cells.count, layout.weekCount * 7)
             XCTAssertGreaterThanOrEqual(layout.cellSize, scenario.minCell)
             XCTAssertLessThanOrEqual(layout.cellSize, scenario.maxCell)
+            XCTAssertEqual(layout.cellWidth, layout.cellHeight)
             XCTAssertLessThanOrEqual(layout.renderedWidth, scenario.size.width + 0.001)
             XCTAssertLessThanOrEqual(layout.renderedHeight, scenario.size.height + 0.001)
             XCTAssertEqual(Set(layout.cells.map(\.id)).count, layout.cells.count)
@@ -453,14 +509,15 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
 
     // MARK: - Large Widget Layout Tests
 
-    func testLargeModelFontSizeGreaterThanMedium() {
+    func testLargeModelFontSizeMatchesQuotaListDensity() {
         let largePlan = WidgetLargeListLayoutPlan.make(itemCount: 5, availableHeight: 380)
         let mediumGeometry = WidgetListCapacity.geometry(kind: .models, density: .regular)
 
-        XCTAssertGreaterThan(largePlan.nameFontSize, 10) // Medium regular = 10pt
-        XCTAssertGreaterThanOrEqual(largePlan.nameFontSize, 13)
-        XCTAssertLessThanOrEqual(largePlan.nameFontSize, 16)
-        XCTAssertGreaterThan(largePlan.rowHeight, mediumGeometry.rowHeight) // Large > 28pt
+        XCTAssertEqual(largePlan.nameFontSize, 11)
+        XCTAssertEqual(largePlan.percentFontSize, 10)
+        XCTAssertEqual(largePlan.tokenFontSize, 9)
+        XCTAssertGreaterThan(largePlan.rowHeight, mediumGeometry.rowHeight)
+        XCTAssertLessThanOrEqual(largePlan.rowHeight, 38)
     }
 
     func testLargeModelRowHeightAdaptsToAvailableHeight() {
@@ -468,19 +525,22 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         let medium = WidgetLargeListLayoutPlan.make(itemCount: 5, availableHeight: 380)
         let large = WidgetLargeListLayoutPlan.make(itemCount: 5, availableHeight: 600)
 
-        XCTAssertGreaterThanOrEqual(small.rowHeight, 34)
-        XCTAssertLessThanOrEqual(small.rowHeight, 46)
+        XCTAssertGreaterThanOrEqual(small.rowHeight, 30)
+        XCTAssertLessThanOrEqual(small.rowHeight, 38)
         XCTAssertGreaterThan(medium.rowHeight, small.rowHeight)
-        XCTAssertGreaterThanOrEqual(large.rowHeight, 34)
-        XCTAssertLessThanOrEqual(large.rowHeight, 46)
+        XCTAssertGreaterThanOrEqual(large.rowHeight, 30)
+        XCTAssertLessThanOrEqual(large.rowHeight, 38)
+        XCTAssertEqual(large.nameFontSize, 11)
+        XCTAssertEqual(large.percentFontSize, 10)
+        XCTAssertEqual(large.tokenFontSize, 9)
     }
 
     func testLargeModelListDoesNotCrowdAllModelsAtTop() {
         let plan = WidgetLargeListLayoutPlan.make(itemCount: 10, availableHeight: 380)
-        // With 380pt and 10 items, rowHeight ~38pt fits all 10 — this is correct
-        // The key test: row height should be reasonable, not collapsed to minimum
-        XCTAssertGreaterThanOrEqual(plan.rowHeight, 34)
-        XCTAssertLessThanOrEqual(plan.rowHeight, 46)
+        // Large models should read as a peer list to quota, not as title-sized rows.
+        XCTAssertGreaterThanOrEqual(plan.rowHeight, 30)
+        XCTAssertLessThanOrEqual(plan.rowHeight, 38)
+        XCTAssertLessThanOrEqual(plan.nameFontSize, 11)
         // If we reduce available height, fewer items should show
         let constrained = WidgetLargeListLayoutPlan.make(itemCount: 10, availableHeight: 200)
         XCTAssertLessThan(constrained.visibleCount, 10)
@@ -529,6 +589,7 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
             spacing: 2
         )
         XCTAssertGreaterThan(layout.cellSize, 12)
+        XCTAssertEqual(layout.cellWidth, layout.cellHeight)
         XCTAssertLessThanOrEqual(layout.cellSize, 22)
     }
 
@@ -546,8 +607,7 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         )
         if layout.weekCount > 0 {
             XCTAssertEqual(layout.cells.count, layout.weekCount * 7)
-            // 7 rows * cellSize + 6 * spacing = renderedHeight
-            let expectedHeight = 7 * layout.cellSize + 6 * layout.spacing
+            let expectedHeight = 7 * layout.cellHeight + 6 * layout.spacing
             XCTAssertEqual(layout.renderedHeight, expectedHeight, accuracy: 0.001)
         }
     }
@@ -567,6 +627,7 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         )
         // With limited history and large available space, cells should be large
         XCTAssertGreaterThan(layout.cellSize, 14)
+        XCTAssertEqual(layout.cellWidth, layout.cellHeight)
         // Week count depends on Sunday alignment (3-5 weeks)
         XCTAssertGreaterThanOrEqual(layout.weekCount, 3)
         XCTAssertLessThanOrEqual(layout.weekCount, 5)
@@ -674,26 +735,36 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(metrics.activityMaxCellSize, 18)
     }
 
-    func testMediumHeatmapUsesFullWidth() throws {
-        let reference = try utcDate("2026-07-17")
-        let days = try continuousActivityDays(count: 180, ending: "2026-07-17")
-        // Medium: maxWeeks=14, minCell=12, maxCell=20
-        // Realistic Medium content height≈97pt, minus labelReserve(14)+summaryReserve(16)+6=30 → 67pt
+    func testMediumActivityLayoutSplitsSummaryAndHeatmapColumns() {
+        let plan = WidgetMediumActivityLayoutPlan.make(availableSize: CGSize(width: 330, height: 67))
+        XCTAssertGreaterThan(plan.summaryWidth, 130)
+        XCTAssertLessThan(plan.summaryWidth, 150)
+        XCTAssertGreaterThan(plan.heatmapWidth, 170)
+        XCTAssertEqual(plan.summaryWidth + plan.heatmapWidth + plan.spacing, 330, accuracy: 0.001)
+    }
+
+    func testMediumHeatmapKeepsSquareCellsInRightColumn() throws {
+        let reference = try utcDate("2026-07-18")
+        let days = try continuousActivityDays(count: 64, ending: "2026-07-18")
+        let plan = WidgetMediumActivityLayoutPlan.make(availableSize: CGSize(width: 330, height: 67))
         let layout = WidgetHeatmapLayoutCalculator.make(
             days: days,
             referenceDate: reference,
-            availableSize: CGSize(width: 330, height: 67),
+            availableSize: CGSize(width: plan.heatmapWidth, height: 67),
             maxWeeks: 14,
-            minCellSize: 12,
+            minCellSize: 5,
             maxCellSize: 20,
             spacing: 2
         )
+        XCTAssertEqual(layout.weekCount, 10)
         XCTAssertLessThanOrEqual(layout.weekCount, 14)
-        XCTAssertGreaterThanOrEqual(layout.weekCount, 10)
-        // heightFit = (67-12)/7 ≈ 7.9 — calculator doesn't enforce minCellSize as floor
-        // but width-limited cells should be ≥12 when weekCount ≤14
-        XCTAssertLessThanOrEqual(layout.renderedWidth, 330.001)
+        XCTAssertEqual(layout.cellWidth, layout.cellHeight)
+        XCTAssertGreaterThan(layout.cellHeight, 7.5)
+        XCTAssertEqual(layout.renderedHeight, 7 * layout.cellHeight + 6 * layout.spacing, accuracy: 0.001)
+        XCTAssertLessThanOrEqual(layout.renderedHeight, 67.001)
+        XCTAssertLessThanOrEqual(layout.renderedWidth, plan.heatmapWidth + 0.001)
         XCTAssertEqual(layout.cells.count, layout.weekCount * 7)
+        XCTAssertEqual(layout.cells.filter { !$0.isFuture && $0.intensity > 0 }.count, days.count)
     }
 
     func testSmallHeatmapShowsMoreWeeksThanBefore() throws {
@@ -710,6 +781,7 @@ final class WidgetSnapshotDecodingTests: XCTestCase {
             spacing: 2
         )
         XCTAssertGreaterThan(layout.weekCount, 6) // More than old 6-week cap
+        XCTAssertEqual(layout.cellWidth, layout.cellHeight)
         XCTAssertLessThanOrEqual(layout.renderedWidth, 155.001)
         XCTAssertEqual(layout.cells.count, layout.weekCount * 7)
     }

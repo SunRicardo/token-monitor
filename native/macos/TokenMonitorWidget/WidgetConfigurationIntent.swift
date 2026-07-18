@@ -133,11 +133,16 @@ protocol WidgetPresentationStateStoring {
     func setSelectedPage(_ page: WidgetPage, for family: WidgetFamilyScope)
     func clearSelectedPage(for family: WidgetFamilyScope)
     func clearSelectedPages()
+    func lastConfiguredPage(for family: WidgetFamilyScope) -> WidgetPage?
+    func setLastConfiguredPage(_ page: WidgetPage, for family: WidgetFamilyScope)
+    func clearLastConfiguredPage(for family: WidgetFamilyScope)
+    func effectivePage(configuredPage: WidgetPage, for family: WidgetFamilyScope) -> WidgetPage
 }
 
 final class WidgetPresentationStateStore: WidgetPresentationStateStoring {
     static let selectedPeriodKey = "selectedPeriod"
     static let selectedPageKeyPrefix = "widget.presentation.page"
+    static let lastConfiguredPageKeyPrefix = "widget.presentation.config-page"
     static let shared = WidgetPresentationStateStore()
 
     private let defaults: UserDefaults?
@@ -186,12 +191,55 @@ final class WidgetPresentationStateStore: WidgetPresentationStateStoring {
         }
     }
 
+    func lastConfiguredPage(for family: WidgetFamilyScope) -> WidgetPage? {
+        guard let defaults else { return nil }
+        let key = lastConfiguredPageKey(for: family)
+        guard let raw = defaults.string(forKey: key) else { return nil }
+        guard let page = WidgetPage(rawValue: raw.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            defaults.removeObject(forKey: key)
+            return nil
+        }
+        return page
+    }
+
+    func setLastConfiguredPage(_ page: WidgetPage, for family: WidgetFamilyScope) {
+        defaults?.set(page.rawValue, forKey: lastConfiguredPageKey(for: family))
+    }
+
+    func clearLastConfiguredPage(for family: WidgetFamilyScope) {
+        defaults?.removeObject(forKey: lastConfiguredPageKey(for: family))
+    }
+
+    func effectivePage(configuredPage: WidgetPage, for family: WidgetFamilyScope) -> WidgetPage {
+        let interactivePage = selectedPage(for: family)
+        guard let lastConfiguredPage = lastConfiguredPage(for: family) else {
+            setLastConfiguredPage(configuredPage, for: family)
+            return interactivePage ?? configuredPage
+        }
+
+        if configuredPage != lastConfiguredPage {
+            setLastConfiguredPage(configuredPage, for: family)
+            setSelectedPage(configuredPage, for: family)
+            return configuredPage
+        }
+
+        return interactivePage ?? configuredPage
+    }
+
     static func selectedPageKey(for family: WidgetFamilyScope) -> String {
         "\(selectedPageKeyPrefix).\(family.rawValue)"
     }
 
+    static func lastConfiguredPageKey(for family: WidgetFamilyScope) -> String {
+        "\(lastConfiguredPageKeyPrefix).\(family.rawValue)"
+    }
+
     private func pageKey(for family: WidgetFamilyScope) -> String {
         Self.selectedPageKey(for: family)
+    }
+
+    private func lastConfiguredPageKey(for family: WidgetFamilyScope) -> String {
+        Self.lastConfiguredPageKey(for: family)
     }
 }
 
