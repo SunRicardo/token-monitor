@@ -279,13 +279,11 @@ struct TokenMonitorWidgetView: View {
                         }
                     }
                     .buttonStyle(.plain)
-                    HStack(spacing: 8) {
-                        summaryLinkRow(title: "额度", value: quotaSummary(snapshot), page: .quota)
-                        summaryLinkRow(title: "活跃天数", value: "\(snapshot.activity.activeDays)", page: .activity)
-                    }
+                    largeQuotaPreview(snapshot)
+                    summaryLinkRow(title: "活跃天数", value: "\(snapshot.activity.activeDays)", page: .activity)
                     summaryLinkSection(
                         title: "模型",
-                        rows: modelOverviewRows(snapshot, limit: 3),
+                        rows: modelOverviewRows(snapshot, limit: 5),
                         page: .models
                     )
                     summaryLinkRow(
@@ -363,12 +361,22 @@ struct TokenMonitorWidgetView: View {
     }
 
     private func models(_ snapshot: WidgetSnapshot, context: WidgetContentContext) -> some View {
-        let plan = WidgetListCapacity.plan(
-            itemCount: snapshot.models.count,
-            availableHeight: context.size.height,
-            kind: .models
-        )
-        return modelList(snapshot, context: context, plan: plan)
+        Group {
+            if context.layout == .large {
+                let largePlan = WidgetLargeListLayoutPlan.make(
+                    itemCount: snapshot.models.count,
+                    availableHeight: context.size.height
+                )
+                largeModelList(snapshot, context: context, plan: largePlan)
+            } else {
+                let plan = WidgetListCapacity.plan(
+                    itemCount: snapshot.models.count,
+                    availableHeight: context.size.height,
+                    kind: .models
+                )
+                modelList(snapshot, context: context, plan: plan)
+            }
+        }
     }
 
     private func activity(_ snapshot: WidgetSnapshot, context: WidgetContentContext) -> some View {
@@ -528,6 +536,50 @@ struct TokenMonitorWidgetView: View {
         return "\(label) \(WidgetFormat.quotaValue(provider))"
     }
 
+    private func largeQuotaPreview(_ snapshot: WidgetSnapshot) -> some View {
+        Link(destination: TokenMonitorWidgetConfiguration.url(for: .quota)) {
+            panel {
+                VStack(alignment: .leading, spacing: 4) {
+                    sectionLabel("额度")
+                    if snapshot.quota.isEmpty {
+                        emptyMessage("未配置额度来源")
+                    } else {
+                        ForEach(Array(sortedQuotaProviders(snapshot).prefix(4))) { provider in
+                            HStack(spacing: 6) {
+                                Text(WidgetFormat.provider(provider.provider))
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.72)
+                                Spacer(minLength: 3)
+                                Text(WidgetFormat.quotaValue(provider))
+                                    .font(.system(size: WidgetDesignTokens.secondarySize, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(provider.status == "ok" ? .primary : .secondary)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.72)
+                            }
+                        }
+                        if snapshot.quota.count > 4 {
+                            secondary("另有 \(snapshot.quota.count - 4) 项")
+                        }
+                    }
+                }
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func sortedQuotaProviders(_ snapshot: WidgetSnapshot) -> [WidgetQuotaProvider] {
+        snapshot.quota.sorted { a, b in
+            func priority(_ p: WidgetQuotaProvider) -> Int {
+                if p.balance != nil || p.windows.first?.remainingPercent != nil { return 0 }
+                if p.status == "unauthorized" || p.status == "sessionExpired" { return 1 }
+                if p.status == "notConfigured" { return 3 }
+                return 2
+            }
+            return priority(a) < priority(b)
+        }
+    }
+
     private func modelOverviewRows(_ snapshot: WidgetSnapshot, limit: Int) -> [String] {
         let rows = Array(snapshot.models.prefix(limit)).map {
             "\($0.displayName) · \(WidgetFormat.tokens($0.totalTokens, style: snapshot.presentation.numberStyle))"
@@ -677,6 +729,64 @@ struct TokenMonitorWidgetView: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
+    private func largeModelList(
+        _ snapshot: WidgetSnapshot,
+        context: WidgetContentContext,
+        plan: WidgetLargeListLayoutPlan
+    ) -> some View {
+        let rows = Array(snapshot.models.prefix(plan.visibleCount))
+
+        return VStack(alignment: .leading, spacing: plan.rowSpacing) {
+            if snapshot.models.isEmpty {
+                emptyMessage("模型排行为空")
+            } else {
+                ForEach(rows) { model in
+                    largeModelRow(
+                        model,
+                        plan: plan,
+                        style: snapshot.presentation.numberStyle
+                    )
+                    .frame(height: plan.rowHeight, alignment: .topLeading)
+                    .overlay(alignment: .bottom) {
+                        if model.id != rows.last?.id {
+                            Divider().opacity(WidgetDesignTokens.dividerOpacity)
+                        }
+                    }
+                }
+                if plan.hiddenCount > 0 {
+                    secondary("另有 \(plan.hiddenCount) 项")
+                        .frame(height: plan.moreRowHeight, alignment: .leading)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private func largeModelRow(
+        _ model: WidgetModel,
+        plan: WidgetLargeListLayoutPlan,
+        style: String
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 5) {
+                Text(model.displayName)
+                    .font(.system(size: plan.nameFontSize, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .truncationMode(.tail)
+                Spacer(minLength: 2)
+                Text("\(Int(model.sharePercent.rounded()))%")
+                    .font(.system(size: plan.percentFontSize, design: .monospaced))
+                    .foregroundStyle(.secondary)
+            }
+            modelBar(model.sharePercent)
+                .frame(height: plan.barHeight)
+            Text(WidgetFormat.tokens(model.totalTokens, style: style))
+                .font(.system(size: plan.tokenFontSize, design: .monospaced))
+                .foregroundStyle(.tertiary)
+        }
+    }
+
     private func modelRow(
         _ model: WidgetModel,
         layout: WidgetLayout,
@@ -756,7 +866,7 @@ struct TokenMonitorWidgetView: View {
                     }
 
                     ActivityHeatmap(layout: spec)
-                        .frame(maxWidth: .infinity, alignment: context.layout == .small ? .center : .leading)
+                        .frame(maxWidth: .infinity, alignment: context.layout == .large ? .center : context.layout == .small ? .center : .leading)
 
                     if density == .regular {
                         secondary(activityDateRangeText(spec))
@@ -783,7 +893,7 @@ struct TokenMonitorWidgetView: View {
         let summaryReserve: CGFloat = switch context.layout {
         case .small: 16
         case .medium: 0
-        case .large: 32
+        case .large: 28
         }
         let heatmapWidth = context.layout == .medium
             ? max(0, context.size.width - 82)

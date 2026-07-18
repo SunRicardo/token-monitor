@@ -123,10 +123,10 @@ test('Widget build provenance fields are injected into the extension Info.plist'
   }
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_KIND = com\.tokenmonitor\.dashboard;/);
   assert.match(widgetProject, /TOKEN_MONITOR_WIDGET_GIT_REVISION = unknown;/);
-  assert.match(widgetBuildSource, /const WIDGET_UI_VERSION = 9;/);
+  assert.match(widgetBuildSource, /const WIDGET_UI_VERSION = 10;/);
   assert.match(widgetBuildSource, /const WIDGET_SCHEMA_VERSION = 4;/);
   assert.match(widgetInfo, /<key>TMWidgetSchemaVersion<\/key>\s*<string>4<\/string>/);
-  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>9<\/string>/);
+  assert.match(widgetInfo, /<key>TMWidgetUIVersion<\/key>\s*<string>10<\/string>/);
 });
 
 test('Widget layout uses system margins and fixed scaffold metrics without changing kind', () => {
@@ -204,7 +204,7 @@ test('Quota and model pages derive row density from measured content height', ()
   assert.match(widgetViewModelSource, /for density in \[WidgetContentDensity\.regular, \.compact, \.summary\]/);
   assert.match(widgetViewModelSource, /availableForRows/);
   assert.equal((widgetSource.match(/WidgetListCapacity\.plan\(/g) || []).length, 2);
-  assert.equal((widgetSource.match(/availableHeight: context\.size\.height/g) || []).length, 2);
+  assert.equal((widgetSource.match(/availableHeight: context\.size\.height/g) || []).length, 3);
   assert.doesNotMatch(widgetSource, /quotaLimit|modelLimit/);
 });
 
