@@ -11,10 +11,9 @@ const { REASONIX_CLIENT } = require('./reasonixPaths');
 const { canonicalProjectKey, deterministicProjectLabel } = require('./projectKey');
 const { normalizeSyncUploadIntervalMs, staleAfterMsForSyncUpload } = require('./syncUploadInterval');
 const TOKEN_KEYS = ['totalTokens', 'total_tokens', 'totalTokenCount', 'total_token_count', 'tokens', 'tokenCount', 'token_count'];
-// Additive components for a token total. `reasoning` is deliberately excluded: OpenAI/Codex report
-// reasoning_output_tokens WITHIN output_tokens (tokscale's `output` already includes it and exposes
-// `reasoning` only as informational metadata), so summing it would double-count. It is still tracked
-// separately via REASONING_TOKEN_KEYS for display.
+// Additive components for a token total. `reasoning` is deliberately excluded for ordinary clients:
+// OpenAI/Codex report reasoning_output_tokens WITHIN output_tokens (tokscale's `output` already
+// includes it). Reasonix is the exception: its `output` and `reasoning` fields are disjoint.
 const TOKEN_COMPONENT_KEYS = [
   'input', 'inputTokens', 'input_tokens', 'promptTokens', 'prompt_tokens',
   'output', 'outputTokens', 'output_tokens', 'completionTokens', 'completion_tokens',
@@ -91,6 +90,15 @@ function tokenValueForClient(obj, client) {
   if (client !== REASONIX_CLIENT) return base;
   const direct = firstNumber(obj, TOKEN_KEYS);
   return direct !== 0 ? base : base + Math.max(0, firstNumber(obj, REASONING_TOKEN_KEYS));
+}
+
+// The public breakdown uses one output-family bucket. Reasonix's independent reasoning
+// component belongs there so cache-hit + cache-miss + output still closes over totalTokens.
+function outputValueForClient(obj, client) {
+  const output = Math.max(0, firstNumber(obj, OUTPUT_TOKEN_KEYS));
+  return client === REASONIX_CLIENT
+    ? output + Math.max(0, firstNumber(obj, REASONING_TOKEN_KEYS))
+    : output;
 }
 
 function costValue(obj) {
@@ -615,7 +623,7 @@ function addUsageRowToPeriod(period, row, detectedClient = detectClient(row)) {
   const cost = costValue(row);
   const cacheRead = Math.max(0, Math.round(firstNumber(row, CACHE_READ_TOKEN_KEYS)));
   const cacheWrite = Math.max(0, Math.round(firstNumber(row, CACHE_WRITE_TOKEN_KEYS)));
-  const output = Math.max(0, Math.round(firstNumber(row, OUTPUT_TOKEN_KEYS)));
+  const output = Math.max(0, Math.round(outputValueForClient(row, client)));
   const performance = row?.performance && typeof row.performance === 'object' ? row.performance : null;
   const timedTokens = Math.max(0, Math.round(firstNumber(performance, TIMED_TOKEN_KEYS)));
   const timedDurationMs = Math.max(0, Math.round(firstNumber(performance, TIMED_DURATION_KEYS)));

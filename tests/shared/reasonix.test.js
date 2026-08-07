@@ -9,6 +9,7 @@ const test = require('node:test');
 const {
   REASONIX_CLIENT,
   REASONIX_SOURCE_CHECK_ID,
+  cleanEnvDir,
   resolveReasonixHome,
   resolveReasonixStatsDir
 } = require('../../src/shared/reasonixPaths');
@@ -70,6 +71,40 @@ test('Reasonix path resolution follows state, home, then platform defaults', () 
   );
 });
 
+test('Reasonix path cleaning matches the official environment-directory forms', () => {
+  const linuxEnv = { HOME: '/home/alice', REASONIX_ROOT: '/srv/reasonix' };
+  assert.equal(
+    cleanEnvDir('${HOME}/.reasonix/./stats/../stats', { env: linuxEnv, platform: 'linux', cwdDir: '/workspace' }),
+    '/home/alice/.reasonix/stats'
+  );
+  assert.equal(
+    cleanEnvDir('${MISSING:-fallback/./stats}', { env: linuxEnv, platform: 'linux', cwdDir: '/workspace' }),
+    '/workspace/fallback/stats'
+  );
+  assert.equal(
+    cleanEnvDir('${REASONIX_ROOT}/../reasonix', { env: linuxEnv, platform: 'linux', cwdDir: '/workspace' }),
+    '/srv/reasonix'
+  );
+  assert.equal(
+    cleanEnvDir('~/reasonix/../stats', { env: linuxEnv, homeDir: '/home/alice', platform: 'linux', cwdDir: '/workspace' }),
+    '/home/alice/stats'
+  );
+  assert.equal(
+    cleanEnvDir('relative/./reasonix/../stats', { env: linuxEnv, platform: 'linux', cwdDir: '/workspace' }),
+    '/workspace/relative/stats'
+  );
+
+  const windowsEnv = { USERPROFILE: String.raw`C:\Users\alice` };
+  assert.equal(
+    cleanEnvDir(String.raw`~\reasonix\..\stats`, { env: windowsEnv, homeDir: String.raw`C:\Users\alice`, platform: 'win32', cwdDir: String.raw`C:\workspace` }),
+    String.raw`C:\Users\alice\stats`
+  );
+  assert.equal(
+    cleanEnvDir(String.raw`relative\.\reasonix\..\stats`, { env: windowsEnv, platform: 'win32', cwdDir: String.raw`C:\workspace` }),
+    String.raw`C:\workspace\relative\stats`
+  );
+});
+
 test('Reasonix is a normalized tracked client', () => {
   assert.equal(normalizeClientName('Reasonix'), 'reasonix');
   assert.equal(normalizeClientName('reasonix-stats'), 'reasonix');
@@ -78,6 +113,11 @@ test('Reasonix is a normalized tracked client', () => {
 test('Reasonix reasoning is additive without changing other client semantics', () => {
   const reasonix = extractUsageFromTokscale({ entries: [REASONIX_ROW] });
   assert.equal(reasonix.totalTokens, 140);
+  assert.equal(reasonix.cacheReadTokens, 20);
+  assert.equal(reasonix.outputTokens, 40);
+  assert.equal(reasonix.clientOutputs.reasonix, 40);
+  assert.equal(reasonix.modelOutputs['deepseek-chat'], 40);
+  assert.equal(reasonix.totalTokens - reasonix.cacheReadTokens - reasonix.outputTokens, 80);
   assert.equal(reasonix.clients.reasonix, 140);
   assert.equal(reasonix.models['deepseek-chat'], 140);
   assert.equal(reasonix.clientModels.reasonix['deepseek-chat'], 140);
@@ -93,6 +133,8 @@ test('Reasonix reasoning is additive without changing other client semantics', (
       model: client === 'codex' ? 'gpt-5' : 'claude-sonnet-4'
     }] });
     assert.equal(period.totalTokens, 130, `${client} reasoning must remain informational`);
+    assert.equal(period.outputTokens, 30, `${client} output-family must remain unchanged`);
+    assert.equal(period.clientOutputs[client], 30, `${client} output-family must remain unchanged`);
   }
 });
 
@@ -123,10 +165,16 @@ test('Reasonix history uses additive reasoning while existing clients stay uncha
   assert.equal(parsed.contributions[0].perClient.codex.tokens, 130);
   assert.equal(parsed.contributions[0].perModel['deepseek-chat'].tokens, 140);
   assert.equal(parsed.contributions[0].perModel['gpt-5'].tokens, 130);
+  assert.equal(parsed.contributions[0].messages, 1);
+  assert.equal(parsed.contributions[0].perClient.reasonix.messages, 0);
+  assert.equal(parsed.contributions[0].perClient.codex.messages, 1);
   const history = normalizeHistory(parsed, { todayKey: '2026-08-07' });
   assert.equal(history.daily[0].tokens, 270);
   assert.equal(history.daily[0].perClient.reasonix.tokens, 140);
   assert.equal(history.daily[0].perModel['deepseek-chat'].tokens, 140);
+  assert.equal(history.daily[0].messages, 1);
+  assert.equal(history.daily[0].perClient.reasonix.messages, 0);
+  assert.equal(history.summary.messages, 1);
   assert.equal(history.summary.totalTokens, 270);
 });
 
@@ -148,6 +196,8 @@ test('Reasonix daily history archive preserves its additive total', () => {
   });
   assert.equal(restored.daily[0].perClient.reasonix.tokens, 140);
   assert.equal(restored.daily[0].perModel['deepseek-chat'].tokens, 140);
+  assert.equal(restored.daily[0].perClient.reasonix.messages, 0);
+  assert.equal(restored.summary.messages, 0);
   assert.equal(restored.summary.totalTokens, 140);
 });
 

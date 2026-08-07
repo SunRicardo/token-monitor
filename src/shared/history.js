@@ -53,7 +53,10 @@ function parseGraphResult(raw) {
       const model = String(c.modelId || c.model || c.model_id || 'unknown');
       const t = sumTokens(c.tokens, client);
       const cst = num(c.cost);
-      const msg = num(c.messages);
+      // Reasonix's `messages` field is a provider request count, not user turns.
+      // Keep it out of Token Monitor's message/activity semantics; its tokens and
+      // cost still contribute normally to the history totals.
+      const msg = String(client).trim().toLowerCase() === REASONIX_CLIENT ? 0 : num(c.messages);
       tokens += t;
       cost += cst;
       messages += msg;

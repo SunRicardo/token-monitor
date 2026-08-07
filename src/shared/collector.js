@@ -1157,7 +1157,7 @@ function clientSourceRoots(clientsCsv) {
   add('proma', ['proma-sessions', path.join(home, '.proma', 'agent-sessions')]);
   add('reasonix', [
     REASONIX_SOURCE_CHECK_ID,
-    resolveReasonixStatsDir({ env: process.env, homeDir: home, platform: process.platform })
+    resolveReasonixStatsDir({ env: process.env, homeDir: home, platform: process.platform, cwdDir: process.cwd() })
   ]);
   // Kiro (AWS): tokscale reads home-relative roots — the sessions tree used by
   // both CLI and IDE, the Kiro IDE globalStorage root (native macOS / Linux /
