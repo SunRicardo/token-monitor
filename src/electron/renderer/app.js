@@ -1706,7 +1706,7 @@ function renderDeviceAccordion(accordionInner, deviceDetail) {
   accordionInner.dataset.signature = signature;
 }
 
-function updateRow(row, { name, subtitle, detail, value, cost, max, color, barBackground, accordionRows, deviceDetail, stale, platform, local, client, kind, cacheReadTokens, outputTokens }) {
+function updateRow(row, { name, subtitle, detail, value, cost, max, color, barBackground, accordionRows, deviceDetail, nativeSessionBreakdown, stale, platform, local, client, kind, cacheReadTokens, outputTokens }) {
   const width = rowWidth(value, max);
   const isExpanded = row.classList.contains('expanded');
   row.className = `row${kind ? ` ${kind}-row` : ''}${stale ? ' stale' : ''}${local ? ' local' : ''}`;
@@ -1774,6 +1774,38 @@ function updateRow(row, { name, subtitle, detail, value, cost, max, color, barBa
         tokens.className = 'accordion-value';
         tokens.textContent = formatNumber(tool.value);
         item.append(label, tokens);
+        content.append(item);
+      }
+      accordionInner.replaceChildren(content);
+      accordionInner.dataset.signature = accordionSignature;
+    }
+    row.classList.add('has-accordion');
+    if (isExpanded) row.classList.add('expanded');
+  } else if (nativeSessionBreakdown) {
+    const breakdownRows = [
+      [t('reasonix.native.total'), value, false],
+      [t('reasonix.native.prompt'), nativeSessionBreakdown.promptTokens, false],
+      [t('reasonix.native.completion'), nativeSessionBreakdown.completionTokens, false],
+      [t('reasonix.native.reasoning'), nativeSessionBreakdown.reasoningTokens, false],
+      [t('reasonix.native.cacheHit'), nativeSessionBreakdown.cacheHitTokens, false],
+      [t('reasonix.native.cacheMiss'), nativeSessionBreakdown.cacheMissTokens, false],
+      [t('reasonix.native.providerRequests'), nativeSessionBreakdown.providerRequests, false],
+      [t('reasonix.native.sessionCost'), nativeSessionBreakdown.sessionCostUsd, true]
+    ];
+    const accordionSignature = JSON.stringify(breakdownRows);
+    if (accordionInner.dataset.signature !== accordionSignature) {
+      const content = document.createElement('div');
+      content.className = 'accordion-content native-session-breakdown';
+      for (const [labelText, rawValue, isCost] of breakdownRows) {
+        const item = document.createElement('div');
+        item.className = 'accordion-row';
+        const label = document.createElement('div');
+        label.className = 'accordion-label';
+        label.textContent = labelText;
+        const metric = document.createElement('div');
+        metric.className = 'accordion-value';
+        metric.textContent = isCost ? formatCost(rawValue || 0) : formatNumber(rawValue || 0);
+        item.append(label, metric);
         content.append(item);
       }
       accordionInner.replaceChildren(content);
@@ -1993,7 +2025,8 @@ function sessionRowsForPeriod(period) {
     modelColor,
     stableColor,
     fallbackColors: fallbackModelColors,
-    archivedLabel: t('session.archived')
+    archivedLabel: t('session.archived'),
+    nativeSessions: state.stats?.nativeSessions?.[state.period] || {}
   });
   if (rows.length > 0) return rows.sort((a, b) => b.sortTime - a.sortTime || b.value - a.value || b.cost - a.cost || a.name.localeCompare(b.name));
   if (Number(period?.totalTokens || 0) === 0) return [];
@@ -2006,7 +2039,8 @@ function projectRowsForPeriod(period) {
     clientColors,
     stableColor,
     fallbackColors: fallbackModelColors,
-    unknownClientLabel: t('projects.unknownTool')
+    unknownClientLabel: t('projects.unknownTool'),
+    nativeProjects: state.stats?.nativeProjects?.[state.period] || {}
   });
 }
 

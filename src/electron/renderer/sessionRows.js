@@ -74,9 +74,58 @@
     return compactSessionTime(session?.lastUsedAt || session?.startedAt, now);
   }
 
+  function textValue(value) {
+    return typeof value === 'string' ? value.trim() : '';
+  }
+
   function messageLabel(session) {
     const count = finiteNumber(session?.messageCount);
     return count > 0 ? `${formatNumber(count)} msg${count === 1 ? '' : 's'}` : '';
+  }
+
+  function nativeSessionRow(session, key, options, now) {
+    const value = finiteNumber(session?.totalTokens);
+    if (value <= 0) return null;
+    const labels = options.clientLabels || {};
+    const colors = options.clientColors || {};
+    const stable = typeof options.stableColor === 'function' ? options.stableColor : stableColor;
+    const palette = options.fallbackColors || fallbackColors;
+    const client = session?.client || 'reasonix';
+    const clientLabel = labels[client] || client || 'Reasonix';
+    const title = textValue(session?.title) || 'Reasonix Session';
+    const model = textValue(session?.model) || sessionModelLabel(session);
+    const project = textValue(session?.projectLabel);
+    const turns = finiteNumber(session?.turns);
+    const subtitleParts = [
+      clientLabel,
+      model,
+      project,
+      sessionActivityLabel(session, now),
+      turns > 0 ? `${formatNumber(turns)} turn${turns === 1 ? '' : 's'}` : ''
+    ].filter(Boolean);
+    return {
+      key: `native-session:${key}`,
+      kind: 'native-session',
+      name: title,
+      subtitle: subtitleParts.join(' · '),
+      detail: sessionIdLabel(session?.sessionId || key),
+      value,
+      cost: finiteNumber(session?.sessionCostUsd),
+      color: colors[client] || stable(key, palette),
+      stale: false,
+      client,
+      sortTime: sessionTimestampValue(session),
+      title: `${clientLabel} session ${title}`,
+      nativeSessionBreakdown: {
+        promptTokens: finiteNumber(session?.promptTokens),
+        completionTokens: finiteNumber(session?.completionTokens),
+        reasoningTokens: finiteNumber(session?.reasoningTokens),
+        cacheHitTokens: finiteNumber(session?.cacheHitTokens),
+        cacheMissTokens: finiteNumber(session?.cacheMissTokens),
+        providerRequests: finiteNumber(session?.requestCount),
+        sessionCostUsd: finiteNumber(session?.sessionCostUsd)
+      }
+    };
   }
 
   function sessionRowsForPeriod(period, options = {}) {
@@ -119,6 +168,10 @@
         };
       })
       .filter(Boolean);
+    for (const [key, session] of Object.entries(options.nativeSessions || {})) {
+      const row = nativeSessionRow(session, key, options, now);
+      if (row) rows.push(row);
+    }
     return rows.sort((a, b) => b.sortTime - a.sortTime || b.value - a.value || b.cost - a.cost || a.name.localeCompare(b.name));
   }
 

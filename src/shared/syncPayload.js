@@ -122,6 +122,12 @@ function sessionsWithoutReasonix(sessions) {
 function buildSyncPayload(summary, { omitAllTimeProjects = false } = {}) {
   if (!summary || typeof summary !== 'object') return summary;
   const payload = { ...summary, limits: syncLimits(summary.limits) };
+  // Reasonix native sessions are a local-only view. They contain provider
+  // metadata and project labels that are intentionally not part of the device
+  // wire contract, and uploading them would also make local paths/preview text
+  // a hub concern. Tokscale remains the only aggregate/session authority.
+  delete payload.nativeSessions;
+  delete payload.nativeProjects;
   const projectsEnabled = summary.projectsEnabled !== false;
   delete payload.allTimeProjectsOmitted;
   delete payload.allTimeProjectsIncomplete;

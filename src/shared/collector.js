@@ -36,6 +36,13 @@ const { findSessionFiles, codexSessionFile } = require('./sessionFiles');
 const opencodeSession = require('./opencodeSession');
 const { buildPromaHistoryGraph, buildPromaPeriods, collectPromaRows } = require('./promaUsage');
 const { resolveReasonixStatsDir, REASONIX_SOURCE_CHECK_ID } = require('./reasonixPaths');
+const {
+  createReasonixNativeSessionCache,
+  isReasonixNativeSessionPath,
+  isReasonixNativeSessionSidecar,
+  reasonixNativeSessionWatchRoots,
+  emptyNativeView
+} = require('./reasonixSessions');
 const { hashKey } = require('./hashKey');
 const { hostOsInfo, normalizeOsInfo } = require('./osVersion');
 const {
@@ -1007,6 +1014,25 @@ async function collectUsageOnce(options) {
     month,
     allTime
   };
+  if (options.reasonixNativeSessionsEnabled === true && trackedClientSet.has('reasonix')) {
+    try {
+      const nativeCache = options.reasonixNativeSessionCache || createReasonixNativeSessionCache({
+        env: options.env || process.env,
+        homeDir: options.homeDir || os.homedir(),
+        platform: platformValue,
+        cwdDir: options.cwdDir || process.cwd(),
+        projectIdentity
+      });
+      const nativeView = nativeCache.getView({ now: collectedAt, projectsEnabled });
+      summary.nativeSessions = nativeView.sessions;
+      summary.nativeProjects = nativeView.projects;
+    } catch (error) {
+      if (typeof options.logger === 'function') options.logger(`reasonix native session scan failed: ${error.message}`);
+      const empty = emptyNativeView();
+      summary.nativeSessions = empty.sessions;
+      summary.nativeProjects = empty.projects;
+    }
+  }
   if (options.historyEnabled === false) {
     summary.history = null;
   } else if (options.includeHistory) {
@@ -1263,6 +1289,13 @@ function watchClientRootsForClients(clientsCsv) {
   if (enabled.has('antigravity') && dirExists(antigravityCliDir)) {
     rootsByClient.antigravity = [...new Set([...(rootsByClient.antigravity || []), antigravityCliDir])];
   }
+  if (enabled.has('reasonix')) {
+    const nativeRoots = reasonixNativeSessionWatchRoots();
+    const existingNativeRoots = nativeRoots.filter(dirExists);
+    if (existingNativeRoots.length > 0) {
+      rootsByClient.reasonix = [...new Set([...(rootsByClient.reasonix || []), ...existingNativeRoots])];
+    }
+  }
   return rootsByClient;
 }
 
@@ -1340,7 +1373,12 @@ function watchIgnoreMatcher(clientsCsv) {
   const antigravityRootSet = new Set(antigravityRoots);
   const micodeRoots = (candidates.micode || []).map((dir) => path.resolve(canonicalWatchPath(dir)));
   const micodeRootSet = new Set(micodeRoots);
-  if (hermesRoots.length === 0 && copilotRoots.length === 0 && antigravityRoots.length === 0 && micodeRoots.length === 0) return undefined;
+  const reasonixEnabled = String(clientsCsv || '').split(',').map((value) => value.trim().toLowerCase()).includes('reasonix');
+  const reasonixRoots = reasonixEnabled
+    ? reasonixNativeSessionWatchRoots().map((dir) => path.resolve(canonicalWatchPath(dir)))
+    : [];
+  const reasonixRootSet = new Set(reasonixRoots);
+  if (hermesRoots.length === 0 && copilotRoots.length === 0 && antigravityRoots.length === 0 && micodeRoots.length === 0 && reasonixRoots.length === 0) return undefined;
   return (target) => {
     const resolved = path.resolve(target);
     // Every explicit watch root stays watched — the home dir AND each profile
@@ -1383,7 +1421,19 @@ function watchIgnoreMatcher(clientsCsv) {
       if (path.dirname(resolved) !== root) return true;
       return !MICODE_DB_WATCH_PATTERN.test(path.basename(resolved));
     }
-    return false; // paths outside the bounded Hermes/Copilot/Antigravity/MiCode roots are never ignored
+    if (reasonixRootSet.has(resolved)) return false;
+    for (const root of reasonixRoots) {
+      if (!resolved.startsWith(root + path.sep)) continue;
+      if (isReasonixNativeSessionSidecar(resolved)) return false;
+      try {
+        if (fs.statSync(resolved).isDirectory()) return false;
+      } catch (_) {
+        // A removed sidecar is still delivered by chokidar; other removed
+        // files do not need to invalidate the native-session cache.
+      }
+      return true;
+    }
+    return false; // paths outside the bounded Hermes/Copilot/Antigravity/MiCode/Reasonix roots are never ignored
   };
 }
 
@@ -1768,6 +1818,16 @@ function startCollector(options) {
   const watchUsePolling = resolveWatchUsePolling(options.watchUsePolling);
   const watchNativeForced = watchPollingEnvOverride() === false;
   const trackedClients = new Set(normalizeClientsCsv(clients).split(',').filter(Boolean));
+  const reasonixNativeSessionsEnabled = options.reasonixNativeSessionsEnabled === true;
+  const reasonixNativeSessionCache = reasonixNativeSessionsEnabled && trackedClients.has('reasonix')
+    ? options.reasonixNativeSessionCache || createReasonixNativeSessionCache({
+      env: options.env || process.env,
+      homeDir: options.homeDir || os.homedir(),
+      platform: options.platform || process.platform,
+      cwdDir: options.cwdDir || process.cwd(),
+      projectIdentity
+    })
+    : null;
   const deviceOsInfo = options.osInfo === undefined
     ? hostOsInfo()
     : normalizeOsInfo(options.osInfo);
@@ -1978,6 +2038,8 @@ function startCollector(options) {
         } : null,
         forceSelfSync: tickOptions.forceSelfSync ?? null,
         sourceSelfSync: tickOptions.sourceSelfSync ?? null,
+        reasonixNativeSessionsEnabled,
+        reasonixNativeSessionCache,
         // Both selections name clients whose pending source event this tick has
         // already consumed — the queue's drain for one, its acknowledgement for
         // the other — so either is a legitimate restore.
@@ -2324,6 +2386,18 @@ function startCollector(options) {
             : Math.max(pendingActivityRevision, activityRevision);
         }
         const eventClients = clientsForWatchPath(filePath, rootsByClient);
+        if (
+          reasonixNativeSessionCache
+          && isReasonixNativeSessionSidecar(filePath)
+          && isReasonixNativeSessionPath(
+            filePath,
+            typeof reasonixNativeSessionCache.sessionRoots === 'function'
+              ? reasonixNativeSessionCache.sessionRoots()
+              : reasonixNativeSessionWatchRoots()
+          )
+        ) {
+          reasonixNativeSessionCache.invalidate(filePath);
+        }
         for (const client of clientsForWatchPath(filePath, sourceSyncRootsByClient)) {
           sourceSyncQueue.record(client);
         }
