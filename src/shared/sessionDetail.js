@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const { resolveSessionFile } = require('./sessionFiles');
 const opencodeSession = require('./opencodeSession');
+const { readReasonixSessionEvents } = require('./reasonixSessionDetail');
 
 function num(value) {
   const n = Number(value);
@@ -290,8 +291,28 @@ function readOpenCodeSessionDetail({ sessionId, period = 'total', deps = {} }) {
   return { found: true, client: 'opencode', sessionId, period, exchanges: grouped, totals: totalsOf(grouped, filteredCost) };
 }
 
+function readReasonixSessionDetail({ sessionId, period = 'total', home, deps = {} }) {
+  const result = readReasonixSessionEvents({
+    sessionId,
+    home,
+    env: deps.env || process.env,
+    platform: deps.platform || process.platform,
+    cwdDir: deps.cwdDir || process.cwd(),
+    fsModule: deps.fsModule,
+    pathModule: deps.pathModule
+  });
+  if (!result.found) return { found: false, client: 'reasonix', sessionId, period, exchanges: [], totals: totalsOf([], 0) };
+
+  const now = new Date(deps.now || Date.now());
+  const grouped = filterExchangesByPeriod(groupEvents(result.events), period, now);
+  // Reasonix's reported session cost belongs to the native-session sidecar.
+  // It is intentionally not promoted to the generic Session Detail cost.
+  return { found: true, client: 'reasonix', sessionId, period, exchanges: grouped, totals: totalsOf(grouped, 0) };
+}
+
 function readSessionDetail({ client, sessionId, period = 'total', sessionCost = 0, home, deps = {} }) {
   if (client === 'opencode') return readOpenCodeSessionDetail({ sessionId, period, deps });
+  if (client === 'reasonix') return readReasonixSessionDetail({ sessionId, period, home, deps });
   const filePath = resolveSessionFile(client, sessionId, home);
   if (!filePath) return { found: false, client, sessionId, period, exchanges: [], totals: totalsOf([], sessionCost) };
   let text;
@@ -304,4 +325,13 @@ function readSessionDetail({ client, sessionId, period = 'total', sessionCost = 
   return { found: true, client, sessionId, period, exchanges: grouped, totals: totalsOf(grouped, sessionCost) };
 }
 
-module.exports = { parseClaudeTranscript, parseCodexTranscript, makeTokens, groupEvents, filterExchangesByPeriod, distributeCost, readSessionDetail };
+module.exports = {
+  parseClaudeTranscript,
+  parseCodexTranscript,
+  makeTokens,
+  groupEvents,
+  filterExchangesByPeriod,
+  distributeCost,
+  readReasonixSessionDetail,
+  readSessionDetail
+};

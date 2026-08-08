@@ -468,7 +468,7 @@ test('Reasonix native view stays outside aggregate, history, archive and sync pa
   assert.equal(records.at(-1).nativeSessions.today[nativeSession.sessionId].totalTokens, 999);
 });
 
-test('Reasonix native rows label requests separately from messages and merge project attribution', () => {
+test('Reasonix native rows use the common session formatter and merge project attribution', () => {
   const session = {
     native: true,
     client: 'reasonix',
@@ -485,24 +485,21 @@ test('Reasonix native rows label requests separately from messages and merge pro
     reportedCostUsd: 0.25,
     turns: 2,
     projectLabel: 'Token Monitor',
-    lastUsedAt: '2026-08-08T03:00:00.000Z'
+    lastUsedAt: new Date(2026, 7, 8, 11, 0).toISOString()
   };
   const rows = sessionRowsForPeriod({ sessions: {} }, {
     nativeSessions: { 'reasonix:row-id': session },
     clientLabels: { reasonix: 'Reasonix' },
     clientColors: { reasonix: '#4d6bfe' },
-    now: new Date('2026-08-08T12:00:00.000Z')
+    now: new Date(2026, 7, 8, 12, 0)
   });
   assert.equal(rows.length, 1);
   assert.equal(rows[0].kind, 'session');
+  assert.equal(rows[0].key, 'session:reasonix:row-id');
   assert.equal(rows[0].name, 'Reasonix · deepseek-v4');
-  assert.match(rows[0].subtitle, /2 turns/);
+  assert.equal(rows[0].subtitle, '11:00');
   assert.equal(rows[0].detail, 'row-id');
-  assert.equal(rows[0].nativeSessionBreakdown.sessionTitle, 'Build a dashboard');
-  assert.equal(rows[0].nativeSessionBreakdown.projectLabel, 'Token Monitor');
-  assert.equal(rows[0].nativeSessionBreakdown.cacheMissTokens, 80);
-  assert.equal(rows[0].nativeSessionBreakdown.providerRequests, 4);
-  assert.equal(rows[0].nativeSessionBreakdown.reportedCostUsd, 0.25);
+  assert.equal(Object.hasOwn(rows[0], 'nativeSessionBreakdown'), false);
   assert.equal(rows[0].cost, 0);
 
   const projects = projectRowsForPeriod({ projects: {} }, {

@@ -1706,7 +1706,7 @@ function renderDeviceAccordion(accordionInner, deviceDetail) {
   accordionInner.dataset.signature = signature;
 }
 
-function updateRow(row, { name, subtitle, detail, value, cost, max, color, barBackground, accordionRows, deviceDetail, nativeSessionBreakdown, stale, platform, local, client, kind, cacheReadTokens, outputTokens }) {
+function updateRow(row, { name, subtitle, detail, value, cost, max, color, barBackground, accordionRows, deviceDetail, stale, platform, local, client, kind, cacheReadTokens, outputTokens }) {
   const width = rowWidth(value, max);
   const isExpanded = row.classList.contains('expanded');
   row.className = `row${kind ? ` ${kind}-row` : ''}${stale ? ' stale' : ''}${local ? ' local' : ''}`;
@@ -1774,48 +1774,6 @@ function updateRow(row, { name, subtitle, detail, value, cost, max, color, barBa
         tokens.className = 'accordion-value';
         tokens.textContent = formatNumber(tool.value);
         item.append(label, tokens);
-        content.append(item);
-      }
-      accordionInner.replaceChildren(content);
-      accordionInner.dataset.signature = accordionSignature;
-    }
-    row.classList.add('has-accordion');
-    if (isExpanded) row.classList.add('expanded');
-  } else if (nativeSessionBreakdown) {
-    const breakdownRows = [
-      ...(nativeSessionBreakdown.sessionTitle
-        ? [[t('reasonix.native.sessionTitle'), nativeSessionBreakdown.sessionTitle, 'text']]
-        : []),
-      ...(nativeSessionBreakdown.projectLabel
-        ? [[t('reasonix.native.project'), nativeSessionBreakdown.projectLabel, 'text']]
-        : []),
-      [t('reasonix.native.prompt'), nativeSessionBreakdown.promptTokens, false],
-      [t('reasonix.native.completion'), nativeSessionBreakdown.completionTokens, false],
-      [t('reasonix.native.reasoning'), nativeSessionBreakdown.reasoningTokens, false],
-      [t('reasonix.native.cacheHit'), nativeSessionBreakdown.cacheHitTokens, false],
-      [t('reasonix.native.cacheMiss'), nativeSessionBreakdown.cacheMissTokens, false],
-      [t('reasonix.native.providerRequests'), nativeSessionBreakdown.providerRequests, false],
-      [t('reasonix.native.reportedCost'), nativeSessionBreakdown.reportedCostUsd, true]
-    ];
-    const accordionSignature = JSON.stringify(breakdownRows);
-    if (accordionInner.dataset.signature !== accordionSignature) {
-      const content = document.createElement('div');
-      content.className = 'accordion-content';
-      for (const [labelText, rawValue, valueKind] of breakdownRows) {
-        const item = document.createElement('div');
-        item.className = 'accordion-row';
-        const label = document.createElement('div');
-        label.className = 'accordion-label';
-        label.textContent = labelText;
-        const metric = document.createElement('div');
-        metric.className = 'accordion-value';
-        const displayValue = valueKind === 'text'
-          ? rawValue
-          : valueKind
-          ? (rawValue === undefined ? '—' : formatCost(rawValue))
-          : formatNumber(rawValue || 0);
-        metric.textContent = displayValue;
-        item.append(label, metric);
         content.append(item);
       }
       accordionInner.replaceChildren(content);
@@ -10007,16 +9965,18 @@ els.breakdown.addEventListener('click', (event) => {
   if (!rowEl) return;
   const key = rowEl.dataset.key || '';            // "session:<client>:<sessionId>"
   const client = rowEl.dataset.client || '';
-  if (client !== 'claude' && client !== 'codex' && client !== 'opencode') return;
+  if (client !== 'claude' && client !== 'codex' && client !== 'opencode' && client !== 'reasonix') return;
   const match = key.match(/^session:([^:]+):(.+)$/);
   if (!match) return;
-  const sessionId = match[2];
+  const sessionId = client === 'reasonix' ? `reasonix:${match[2]}` : match[2];
   const period = state.stats?.periods?.[state.period];
-  const session = period?.sessions?.[`${client}:${sessionId}`];
+  const session = client === 'reasonix'
+    ? state.stats?.nativeSessions?.[state.period]?.[sessionId]
+    : period?.sessions?.[`${client}:${sessionId}`];
   openSessionDetail({
     client,
     sessionId,
-    sessionCost: Number(session?.costUsd || 0),
+    sessionCost: client === 'reasonix' ? 0 : Number(session?.costUsd || 0),
     title: rowEl.querySelector('.row-title')?.textContent || ''
   });
 });

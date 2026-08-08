@@ -85,7 +85,7 @@ test('session rows fall back to month and day for older activity', () => {
   assert.equal(rows[0].detail, '214c24d5-aaaa-bbbb-cccc-f87e');
 });
 
-test('Reasonix native rows reuse the common session schema and keep native details in the accordion payload', () => {
+test('Reasonix native rows reuse the common session schema without a native accordion', () => {
   const rows = sessionRowsForPeriod({ sessions: {} }, {
     nativeSessions: {
       'reasonix:ABC123': {
@@ -114,8 +114,9 @@ test('Reasonix native rows reuse the common session schema and keep native detai
   assert.equal(rows.length, 1);
   const [row] = rows;
   assert.equal(row.kind, 'session');
+  assert.equal(row.key, 'session:reasonix:ABC123');
   assert.equal(row.name, 'Reasonix · deepseek/deepseek-v4-flash');
-  assert.equal(row.subtitle, '14:10 · 1 turn');
+  assert.equal(row.subtitle, '14:10');
   assert.equal(row.detail, 'ABC123');
   assert.equal(row.value, 15382);
   assert.equal(row.cost, 0);
@@ -124,17 +125,7 @@ test('Reasonix native rows reuse the common session schema and keep native detai
   assert.doesNotMatch(row.name, /测试一下/);
   assert.doesNotMatch(row.subtitle, /Qyen/);
   assert.doesNotMatch(row.detail, /reasonix:/);
-  assert.deepEqual(row.nativeSessionBreakdown, {
-    sessionTitle: '测试一下',
-    projectLabel: 'Qyen',
-    promptTokens: 80,
-    completionTokens: 30,
-    reasoningTokens: 10,
-    cacheHitTokens: 20,
-    cacheMissTokens: 80,
-    providerRequests: 4,
-    reportedCostUsd: 0.25
-  });
+  assert.equal(Object.hasOwn(row, 'nativeSessionBreakdown'), false);
   assert.equal(sessionIdLabel('reasonix:ABC123'), 'ABC123');
 
   const ordinary = sessionRowsForPeriod({

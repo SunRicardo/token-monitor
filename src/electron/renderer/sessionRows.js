@@ -12,12 +12,6 @@
     return Number.isFinite(n) ? n : 0;
   }
 
-  function optionalNumber(value) {
-    if (value === undefined || value === null || value === '') return undefined;
-    const n = Number(value);
-    return Number.isFinite(n) ? n : undefined;
-  }
-
   function formatNumber(value) {
     return Math.round(finiteNumber(value)).toLocaleString('en-US');
   }
@@ -97,15 +91,6 @@
     };
   }
 
-  function nativeSessionTitle(session) {
-    const explicitTitle = [session?.customTitle, session?.topicTitle, session?.preview]
-      .map(textValue)
-      .find(Boolean);
-    if (explicitTitle) return explicitTitle;
-    const derivedTitle = textValue(session?.title);
-    return derivedTitle && derivedTitle !== 'Reasonix Session' ? derivedTitle : '';
-  }
-
   function messageLabel(session) {
     const count = finiteNumber(session?.messageCount);
     return count > 0 ? `${formatNumber(count)} msg${count === 1 ? '' : 's'}` : '';
@@ -125,14 +110,12 @@
       'Reasonix',
       session?.model
     );
-    const project = textValue(session?.projectLabel);
-    const turns = finiteNumber(session?.turns);
     const subtitleParts = [
       sessionActivityLabel(session, now),
-      turns > 0 ? `${formatNumber(turns)} turn${turns === 1 ? '' : 's'}` : ''
+      messageLabel(session)
     ].filter(Boolean);
     return {
-      key: `native-session:${key}`,
+      key: `session:${key}`,
       kind: 'session',
       name: titleParts.join(' · '),
       subtitle: subtitleParts.join(' · '),
@@ -145,18 +128,7 @@
       stale: false,
       client,
       sortTime: sessionTimestampValue(session),
-      title: `${clientLabel} session ${sessionIdLabel(session?.sessionId || key)}`,
-      nativeSessionBreakdown: {
-        sessionTitle: nativeSessionTitle(session),
-        ...(project ? { projectLabel: project } : {}),
-        promptTokens: finiteNumber(session?.promptTokens),
-        completionTokens: finiteNumber(session?.completionTokens),
-        reasoningTokens: finiteNumber(session?.reasoningTokens),
-        cacheHitTokens: finiteNumber(session?.cacheHitTokens),
-        cacheMissTokens: finiteNumber(session?.cacheMissTokens),
-        providerRequests: finiteNumber(session?.requestCount),
-        reportedCostUsd: optionalNumber(session?.reportedCostUsd)
-      }
+      title: `${clientLabel} session ${sessionIdLabel(session?.sessionId || key)}`
     };
   }
 
