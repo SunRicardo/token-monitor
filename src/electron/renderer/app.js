@@ -1790,7 +1790,7 @@ function updateRow(row, { name, subtitle, detail, value, cost, max, color, barBa
       [t('reasonix.native.cacheHit'), nativeSessionBreakdown.cacheHitTokens, false],
       [t('reasonix.native.cacheMiss'), nativeSessionBreakdown.cacheMissTokens, false],
       [t('reasonix.native.providerRequests'), nativeSessionBreakdown.providerRequests, false],
-      [t('reasonix.native.sessionCost'), nativeSessionBreakdown.sessionCostUsd, true]
+      [t('reasonix.native.reportedCost'), nativeSessionBreakdown.reportedCostUsd, true]
     ];
     const accordionSignature = JSON.stringify(breakdownRows);
     if (accordionInner.dataset.signature !== accordionSignature) {
@@ -1804,7 +1804,9 @@ function updateRow(row, { name, subtitle, detail, value, cost, max, color, barBa
         label.textContent = labelText;
         const metric = document.createElement('div');
         metric.className = 'accordion-value';
-        metric.textContent = isCost ? formatCost(rawValue || 0) : formatNumber(rawValue || 0);
+        metric.textContent = isCost
+          ? (rawValue === undefined ? '—' : formatCost(rawValue))
+          : formatNumber(rawValue || 0);
         item.append(label, metric);
         content.append(item);
       }

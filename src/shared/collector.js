@@ -1023,7 +1023,7 @@ async function collectUsageOnce(options) {
         cwdDir: options.cwdDir || process.cwd(),
         projectIdentity
       });
-      const nativeView = nativeCache.getView({ now: collectedAt, projectsEnabled });
+      const nativeView = nativeCache.getView({ now: collectedAt, projectsEnabled, allTimeSince });
       summary.nativeSessions = nativeView.sessions;
       summary.nativeProjects = nativeView.projects;
     } catch (error) {

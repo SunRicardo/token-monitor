@@ -88,7 +88,8 @@
       const project = projects.get(key);
       project.name = deterministicProjectLabel(project.name, name);
       project.value += Math.max(0, Number(entry.tokens || 0));
-      project.cost += Math.max(0, Number(entry.costUsd || 0));
+      // Reasonix native project telemetry is local reference data only. Its
+      // reported session cost must never become generic project cost.
       for (const [client, value] of Object.entries(entry.clients || {})) {
         const tokens = Math.max(0, Number(value || 0));
         if (tokens <= 0) continue;

@@ -34,14 +34,22 @@ function sidecars(directory, id, meta, telemetry) {
   return { metaPath, telemetryPath };
 }
 
-function cacheFor(stateHome, projectIdentity) {
+function cacheFor(stateHome, projectIdentity, allTimeSince) {
   return createReasonixNativeSessionCache({
     env: { REASONIX_STATE_HOME: stateHome },
     homeDir: path.dirname(stateHome),
     platform: 'linux',
     cwdDir: path.dirname(stateHome),
-    projectIdentity
+    projectIdentity,
+    allTimeSince
   });
+}
+
+function localDateIso(date, dayOffset = 0) {
+  const value = new Date(date);
+  value.setHours(12, 0, 0, 0);
+  value.setDate(value.getDate() + dayOffset);
+  return value.toISOString();
 }
 
 function nativeTelemetry(overrides = {}) {
@@ -95,11 +103,14 @@ test('Reasonix native adapter reads routed and global sidecars without parsing t
   }, nativeTelemetry({ totalTokens: 141, sessionCostUsd: 0.5, requestCount: 9 }));
   sidecars(globalDir, 'preview-id', {
     id: 'preview-id',
+    created_at: '2026-08-08T05:00:00.000Z',
     updated_at: '2026-08-08T05:00:00.000Z',
+    schema_version: 1,
     preview: 'Preview fallback'
   }, nativeTelemetry({ totalTokens: 1 }));
   sidecars(globalDir, 'name-id', {
     id: 'name-id',
+    created_at: '2026-08-08T05:30:00.000Z',
     updated_at: '2026-08-08T05:30:00.000Z',
     name: 'Official branch name'
   }, nativeTelemetry({ totalTokens: 2 }));
@@ -136,12 +147,182 @@ test('Reasonix native adapter reads routed and global sidecars without parsing t
   assert.equal(JSON.stringify(view).includes(workspaceRoot), false);
 });
 
+test('Reasonix native period attribution uses created_at for today/month and lifetime all-time', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'reasonix-native-periods-'));
+  const stateHome = path.join(root, 'state');
+  const sessionsDir = path.join(stateHome, 'sessions');
+  const now = new Date(2026, 7, 8, 12, 0, 0, 0);
+  const workspaceRoot = path.join(root, 'workspace');
+  const projectIdentity = () => ({ projectId: 'opaque-project', projectLabel: 'token-monitor' });
+
+  sidecars(sessionsDir, 'new-today', {
+    id: 'new-today',
+    created_at: localDateIso(now),
+    updated_at: localDateIso(now),
+    scope: 'project',
+    workspace_root: workspaceRoot,
+    schema_version: 1
+  }, nativeTelemetry({ totalTokens: 30621 }));
+  sidecars(sessionsDir, 'resumed', {
+    id: 'resumed',
+    created_at: localDateIso(now, -1),
+    updated_at: localDateIso(now),
+    scope: 'project',
+    workspace_root: workspaceRoot,
+    schema_version: 1
+  }, nativeTelemetry({ totalTokens: 110000 }));
+  const previousMonth = new Date(now);
+  previousMonth.setDate(1);
+  previousMonth.setMonth(previousMonth.getMonth() - 1);
+  sidecars(sessionsDir, 'cross-month', {
+    id: 'cross-month',
+    created_at: localDateIso(previousMonth),
+    updated_at: localDateIso(now),
+    scope: 'project',
+    workspace_root: workspaceRoot,
+    schema_version: 1
+  }, nativeTelemetry({ totalTokens: 220000 }));
+
+  const cache = cacheFor(stateHome, projectIdentity, '2026-01-01');
+  const view = cache.getView({ now });
+  const projectKey = 'token-monitor';
+
+  assert.deepEqual(Object.keys(view.sessions.today), ['reasonix:new-today']);
+  assert.deepEqual(Object.keys(view.sessions.month).sort(), ['reasonix:new-today', 'reasonix:resumed']);
+  assert.deepEqual(Object.keys(view.sessions.allTime).sort(), [
+    'reasonix:cross-month',
+    'reasonix:new-today',
+    'reasonix:resumed'
+  ]);
+  assert.equal(view.projects.today[projectKey].tokens, 30621);
+  assert.equal(view.projects.month[projectKey].tokens, 140621);
+  assert.equal(view.projects.allTime[projectKey].tokens, 360621);
+  assert.equal(view.projects.today[projectKey].costUsd, 0);
+});
+
+test('Reasonix allTimeSince conservatively excludes sessions created before the boundary', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'reasonix-native-boundary-'));
+  const stateHome = path.join(root, 'state');
+  const sessionsDir = path.join(stateHome, 'sessions');
+  const now = new Date(2026, 7, 8, 12, 0, 0, 0);
+  const beforeBoundary = new Date(2026, 6, 31, 12, 0, 0, 0);
+  sidecars(sessionsDir, 'before-boundary', {
+    id: 'before-boundary',
+    created_at: beforeBoundary.toISOString(),
+    updated_at: localDateIso(now),
+    schema_version: 1
+  }, nativeTelemetry({ totalTokens: 900 }));
+  sidecars(sessionsDir, 'after-boundary', {
+    id: 'after-boundary',
+    created_at: localDateIso(now),
+    updated_at: localDateIso(now),
+    schema_version: 1
+  }, nativeTelemetry({ totalTokens: 1000 }));
+
+  const cache = cacheFor(stateHome, projectIdentity);
+  const view = cache.getView({ now, allTimeSince: '2026-08-01' });
+  assert.deepEqual(Object.keys(view.sessions.allTime), ['reasonix:after-boundary']);
+  assert.equal(view.sessions.month['reasonix:after-boundary'].totalTokens, 1000);
+  assert.equal(Object.hasOwn(view.sessions.month, 'reasonix:before-boundary'), false);
+});
+
+test('Reasonix rename/update does not move an old cumulative session into today', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'reasonix-native-rename-'));
+  const stateHome = path.join(root, 'state');
+  const sessionsDir = path.join(stateHome, 'sessions');
+  const now = new Date(2026, 7, 8, 12, 0, 0, 0);
+  const paths = sidecars(sessionsDir, 'renamed', {
+    id: 'renamed',
+    created_at: localDateIso(now, -1),
+    updated_at: localDateIso(now, -1),
+    custom_title: 'Before rename',
+    schema_version: 1
+  }, nativeTelemetry({ totalTokens: 110000 }));
+  const cache = cacheFor(stateHome, projectIdentity);
+
+  assert.equal(Object.hasOwn(cache.getView({ now }).sessions.today, 'reasonix:renamed'), false);
+  fs.writeFileSync(paths.metaPath, JSON.stringify({
+    id: 'renamed',
+    created_at: localDateIso(now, -1),
+    updated_at: localDateIso(now),
+    custom_title: 'After rename',
+    schema_version: 1
+  }));
+  cache.invalidate(paths.metaPath);
+  const view = cache.getView({ now });
+  assert.equal(Object.hasOwn(view.sessions.today, 'reasonix:renamed'), false);
+  assert.equal(view.sessions.allTime['reasonix:renamed'].title, 'After rename');
+});
+
+test('Reasonix telemetry cost is USD-only and never contributes generic project cost', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'reasonix-native-cost-'));
+  const workspaceRoot = path.join(root, 'workspace');
+  const make = (id, usage) => {
+    const paths = sidecars(root, id, {
+      id,
+      created_at: '2026-08-08T00:00:00.000Z',
+      scope: 'project',
+      workspace_root: workspaceRoot,
+      schema_version: 1
+    }, usage);
+    return readReasonixNativeSession(paths.metaPath, paths.telemetryPath, {
+      projectIdentity: () => ({ projectId: 'opaque', projectLabel: 'Token Monitor' })
+    });
+  };
+
+  const explicitUsd = make('explicit-usd', nativeTelemetry({ sessionCostUsd: 1.25 }));
+  const cny = make('cny', nativeTelemetry({ sessionCostUsd: undefined, sessionCost: 99, sessionCurrency: 'CNY' }));
+  const inferredUsd = make('inferred-usd', nativeTelemetry({ sessionCostUsd: undefined, sessionCost: 2.5, sessionCurrency: 'USD' }));
+  assert.equal(explicitUsd.reportedCostUsd, 1.25);
+  assert.equal(Object.hasOwn(cny, 'reportedCostUsd'), false);
+  assert.equal(inferredUsd.reportedCostUsd, 2.5);
+});
+
+test('Reasonix schema_version gates turns and preview listing fields', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'reasonix-native-schema-'));
+  const make = (id, schemaVersion) => {
+    const paths = sidecars(root, id, {
+      id,
+      schema_version: schemaVersion,
+      turns: 7,
+      preview: 'stale preview must not be used',
+      created_at: '2026-08-08T00:00:00.000Z'
+    }, nativeTelemetry());
+    return readReasonixNativeSession(paths.metaPath, paths.telemetryPath);
+  };
+
+  const legacy = make('legacy', 0);
+  const trusted = make('trusted', 1);
+  assert.equal(legacy.title, 'Reasonix Session');
+  assert.equal(Object.hasOwn(legacy, 'turns'), false);
+  assert.equal(Object.hasOwn(legacy, 'preview'), false);
+  assert.equal(legacy.schemaVersion, 0);
+  assert.equal(trusted.title, 'stale preview must not be used');
+  assert.equal(trusted.turns, 7);
+  assert.equal(trusted.preview, 'stale preview must not be used');
+});
+
+test('Reasonix scanner keeps same-stem sidecars from different routed projects separate', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'reasonix-native-stems-'));
+  const stateHome = path.join(root, 'state');
+  const projectA = path.join(stateHome, 'projects', 'a', 'sessions');
+  const projectB = path.join(stateHome, 'projects', 'b', 'sessions');
+  const common = { created_at: '2026-08-08T00:00:00.000Z', schema_version: 1 };
+  sidecars(projectA, 'same', { ...common, id: 'project-a' }, nativeTelemetry({ totalTokens: 11 }));
+  sidecars(projectB, 'same', { ...common, id: 'project-b' }, nativeTelemetry({ totalTokens: 22 }));
+
+  const view = cacheFor(stateHome, projectIdentity).getView({ now: new Date(2026, 7, 8, 12, 0, 0, 0) });
+  assert.equal(view.sessions.allTime['reasonix:project-a'].totalTokens, 11);
+  assert.equal(view.sessions.allTime['reasonix:project-b'].totalTokens, 22);
+});
+
 test('Reasonix native telemetry uses direct total, skips invalid sidecars, and invalidates on update/delete', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'reasonix-native-cache-'));
   const stateHome = path.join(root, 'state');
   const sessionsDir = path.join(stateHome, 'sessions');
   const paths = sidecars(sessionsDir, 'stable-id', {
     id: 'stable-id',
+    created_at: '2026-08-08T02:00:00.000Z',
     updated_at: '2026-08-08T03:00:00.000Z',
     custom_title: 'Before rename'
   }, nativeTelemetry({ totalTokens: 140, promptTokens: 1, completionTokens: 2, reasoningTokens: 99 }));
@@ -156,6 +337,7 @@ test('Reasonix native telemetry uses direct total, skips invalid sidecars, and i
 
   fs.writeFileSync(paths.metaPath, JSON.stringify({
     id: 'stable-id',
+    created_at: '2026-08-08T02:00:00.000Z',
     updated_at: '2026-08-08T04:00:00.000Z',
     custom_title: 'After rename'
   }));
@@ -209,7 +391,7 @@ test('Reasonix native view stays outside aggregate, history, archive and sync pa
     sessionId: 'reasonix:native-id',
     title: 'Native session',
     totalTokens: 999,
-    sessionCostUsd: 3,
+    reportedCostUsd: 3,
     messageCount: 0,
     lastUsedAt: '2026-08-08T03:00:00.000Z',
     models: { 'deepseek-v4': 999 }
@@ -218,7 +400,12 @@ test('Reasonix native view stays outside aggregate, history, archive and sync pa
     sessions: { today: { [nativeSession.sessionId]: nativeSession }, month: {}, allTime: { [nativeSession.sessionId]: nativeSession } },
     projects: { today: {}, month: {}, allTime: {} }
   };
-  const nativeCache = { getView: () => nativeView };
+  const nativeCache = {
+    getView: (options) => {
+      assert.equal(options.allTimeSince, '2026-01-01');
+      return nativeView;
+    }
+  };
   const runTokscale = async () => ({ entries: [{
     client: 'reasonix',
     model: 'deepseek-v4',
@@ -243,6 +430,7 @@ test('Reasonix native view stays outside aggregate, history, archive and sync pa
   });
 
   assert.equal(summary.today.totalTokens, 140);
+  assert.equal(summary.today.costUsd, 0.25);
   assert.equal(summary.today.clients.reasonix, 140);
   assert.deepEqual(summary.today.sessions, {});
   assert.equal(summary.nativeSessions.today[nativeSession.sessionId].totalTokens, 999);
@@ -294,7 +482,7 @@ test('Reasonix native rows label requests separately from messages and merge pro
     cacheHitTokens: 20,
     cacheMissTokens: 80,
     requestCount: 4,
-    sessionCostUsd: 0.25,
+    reportedCostUsd: 0.25,
     turns: 2,
     projectLabel: 'Token Monitor',
     lastUsedAt: '2026-08-08T03:00:00.000Z'
@@ -311,16 +499,19 @@ test('Reasonix native rows label requests separately from messages and merge pro
   assert.match(rows[0].subtitle, /2 turns/);
   assert.equal(rows[0].nativeSessionBreakdown.cacheMissTokens, 80);
   assert.equal(rows[0].nativeSessionBreakdown.providerRequests, 4);
+  assert.equal(rows[0].nativeSessionBreakdown.reportedCostUsd, 0.25);
+  assert.equal(rows[0].cost, 0);
 
   const projects = projectRowsForPeriod({ projects: {} }, {
     nativeProjects: {
-      'token monitor': { label: 'Token Monitor', tokens: 140, costUsd: 0.25, clients: { reasonix: 140 } }
+      'token monitor': { label: 'Token Monitor', tokens: 140, costUsd: 999, clients: { reasonix: 140 } }
     },
     clientLabels: { reasonix: 'Reasonix' },
     clientColors: { reasonix: '#4d6bfe' }
   });
   assert.equal(projects.length, 1);
   assert.equal(projects[0].value, 140);
+  assert.equal(projects[0].cost, 0);
   assert.deepEqual(projects[0].accordionRows.map(({ key, value }) => ({ key, value })), [{ key: 'reasonix', value: 140 }]);
 });
 

@@ -12,6 +12,12 @@
     return Number.isFinite(n) ? n : 0;
   }
 
+  function optionalNumber(value) {
+    if (value === undefined || value === null || value === '') return undefined;
+    const n = Number(value);
+    return Number.isFinite(n) ? n : undefined;
+  }
+
   function formatNumber(value) {
     return Math.round(finiteNumber(value)).toLocaleString('en-US');
   }
@@ -110,7 +116,9 @@
       subtitle: subtitleParts.join(' · '),
       detail: sessionIdLabel(session?.sessionId || key),
       value,
-      cost: finiteNumber(session?.sessionCostUsd),
+      // Native telemetry cost is a Reasonix-reported detail value, not the
+      // Token Monitor aggregate cost authority used by generic rows.
+      cost: 0,
       color: colors[client] || stable(key, palette),
       stale: false,
       client,
@@ -123,7 +131,7 @@
         cacheHitTokens: finiteNumber(session?.cacheHitTokens),
         cacheMissTokens: finiteNumber(session?.cacheMissTokens),
         providerRequests: finiteNumber(session?.requestCount),
-        sessionCostUsd: finiteNumber(session?.sessionCostUsd)
+        reportedCostUsd: optionalNumber(session?.reportedCostUsd)
       }
     };
   }

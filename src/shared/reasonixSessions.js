@@ -15,6 +15,7 @@ const { canonicalProjectKey, deterministicProjectLabel } = require('./projectKey
 const META_SUFFIX = '.jsonl.meta';
 const TELEMETRY_SUFFIX = '.jsonl.telemetry.json';
 const NATIVE_SESSION_PREFIX = `${REASONIX_CLIENT}:`;
+const BRANCH_META_COUNTS_VERSION = 1;
 
 function hasOwn(value, key) {
   return Object.prototype.hasOwnProperty.call(value || {}, key);
@@ -120,7 +121,8 @@ function pathOptions(options = {}) {
     homeDir,
     platform,
     cwdDir: options.cwdDir || process.cwd(),
-    pathModule: options.pathModule || path
+    pathModule: options.pathModule || path,
+    allTimeSince: options.allTimeSince
   };
 }
 
@@ -177,7 +179,7 @@ function isReasonixNativeSessionPath(filePath, roots = [], options = {}) {
 }
 
 function sidecarCandidates(sessionDirectories, pathApi = path) {
-  const byStem = new Map();
+  const byDirectoryAndStem = new Map();
   for (const directory of sessionDirectories || []) {
     let entries;
     try { entries = fs.readdirSync(directory, { withFileTypes: true }); } catch (_) { continue; }
@@ -191,24 +193,27 @@ function sidecarCandidates(sessionDirectories, pathApi = path) {
       const stem = name.slice(0, -suffix.length);
       if (!stem) continue;
       const filePath = pathApi.join(directory, name);
-      const current = byStem.get(stem) || { stem, directory };
+      // The stable public identity comes from BranchMeta.ID, but scanner/cache
+      // identity must remain directory-local so routed projects can reuse a
+      // filename without one sidecar pair overwriting another.
+      const candidateKey = pathApi.join(directory, stem);
+      const current = byDirectoryAndStem.get(candidateKey) || { stem, directory };
       if (suffix === META_SUFFIX) current.metaPath = filePath;
       else current.telemetryPath = filePath;
-      byStem.set(stem, current);
+      byDirectoryAndStem.set(candidateKey, current);
     }
   }
-  return [...byStem.values()].sort((left, right) => {
+  return [...byDirectoryAndStem.values()].sort((left, right) => {
     const leftPath = left.metaPath || left.telemetryPath || '';
     const rightPath = right.metaPath || right.telemetryPath || '';
     return leftPath.localeCompare(rightPath);
   });
 }
 
-function sessionTitle(meta) {
+function sessionTitle(meta, { trustedPreview = '' } = {}) {
   return firstText(meta, ['custom_title', 'customTitle', 'name'])
     || firstText(meta, ['topic_title', 'topicTitle'])
-    || firstText(meta, ['preview'], 256)
-    || firstText(meta?.preview, ['text', 'content', 'value'], 256)
+    || trustedPreview
     || 'Reasonix Session';
 }
 
@@ -216,6 +221,16 @@ function telemetryUsage(telemetry) {
   const usage = objectValue(telemetry?.usage) || telemetry;
   if (!usage || !hasFiniteNumber(firstValue(usage, ['totalTokens', 'total_tokens']))) return null;
   return usage;
+}
+
+function reportedCostUsd(usage) {
+  const explicitUsd = firstValue(usage, ['sessionCostUsd', 'session_cost_usd']);
+  if (hasFiniteNumber(explicitUsd)) return Math.max(0, finiteNumber(explicitUsd));
+
+  const sessionCost = firstValue(usage, ['sessionCost', 'session_cost']);
+  const sessionCurrency = textValue(firstValue(usage, ['sessionCurrency', 'session_currency']), 16).toUpperCase();
+  if (sessionCurrency === 'USD' && hasFiniteNumber(sessionCost)) return Math.max(0, finiteNumber(sessionCost));
+  return undefined;
 }
 
 function projectIdentityFor(workspaceRoot, projectIdentity) {
@@ -247,7 +262,9 @@ function readReasonixNativeSession(metaPath, telemetryPath, options = {}) {
   const usage = telemetryUsage(telemetry);
   if (!usage) return null;
 
-  const schemaVersion = integerValue(firstNumber(meta, ['schema_version', 'schemaVersion']));
+  const rawSchemaVersion = firstValue(meta, ['schema_version', 'schemaVersion']);
+  const schemaVersion = hasFiniteNumber(rawSchemaVersion) ? integerValue(rawSchemaVersion) : 0;
+  const countsTrusted = schemaVersion >= BRANCH_META_COUNTS_VERSION;
   const scope = textValue(firstValue(meta, ['scope'])).toLowerCase() === 'project' ? 'project' : 'global';
   const workspaceRoot = textValue(firstValue(meta, ['workspace_root', 'workspaceRoot']), 4096);
   const project = scope === 'project' && validWorkspaceRoot(workspaceRoot)
@@ -255,19 +272,21 @@ function readReasonixNativeSession(metaPath, telemetryPath, options = {}) {
     : {};
   const model = textValue(firstValue(meta, ['model']), 256);
   const totalTokens = Math.max(0, Math.round(firstNumber(usage, ['totalTokens', 'total_tokens'])));
-  const costValue = firstValue(usage, ['sessionCostUsd', 'session_cost_usd', 'sessionCost', 'session_cost']);
+  const reportedCost = reportedCostUsd(usage);
   const createdAt = firstTimestamp(meta, ['created_at', 'createdAt']);
   const updatedAt = firstTimestamp(meta, ['updated_at', 'updatedAt']);
   const topicId = textValue(firstValue(meta, ['topic_id', 'topicId']), 256);
   const topicTitle = firstText(meta, ['topic_title', 'topicTitle']);
   const customTitle = firstText(meta, ['custom_title', 'customTitle', 'name']);
-  const preview = firstText(meta, ['preview'], 256) || firstText(meta?.preview, ['text', 'content', 'value'], 256);
+  const preview = countsTrusted
+    ? firstText(meta, ['preview'], 256) || firstText(meta?.preview, ['text', 'content', 'value'], 256)
+    : '';
 
   return {
     native: true,
     client: REASONIX_CLIENT,
     sessionId: `${NATIVE_SESSION_PREFIX}${id}`,
-    title: sessionTitle(meta),
+    title: sessionTitle(meta, { trustedPreview: preview }),
     scope,
     ...(model ? { model, models: { [model]: totalTokens } } : { models: {} }),
     ...(project.projectId ? { projectId: project.projectId } : {}),
@@ -282,14 +301,14 @@ function readReasonixNativeSession(metaPath, telemetryPath, options = {}) {
     cacheMissTokens: integerValue(firstNumber(usage, ['cacheMissTokens', 'cache_miss_tokens'])),
     cacheWriteTokens: integerValue(firstNumber(usage, ['cacheWriteTokens', 'cache_write_tokens'])),
     requestCount: integerValue(firstNumber(usage, ['requestCount', 'request_count'])),
-    sessionCostUsd: Math.max(0, finiteNumber(costValue)),
+    ...(reportedCost === undefined ? {} : { reportedCostUsd: reportedCost }),
     messageCount: 0,
-    ...(schemaVersion > 0 ? { schemaVersion } : {}),
-    ...(hasFiniteNumber(firstValue(meta, ['turns'])) ? { turns: integerValue(firstNumber(meta, ['turns'])) } : {}),
+    ...(hasFiniteNumber(rawSchemaVersion) ? { schemaVersion } : {}),
+    ...(countsTrusted && hasFiniteNumber(firstValue(meta, ['turns'])) ? { turns: integerValue(firstNumber(meta, ['turns'])) } : {}),
     ...(topicId ? { topicId } : {}),
     ...(topicTitle ? { topicTitle } : {}),
     ...(customTitle ? { customTitle } : {}),
-    ...(preview ? { preview } : {}),
+    ...(countsTrusted && preview ? { preview } : {}),
     ...(textValue(firstValue(meta, ['parent_id', 'parentId']), 256) ? { parentId: textValue(firstValue(meta, ['parent_id', 'parentId']), 256) } : {}),
     ...(hasFiniteNumber(firstValue(meta, ['fork_turn', 'forkTurn'])) ? { forkTurn: integerValue(firstValue(meta, ['fork_turn', 'forkTurn'])) } : {}),
     ...(hasFiniteNumber(firstValue(meta, ['fork_message_index', 'forkMessageIndex'])) ? { forkMessageIndex: integerValue(firstValue(meta, ['fork_message_index', 'forkMessageIndex'])) } : {})
@@ -304,11 +323,32 @@ function localMonthKey(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
-function sessionPeriodKeys(session) {
-  const lastUsed = session.lastUsedAt || session.startedAt;
-  const date = lastUsed ? new Date(lastUsed) : null;
-  if (!date || Number.isNaN(date.getTime())) return { day: '', month: '' };
-  return { day: localDayKey(date), month: localMonthKey(date) };
+function localDateBoundary(value) {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value.getTime();
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  const text = textValue(value, 128);
+  if (!text) return Number.NEGATIVE_INFINITY;
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (dateOnly) {
+    const [, year, month, day] = dateOnly;
+    const date = new Date(Number(year), Number(month) - 1, Number(day));
+    return Number.isNaN(date.getTime()) ? null : date.getTime();
+  }
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? null : date.getTime();
+}
+
+function sessionPeriodKeys(session, now, allTimeSince) {
+  const createdAt = session?.createdAt ? new Date(session.createdAt) : null;
+  if (!createdAt || Number.isNaN(createdAt.getTime())) return { day: '', month: '', allTime: false };
+  const day = localDayKey(createdAt);
+  const month = localMonthKey(createdAt);
+  const since = localDateBoundary(allTimeSince);
+  return {
+    day: day === localDayKey(now) ? day : '',
+    month: month === localMonthKey(now) ? month : '',
+    allTime: since !== null && createdAt.getTime() >= since
+  };
 }
 
 function emptyNativeView() {
@@ -335,7 +375,6 @@ function projectEntry(projects, session) {
   const project = projects[key];
   project.label = deterministicProjectLabel(project.label, session.projectLabel);
   project.tokens += session.totalTokens;
-  project.costUsd += finiteNumber(session.sessionCostUsd);
   project.clients[REASONIX_CLIENT] = (project.clients[REASONIX_CLIENT] || 0) + session.totalTokens;
   if (!project.sessionIds.includes(session.sessionId)) project.sessionIds.push(session.sessionId);
 }
@@ -345,6 +384,7 @@ function buildNativeView(entries, options = {}) {
   const view = emptyNativeView();
   const day = localDayKey(now);
   const month = localMonthKey(now);
+  const allTimeSince = options.allTimeSince;
   const projectsEnabled = options.projectsEnabled !== false;
 
   const sessionsById = new Map();
@@ -361,8 +401,8 @@ function buildNativeView(entries, options = {}) {
 
   for (const entry of sessionsById.values()) {
     const session = projectsEnabled ? entry : { ...entry, projectId: '', projectLabel: '' };
-    const periodKeys = sessionPeriodKeys(session);
-    view.sessions.allTime[session.sessionId] = session;
+    const periodKeys = sessionPeriodKeys(session, now, allTimeSince);
+    if (periodKeys.allTime) view.sessions.allTime[session.sessionId] = session;
     if (periodKeys.month === month) view.sessions.month[session.sessionId] = session;
     if (periodKeys.day === day) view.sessions.today[session.sessionId] = session;
   }
@@ -417,7 +457,10 @@ function createReasonixNativeSessionCache(options = {}) {
   function getView(viewOptions = {}) {
     const now = viewOptions.now instanceof Date ? viewOptions.now : new Date(viewOptions.now || Date.now());
     const projectsEnabled = viewOptions.projectsEnabled !== false;
-    const viewKey = `${localDayKey(now)}|${localMonthKey(now)}|${projectsEnabled ? 'projects' : 'no-projects'}`;
+    const allTimeSince = Object.prototype.hasOwnProperty.call(viewOptions, 'allTimeSince')
+      ? viewOptions.allTimeSince
+      : resolvedOptions.allTimeSince;
+    const viewKey = `${localDayKey(now)}|${localMonthKey(now)}|${projectsEnabled ? 'projects' : 'no-projects'}|${String(allTimeSince ?? '')}`;
     if (dirty) {
       const scanned = scanEntries({ ...resolvedOptions, projectIdentity: options.projectIdentity }, entries);
       entries = scanned.entries;
@@ -426,7 +469,7 @@ function createReasonixNativeSessionCache(options = {}) {
       cachedViewKey = '';
     }
     if (!cachedView || cachedViewKey !== viewKey) {
-      cachedView = buildNativeView([...entries.values()].map((entry) => entry.session), { now, projectsEnabled });
+      cachedView = buildNativeView([...entries.values()].map((entry) => entry.session), { now, projectsEnabled, allTimeSince });
       cachedViewKey = viewKey;
     }
     return cachedView;
