@@ -98,7 +98,8 @@
 
   function nativeSessionRow(session, key, options, now) {
     const value = finiteNumber(session?.totalTokens);
-    if (value <= 0) return null;
+    const tokenDataUnavailable = session?.tokenDataUnavailable === true;
+    if (value <= 0 && !tokenDataUnavailable) return null;
     const labels = options.clientLabels || {};
     const colors = options.clientColors || {};
     const stable = typeof options.stableColor === 'function' ? options.stableColor : stableColor;
@@ -121,6 +122,7 @@
       subtitle: subtitleParts.join(' · '),
       detail: sessionIdLabel(session?.sessionId || key),
       value,
+      tokenDataUnavailable,
       // Native telemetry cost is a Reasonix-reported detail value, not the
       // Token Monitor aggregate cost authority used by generic rows.
       cost: 0,

@@ -2,8 +2,10 @@
 
 // Native Reasonix session metadata is deliberately kept outside the Tokscale
 // period/session collections. Tokscale owns the aggregate usage contract; this
-// module only projects the local meta + telemetry sidecars into a renderer-only
-// view. It is Node-only because it reads the Reasonix filesystem directly.
+// module only projects the local BranchMeta + official event sidecars into a
+// renderer-only view. A legacy Token Monitor telemetry sidecar is still read
+// for backwards compatibility, but it is not treated as official per-turn data.
+// It is Node-only because it reads the Reasonix filesystem directly.
 
 const fs = require('node:fs');
 const os = require('node:os');
@@ -11,9 +13,11 @@ const path = require('node:path');
 
 const { REASONIX_CLIENT, resolveReasonixHome } = require('./reasonixPaths');
 const { canonicalProjectKey, deterministicProjectLabel } = require('./projectKey');
+const { parseReasonixEventLog, countReasonixProviderMessages } = require('./reasonixSessionDetail');
 
 const META_SUFFIX = '.jsonl.meta';
 const TELEMETRY_SUFFIX = '.jsonl.telemetry.json';
+const EVENTS_SUFFIX = '.events.jsonl';
 const NATIVE_SESSION_PREFIX = `${REASONIX_CLIENT}:`;
 const BRANCH_META_COUNTS_VERSION = 1;
 
@@ -79,7 +83,12 @@ function firstNumber(source, keys) {
 
 function firstTimestamp(source, keys) {
   const value = firstValue(source, keys);
-  const date = value ? new Date(value) : null;
+  let date = null;
+  if (typeof value === 'number' && Number.isFinite(value)) date = new Date(value);
+  else if (typeof value === 'string' && value.trim() !== '') {
+    const text = value.trim();
+    date = /^[-+]?\d+$/.test(text) ? new Date(Number(text)) : new Date(text);
+  }
   return date && !Number.isNaN(date.getTime()) ? date.toISOString() : '';
 }
 
@@ -189,6 +198,7 @@ function sidecarCandidates(sessionDirectories, pathApi = path) {
       let suffix = '';
       if (name.endsWith(META_SUFFIX)) suffix = META_SUFFIX;
       else if (name.endsWith(TELEMETRY_SUFFIX)) suffix = TELEMETRY_SUFFIX;
+      else if (name.endsWith(EVENTS_SUFFIX)) suffix = EVENTS_SUFFIX;
       if (!suffix) continue;
       const stem = name.slice(0, -suffix.length);
       if (!stem) continue;
@@ -199,7 +209,8 @@ function sidecarCandidates(sessionDirectories, pathApi = path) {
       const candidateKey = pathApi.join(directory, stem);
       const current = byDirectoryAndStem.get(candidateKey) || { stem, directory };
       if (suffix === META_SUFFIX) current.metaPath = filePath;
-      else current.telemetryPath = filePath;
+      else if (suffix === TELEMETRY_SUFFIX) current.telemetryPath = filePath;
+      else current.eventPath = filePath;
       byDirectoryAndStem.set(candidateKey, current);
     }
   }
@@ -233,6 +244,19 @@ function reportedCostUsd(usage) {
   return undefined;
 }
 
+function readTranscriptInfo(eventPath) {
+  if (!eventPath) return null;
+  try {
+    const events = parseReasonixEventLog(fs.readFileSync(eventPath, 'utf8'));
+    return {
+      messageCount: countReasonixProviderMessages(events),
+      hasTranscript: true
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
 function projectIdentityFor(workspaceRoot, projectIdentity) {
   if (typeof projectIdentity !== 'function') return {};
   try {
@@ -258,9 +282,13 @@ function readReasonixNativeSession(metaPath, telemetryPath, options = {}) {
   const id = textValue(firstValue(meta, ['id']), 256);
   if (!id) return null;
 
+  // `.jsonl.telemetry.json` is a legacy Token Monitor compatibility sidecar,
+  // not an official Reasonix per-turn source. Official sessions can still be
+  // listed from BranchMeta + events, but their tokens remain unavailable.
   const telemetry = readJson(telemetryPath);
   const usage = telemetryUsage(telemetry);
-  if (!usage) return null;
+  const transcript = readTranscriptInfo(options.eventPath);
+  if (!usage && !transcript) return null;
 
   const rawSchemaVersion = firstValue(meta, ['schema_version', 'schemaVersion']);
   const schemaVersion = hasFiniteNumber(rawSchemaVersion) ? integerValue(rawSchemaVersion) : 0;
@@ -271,7 +299,7 @@ function readReasonixNativeSession(metaPath, telemetryPath, options = {}) {
     ? projectIdentityFor(workspaceRoot, options.projectIdentity)
     : {};
   const model = textValue(firstValue(meta, ['model']), 256);
-  const totalTokens = Math.max(0, Math.round(firstNumber(usage, ['totalTokens', 'total_tokens'])));
+  const totalTokens = usage ? Math.max(0, Math.round(firstNumber(usage, ['totalTokens', 'total_tokens']))) : 0;
   const reportedCost = reportedCostUsd(usage);
   const createdAt = firstTimestamp(meta, ['created_at', 'createdAt']);
   const updatedAt = firstTimestamp(meta, ['updated_at', 'updatedAt']);
@@ -288,21 +316,23 @@ function readReasonixNativeSession(metaPath, telemetryPath, options = {}) {
     sessionId: `${NATIVE_SESSION_PREFIX}${id}`,
     title: sessionTitle(meta, { trustedPreview: preview }),
     scope,
-    ...(model ? { model, models: { [model]: totalTokens } } : { models: {} }),
+    ...(model ? { model, models: usage ? { [model]: totalTokens } : {} } : { models: {} }),
     ...(project.projectId ? { projectId: project.projectId } : {}),
     ...(project.projectLabel ? { projectLabel: project.projectLabel } : {}),
     ...(createdAt ? { createdAt, startedAt: createdAt } : {}),
     ...(updatedAt ? { updatedAt, lastUsedAt: updatedAt } : {}),
-    totalTokens,
-    promptTokens: integerValue(firstNumber(usage, ['promptTokens', 'prompt_tokens'])),
-    completionTokens: integerValue(firstNumber(usage, ['completionTokens', 'completion_tokens'])),
-    reasoningTokens: integerValue(firstNumber(usage, ['reasoningTokens', 'reasoning_tokens'])),
-    cacheHitTokens: integerValue(firstNumber(usage, ['cacheHitTokens', 'cache_hit_tokens'])),
-    cacheMissTokens: integerValue(firstNumber(usage, ['cacheMissTokens', 'cache_miss_tokens'])),
-    cacheWriteTokens: integerValue(firstNumber(usage, ['cacheWriteTokens', 'cache_write_tokens'])),
-    requestCount: integerValue(firstNumber(usage, ['requestCount', 'request_count'])),
+    ...(usage ? {
+      totalTokens,
+      promptTokens: integerValue(firstNumber(usage, ['promptTokens', 'prompt_tokens'])),
+      completionTokens: integerValue(firstNumber(usage, ['completionTokens', 'completion_tokens'])),
+      reasoningTokens: integerValue(firstNumber(usage, ['reasoningTokens', 'reasoning_tokens'])),
+      cacheHitTokens: integerValue(firstNumber(usage, ['cacheHitTokens', 'cache_hit_tokens'])),
+      cacheMissTokens: integerValue(firstNumber(usage, ['cacheMissTokens', 'cache_miss_tokens'])),
+      cacheWriteTokens: integerValue(firstNumber(usage, ['cacheWriteTokens', 'cache_write_tokens'])),
+      requestCount: integerValue(firstNumber(usage, ['requestCount', 'request_count']))
+    } : { tokenDataUnavailable: true }),
     ...(reportedCost === undefined ? {} : { reportedCostUsd: reportedCost }),
-    messageCount: 0,
+    ...(transcript ? { messageCount: transcript.messageCount } : {}),
     ...(hasFiniteNumber(rawSchemaVersion) ? { schemaVersion } : {}),
     ...(countsTrusted && hasFiniteNumber(firstValue(meta, ['turns'])) ? { turns: integerValue(firstNumber(meta, ['turns'])) } : {}),
     ...(topicId ? { topicId } : {}),
@@ -359,7 +389,7 @@ function emptyNativeView() {
 }
 
 function projectEntry(projects, session) {
-  if (!session.projectId || !session.projectLabel) return;
+  if (!session.projectId || !session.projectLabel || session.tokenDataUnavailable === true) return;
   const key = canonicalProjectKey(session.projectLabel) || session.projectId;
   if (!key) return;
   if (!projects[key]) {
@@ -374,8 +404,10 @@ function projectEntry(projects, session) {
   }
   const project = projects[key];
   project.label = deterministicProjectLabel(project.label, session.projectLabel);
-  project.tokens += session.totalTokens;
-  project.clients[REASONIX_CLIENT] = (project.clients[REASONIX_CLIENT] || 0) + session.totalTokens;
+  const tokens = Number(session.totalTokens);
+  if (!Number.isFinite(tokens) || tokens <= 0) return;
+  project.tokens += tokens;
+  project.clients[REASONIX_CLIENT] = (project.clients[REASONIX_CLIENT] || 0) + tokens;
   if (!project.sessionIds.includes(session.sessionId)) project.sessionIds.push(session.sessionId);
 }
 
@@ -422,17 +454,17 @@ function scanEntries(options = {}, cache = new Map()) {
   const next = new Map();
 
   for (const candidate of candidates) {
-    if (!candidate.metaPath || !candidate.telemetryPath) continue;
+    if (!candidate.metaPath || (!candidate.telemetryPath && !candidate.eventPath)) continue;
     const key = candidate.metaPath;
     seen.add(key);
-    const signature = `${fileSignature(candidate.metaPath)}|${fileSignature(candidate.telemetryPath)}`;
+    const signature = `${fileSignature(candidate.metaPath)}|${fileSignature(candidate.telemetryPath)}|${fileSignature(candidate.eventPath)}`;
     if (!signature) continue;
     const previous = cache.get(key);
     if (previous?.signature === signature) {
       next.set(key, previous);
       continue;
     }
-    const session = readReasonixNativeSession(candidate.metaPath, candidate.telemetryPath, options);
+    const session = readReasonixNativeSession(candidate.metaPath, candidate.telemetryPath, { ...options, eventPath: candidate.eventPath });
     if (session) next.set(key, { signature, session });
   }
 
@@ -493,6 +525,7 @@ module.exports = {
   META_SUFFIX,
   NATIVE_SESSION_PREFIX,
   TELEMETRY_SUFFIX,
+  EVENTS_SUFFIX,
   buildNativeView,
   createReasonixNativeSessionCache,
   emptyNativeView,

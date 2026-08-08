@@ -102,6 +102,7 @@ test('Reasonix native rows reuse the common session schema without a native acco
         cacheMissTokens: 80,
         requestCount: 4,
         reportedCostUsd: 0.25,
+        messageCount: 2,
         turns: 1,
         lastUsedAt: localIso(2026, 8, 8, 14, 10)
       }
@@ -116,7 +117,7 @@ test('Reasonix native rows reuse the common session schema without a native acco
   assert.equal(row.kind, 'session');
   assert.equal(row.key, 'session:reasonix:ABC123');
   assert.equal(row.name, 'Reasonix · deepseek/deepseek-v4-flash');
-  assert.equal(row.subtitle, '14:10');
+  assert.equal(row.subtitle, '14:10 · 2 msgs');
   assert.equal(row.detail, 'ABC123');
   assert.equal(row.value, 15382);
   assert.equal(row.cost, 0);
@@ -165,6 +166,27 @@ test('Reasonix native rows omit turns from the compact subtitle when turns are u
 
   assert.equal(row.subtitle, '14:10');
   assert.doesNotMatch(row.subtitle, /request|msg|turn/i);
+});
+
+test('Reasonix native rows remain visible when official per-session tokens are unavailable', () => {
+  const [row] = sessionRowsForPeriod({ sessions: {} }, {
+    nativeSessions: {
+      'reasonix:official': {
+        client: 'reasonix',
+        sessionId: 'reasonix:official',
+        model: 'deepseek/deepseek-v4-flash',
+        tokenDataUnavailable: true,
+        messageCount: 2,
+        lastUsedAt: localIso(2026, 8, 8, 14, 10)
+      }
+    },
+    clientLabels: { reasonix: 'Reasonix' },
+    now: new Date(2026, 7, 8, 14, 30)
+  });
+
+  assert.equal(row.value, 0);
+  assert.equal(row.tokenDataUnavailable, true);
+  assert.equal(row.subtitle, '14:10 · 2 msgs');
 });
 
 test('session rows label archived sessions without claiming the source was deleted', () => {

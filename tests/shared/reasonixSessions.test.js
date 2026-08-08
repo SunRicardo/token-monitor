@@ -67,7 +67,7 @@ function nativeTelemetry(overrides = {}) {
   };
 }
 
-test('Reasonix native adapter reads routed and global sidecars without parsing transcript artifacts', () => {
+test('Reasonix native adapter reads legacy usage sidecars without inventing message counts', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'reasonix-native-'));
   const stateHome = path.join(root, 'state');
   const globalDir = path.join(stateHome, 'sessions');
@@ -138,13 +138,50 @@ test('Reasonix native adapter reads routed and global sidecars without parsing t
   assert.equal(allTime['reasonix:project-id'].reasoningTokens, 10);
   assert.equal(allTime['reasonix:project-id'].completionTokens, 30);
   assert.equal(allTime['reasonix:project-id'].requestCount, 9);
-  assert.equal(allTime['reasonix:project-id'].messageCount, 0);
+  assert.equal(Object.hasOwn(allTime['reasonix:project-id'], 'messageCount'), false);
   assert.equal(allTime['reasonix:project-id'].projectLabel, 'token-monitor');
   assert.equal(view.projects.allTime['token-monitor'].tokens, 141);
   assert.equal(view.projects.allTime['token-monitor'].clients.reasonix, 141);
   assert.deepEqual(view.projects.allTime['token-monitor'].sessionIds, ['reasonix:project-id']);
   assert.equal(JSON.stringify(view).includes(stateHome), false);
   assert.equal(JSON.stringify(view).includes(workspaceRoot), false);
+});
+
+test('Reasonix native adapter derives msg count from the trusted official transcript and leaves tokens unavailable', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'reasonix-native-events-'));
+  const stateHome = path.join(root, 'state');
+  const sessionsDir = path.join(stateHome, 'sessions');
+  const metaPath = path.join(sessionsDir, 'official.jsonl.meta');
+  const eventsPath = path.join(sessionsDir, 'official.events.jsonl');
+  writeJson(metaPath, {
+    id: 'branch-from-official-meta',
+    schema_version: 1,
+    created_at: '2026-08-08T09:00:00.000Z',
+    updated_at: '2026-08-08T09:02:00.000Z',
+    model: 'deepseek/deepseek-v4-flash'
+  });
+  fs.writeFileSync(eventsPath, `${JSON.stringify({
+    schema_version: 1,
+    type: 'replace',
+    created_at: '2026-08-08T09:00:00.000Z',
+    messages: [
+      { role: 'user', raw_content: 'first', createdAt: 1786179601000 },
+      { role: 'assistant', createdAt: 1786179602000, tool_calls: [{ name: 'search' }] },
+      { role: 'tool', name: 'search', createdAt: 1786179602500 },
+      { role: 'assistant', createdAt: 1786179603000 }
+    ]
+  })}\n`);
+
+  const session = readReasonixNativeSession(metaPath, undefined, { eventPath: eventsPath });
+  assert.equal(session.sessionId, 'reasonix:branch-from-official-meta');
+  assert.equal(session.messageCount, 2);
+  assert.equal(session.tokenDataUnavailable, true);
+  assert.equal(Object.hasOwn(session, 'totalTokens'), false);
+  assert.equal(JSON.stringify(session).includes(root), false);
+
+  const view = cacheFor(stateHome, projectIdentity).getView({ now: new Date(2026, 7, 8, 12, 0, 0) });
+  assert.equal(view.sessions.today['reasonix:branch-from-official-meta'].messageCount, 2);
+  assert.equal(Object.hasOwn(view.projects.today, 'token-monitor'), false);
 });
 
 test('Reasonix native period attribution uses created_at for today/month and lifetime all-time', () => {
@@ -368,13 +405,13 @@ test('Reasonix native watcher roots share the resolved state home and ignore sta
     assert.deepEqual(roots, [sessionsDir, projectsDir]);
     assert.equal(isReasonixNativeSessionPath(path.join(sessionsDir, 'a.jsonl.meta'), roots), true);
     assert.equal(isReasonixNativeSessionSidecar('a.jsonl.meta'), true);
-    assert.equal(isReasonixNativeSessionSidecar('a.jsonl.events.jsonl'), false);
+    assert.equal(isReasonixNativeSessionSidecar('a.events.jsonl'), false);
 
     const ignored = watchIgnoreMatcher('reasonix');
     assert.equal(typeof ignored, 'function');
     assert.equal(ignored(path.join(sessionsDir, 'a.jsonl.meta')), false);
     assert.equal(ignored(path.join(sessionsDir, 'a.jsonl.telemetry.json')), false);
-    assert.equal(ignored(path.join(sessionsDir, 'a.jsonl.events.jsonl')), true);
+    assert.equal(ignored(path.join(sessionsDir, 'a.events.jsonl')), true);
     assert.equal(ignored(path.join(sessionsDir, 'a.event-index.json')), true);
     assert.equal(ignored(sessionsDir), false);
     assert.deepEqual(watchPathsForClients('reasonix').sort(), [statsDir, projectsDir, sessionsDir].sort());

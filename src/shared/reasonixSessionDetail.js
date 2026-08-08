@@ -15,6 +15,32 @@ const SESSION_PREFIX = 'reasonix:';
 const META_SUFFIX = '.jsonl.meta';
 const LEGACY_META_SUFFIX = '.meta.json';
 const EVENTS_SUFFIX = '.events.jsonl';
+const TRANSIENT_USER_BLOCK_TAGS = [
+  'response-language',
+  'reasoning-language',
+  'memory-update',
+  'background-jobs',
+  'active-goal',
+  'autoresearch-runtime',
+  'hook-context',
+  'capability-route',
+  'interrupted-turn-recovery'
+];
+const SYNTHETIC_PROMPT_PREFIXES = [
+  '<reasoning-language>',
+  'Plan approved — plan mode is off',
+  'Host final-answer readiness check failed',
+  'You are already in the executor phase',
+  'The previous assistant response was interrupted while a tool call',
+  'The previous assistant response was interrupted during streaming',
+  'The previous assistant response was interrupted before visible',
+  'The previous assistant response finished without any visible answer',
+  '<compaction-summary>',
+  'Summary of the later conversation (compacted from here on):',
+  'Summary of earlier conversation (compacted up to here):',
+  'Continue pursuing the active goal',
+  'The agent signaled goal completion and all tasks are marked done.'
+];
 
 function objectValue(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
@@ -61,6 +87,30 @@ function firstText(sources, keys, maxLength = 4096) {
   return textValue(value, maxLength);
 }
 
+function dateFromValue(value) {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  if (!text) return null;
+  // provider.Message.CreatedAt is Unix milliseconds. Treat an all-numeric
+  // string the same way for old JSON bridges, while keeping ISO strings intact.
+  if (/^[+-]?\d+$/.test(text)) {
+    const date = new Date(Number(text));
+    if (!Number.isNaN(date.getTime())) return date;
+  }
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function timestampValue(value, fallback = '') {
+  const date = dateFromValue(value);
+  return date ? date.toISOString() : fallback;
+}
+
 function uniqueTools(tools) {
   return [...new Set((tools || []).map((tool) => textValue(tool, 256)).filter(Boolean))];
 }
@@ -85,11 +135,7 @@ function stableId(meta) {
 
 function timestampOf(record, payload, fallback = '') {
   const value = firstValue([record, payload], ['ts', 'timestamp', 'created_at', 'createdAt', 'updated_at', 'updatedAt']);
-  if (value instanceof Date) return Number.isNaN(value.getTime()) ? fallback : value.toISOString();
-  const text = textValue(value, 128);
-  if (!text) return fallback;
-  const date = new Date(text);
-  return Number.isNaN(date.getTime()) ? fallback : date.toISOString();
+  return timestampValue(value, fallback);
 }
 
 function eventPayload(record) {
@@ -108,13 +154,59 @@ function eventTurn(record, payload) {
 }
 
 function cleanPromptText(value) {
-  return String(value || '')
-    // The current Reasonix runtime wraps user input with an internal
-    // reasoning-language directive before writing the snapshot transcript.
-    .replace(/<reasoning-language>[\s\S]*?<\/reasoning-language>/gi, ' ')
+  let text = unwrapMemoryCompilerExecution(String(value || ''));
+  // These blocks are prepended by Reasonix's controller, not typed by the
+  // user. Keep the list deliberately narrow and anchored: a user discussing
+  // an XML tag in ordinary prose must not lose the rest of their message.
+  const transientTags = TRANSIENT_USER_BLOCK_TAGS.join('|');
+  const leadingBlock = new RegExp(`^\\s*<(?:${transientTags})(?:\\s+[^>]*)?>[\\s\\S]*?<\\/(?:${transientTags})>\\s*`, 'i');
+  for (let i = 0; i < 24; i += 1) {
+    const next = text.replace(leadingBlock, '');
+    if (next === text) break;
+    text = next;
+  }
+  // Delivery mode and memory recall are suffix wrappers in the official
+  // runtime. Only remove them at the end of the message.
+  text = text.replace(/\s*<delivery-runtime>[\s\S]*?<\/delivery-runtime>\s*$/i, '');
+  text = text.replace(/\s*<memory-recall>[\s\S]*?<\/memory-recall>\s*$/i, '');
+  return text
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 20000);
+}
+
+function unwrapMemoryCompilerExecution(value) {
+  let text = value;
+  const block = /<memory-compiler-execution>\s*([\s\S]*?)\s*<\/memory-compiler-execution>/i;
+  for (let depth = 0; depth < 24; depth += 1) {
+    const match = block.exec(text);
+    if (!match) break;
+    let sourceEvent = '';
+    try {
+      const contract = JSON.parse(match[1]);
+      sourceEvent = textValue(contract?.planner_ir?.source_event || contract?.source_event, 20000);
+    } catch (_) {}
+    text = `${text.slice(0, match.index)}${sourceEvent}${text.slice(match.index + match[0].length)}`;
+  }
+  const dangling = text.indexOf('<memory-compiler-execution>');
+  if (dangling >= 0) text = text.slice(0, dangling);
+  return text;
+}
+
+function isSyntheticPrompt(text) {
+  const value = String(text || '').trim();
+  return SYNTHETIC_PROMPT_PREFIXES.some((prefix) => value.startsWith(prefix));
+}
+
+function messageContentText(value) {
+  if (typeof value === 'string') return cleanPromptText(value);
+  if (Array.isArray(value)) {
+    return cleanPromptText(value.map(messageContentText).filter(Boolean).join(' '));
+  }
+  const source = objectValue(value);
+  if (!source) return '';
+  const text = source.text ?? source.content ?? source.value;
+  return typeof text === 'string' ? cleanPromptText(text) : '';
 }
 
 function messageText(message) {
@@ -123,16 +215,11 @@ function messageText(message) {
     return cleanPromptText(message.map((part) => messageText(part)).filter(Boolean).join(' '));
   }
   const value = objectValue(message) || {};
-  const content = value.content ?? value.raw_content ?? value.rawContent ?? value.text;
-  if (typeof content === 'string') return cleanPromptText(content);
-  if (Array.isArray(content)) {
-    return cleanPromptText(content.map((part) => {
-      if (typeof part === 'string') return part;
-      const objectPart = objectValue(part);
-      return typeof objectPart?.text === 'string'
-        ? objectPart.text
-        : (typeof objectPart?.content === 'string' ? objectPart.content : '');
-    }).join(' '));
+  // RawContent is the user-authored input. Content is provider-visible and
+  // may contain controller-injected context, so it is only a fallback.
+  for (const key of ['raw_content', 'rawContent', 'content', 'text']) {
+    const text = messageContentText(value[key]);
+    if (text) return text;
   }
   return '';
 }
@@ -197,17 +284,25 @@ function reasonixTokens(record, payload) {
   };
 }
 
-function messageTokens(message) {
-  const source = objectValue(message) || {};
-  return reasonixTokens(source, source);
+function emptyTokens() {
+  return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, total: 0 };
+}
+
+function hasUsageData(record, payload) {
+  const usage = usageObject(record, payload);
+  if (!usage) return false;
+  return [
+    'promptTokens', 'prompt_tokens', 'inputTokens', 'input_tokens',
+    'completionTokens', 'completion_tokens', 'outputTokens', 'output_tokens',
+    'totalTokens', 'total_tokens', 'cacheHitTokens', 'cache_hit_tokens',
+    'cacheReadTokens', 'cache_read_tokens', 'cacheWriteTokens', 'cache_write_tokens',
+    'reasoningTokens', 'reasoning_tokens', 'reasoningOutputTokens', 'reasoning_output_tokens'
+  ].some((key) => Object.prototype.hasOwnProperty.call(usage, key));
 }
 
 function messageTimestamp(message, fallback) {
   const value = firstValue([message], ['ts', 'timestamp', 'created_at', 'createdAt', 'updated_at', 'updatedAt']);
-  const text = textValue(value, 128);
-  if (!text) return fallback;
-  const date = new Date(text);
-  return Number.isNaN(date.getTime()) ? fallback : date.toISOString();
+  return timestampValue(value, fallback);
 }
 
 function messageToolNames(message) {
@@ -222,51 +317,52 @@ function messageToolNames(message) {
 function snapshotMessages(records) {
   let messages = [];
   let sawSnapshot = false;
-  for (const { record } of records) {
+  let appliedSnapshot = false;
+  for (const { record, timestamp: recordTimestamp } of records) {
     const type = eventType(record, record);
-    if (type !== 'replace' && type !== 'append') continue;
-    const payload = eventPayload(record);
-    const incoming = Array.isArray(payload?.messages)
-      ? payload.messages
-      : (objectValue(payload?.message) ? [payload.message] : []);
-    if (incoming.length === 0) continue;
+    if (type !== 'replace' && type !== 'append') {
+      // Once a native snapshot stream starts, an unknown record is damage, not
+      // a reason to reinterpret the remainder as a different transcript format.
+      if (sawSnapshot || Object.prototype.hasOwnProperty.call(record, 'schema_version')) break;
+      continue;
+    }
     sawSnapshot = true;
+    const payload = eventPayload(record);
+    const schemaVersion = firstValue([payload, record], ['schema_version', 'schemaVersion']);
+    if (typeof schemaVersion !== 'number' || !Number.isInteger(schemaVersion) || schemaVersion !== 1) break;
+    if (payload?.messages !== undefined && !Array.isArray(payload.messages)) break;
+    const incoming = Array.isArray(payload?.messages) ? payload.messages : [];
     if (type === 'replace') {
-      messages = incoming.slice();
+      messages = incoming.map((message) => ({ message, fallback: '' }));
+      appliedSnapshot = true;
       continue;
     }
-    const index = firstValue([payload, record], ['message_index', 'messageIndex']);
-    if (hasNumber(index)) {
-      const offset = Math.max(0, Math.trunc(finiteNumber(index)));
-      messages.splice(offset, incoming.length, ...incoming);
-      continue;
-    }
-    const existingIds = new Set(messages.map((message) => textValue(message?.id || message?.message_id, 256)).filter(Boolean));
-    for (const message of incoming) {
-      const id = textValue(message?.id || message?.message_id, 256);
-      if (id && existingIds.has(id)) continue;
-      messages.push(message);
-      if (id) existingIds.add(id);
-    }
+    const index = firstValue([payload, record], ['message_index']);
+    if (typeof index !== 'number' || !Number.isInteger(index) || index < 0 || index !== messages.length) break;
+    messages.push(...incoming.map((message) => ({ message, fallback: recordTimestamp || '' })));
+    appliedSnapshot = true;
   }
   if (!sawSnapshot) return null;
+  if (!appliedSnapshot) return [];
 
   const events = [];
-  for (const message of messages) {
+  for (const { message, fallback } of messages) {
     const source = objectValue(message);
     if (!source) continue;
     const role = textValue(source.role || source.kind, 32).toLowerCase();
-    const timestamp = messageTimestamp(source, '');
+    const timestamp = messageTimestamp(source, fallback);
     if (role === 'user') {
       const text = messageText(source);
-      if (text && source.internal !== true && source.synthetic !== true) {
+      if (text && source.internal !== true && source.synthetic !== true && !isSyntheticPrompt(text)) {
         events.push({ kind: 'prompt', timestamp, text });
       }
     } else if (role === 'assistant' || role === 'model') {
+      if (source.local_only === true || source.localOnly === true) continue;
       events.push({
         kind: 'turn',
         timestamp,
-        tokens: messageTokens(source),
+        tokens: emptyTokens(),
+        tokensAvailable: false,
         tools: messageToolNames(source)
       });
     }
@@ -295,9 +391,9 @@ function typedEvents(records) {
     const turn = eventTurn(record, payload);
 
     if (type === 'user.message' || type === 'user_message') {
-      const rawText = firstValue([payload, record], ['text', 'content', 'message']);
+      const rawText = firstValue([payload, record], ['raw_content', 'rawContent', 'content', 'text', 'message']);
       const text = cleanPromptText(typeof rawText === 'string' ? rawText : messageText(rawText));
-      if (text && payload.internal !== true && payload.synthetic !== true) {
+      if (text && payload.internal !== true && payload.synthetic !== true && !isSyntheticPrompt(text)) {
         events.push({ kind: 'prompt', timestamp, text });
       }
       continue;
@@ -318,6 +414,7 @@ function typedEvents(records) {
         kind: 'turn',
         timestamp,
         tokens: reasonixTokens(record, payload),
+        tokensAvailable: hasUsageData(record, payload),
         tools: uniqueTools(turnTools.concat(pendingTools, finalTools))
       });
       if (turn) toolsByTurn.delete(turn);
@@ -335,13 +432,28 @@ function parseReasonixEventLog(text) {
     if (!trimmed) continue;
     try {
       const record = JSON.parse(trimmed);
-      if (objectValue(record)) records.push({ record, timestamp: timestampOf(record, record, '') });
+      if (!objectValue(record)) break;
+      records.push({ record, timestamp: timestampOf(record, record, '') });
     } catch (_) {
-      // A partially-written final JSONL line is expected during a live turn.
+      // Match Reasonix replay: a torn/corrupt line ends the trusted prefix.
+      break;
     }
   }
   const snapshot = snapshotMessages(records);
   return snapshot || typedEvents(records);
+}
+
+function countReasonixProviderMessages(events) {
+  // Token Monitor's native session `messageCount` is the provider-message
+  // count, not BranchMeta's user-turn count: snapshot replay emits one turn
+  // event per assistant/model Message and deliberately excludes user/tool
+  // records.
+  return (events || []).filter((event) => event && event.kind === 'turn').length;
+}
+
+function tokenDataAvailable(events) {
+  const turns = (events || []).filter((event) => event && event.kind === 'turn');
+  return turns.length > 0 && turns.every((event) => event.tokensAvailable !== false);
 }
 
 function readJson(fsApi, filePath) {
@@ -420,7 +532,13 @@ function readReasonixSessionEvents({ sessionId, home, ...options } = {}) {
   if (!eventsPath) return { found: false, events: [] };
   try {
     const text = (options.fsModule || fs).readFileSync(eventsPath, 'utf8');
-    return { found: true, events: parseReasonixEventLog(text) };
+    const events = parseReasonixEventLog(text);
+    return {
+      found: true,
+      events,
+      messageCount: countReasonixProviderMessages(events),
+      tokenDataAvailable: tokenDataAvailable(events)
+    };
   } catch (_) {
     return { found: false, events: [] };
   }
@@ -431,5 +549,6 @@ module.exports = {
   parseReasonixEventLog,
   readReasonixSessionEvents,
   reasonixTokens,
-  stableId
+  stableId,
+  countReasonixProviderMessages
 };

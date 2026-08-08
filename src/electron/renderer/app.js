@@ -1706,7 +1706,7 @@ function renderDeviceAccordion(accordionInner, deviceDetail) {
   accordionInner.dataset.signature = signature;
 }
 
-function updateRow(row, { name, subtitle, detail, value, cost, max, color, barBackground, accordionRows, deviceDetail, stale, platform, local, client, kind, cacheReadTokens, outputTokens }) {
+function updateRow(row, { name, subtitle, detail, value, cost, max, color, barBackground, accordionRows, deviceDetail, stale, platform, local, client, kind, cacheReadTokens, outputTokens, tokenDataUnavailable }) {
   const width = rowWidth(value, max);
   const isExpanded = row.classList.contains('expanded');
   row.className = `row${kind ? ` ${kind}-row` : ''}${stale ? ' stale' : ''}${local ? ' local' : ''}`;
@@ -1738,10 +1738,12 @@ function updateRow(row, { name, subtitle, detail, value, cost, max, color, barBa
   detailEl.textContent = detail || '';
   detailEl.classList.toggle('hidden', !detail);
   const valueEl = row.querySelector('.row-value');
-  valueEl.textContent = formatNumber(value);
+  valueEl.textContent = tokenDataUnavailable === true
+    ? (t('detailTokenUnavailable') || 'Unavailable')
+    : formatNumber(value);
   valueEl.dataset.motionValue = String(Number(value) || 0);
   row.dataset.motionValue = String(Number(value) || 0);
-  row.querySelector('.row-cost').textContent = formatCost(cost || 0);
+  row.querySelector('.row-cost').textContent = tokenDataUnavailable === true ? '' : formatCost(cost || 0);
   const fill = row.querySelector('.bar-fill');
   fill.style.background = barBackground || color;
   applyBarScale(fill, width / 100);
@@ -1819,7 +1821,11 @@ function updateRow(row, { name, subtitle, detail, value, cost, max, color, barBa
     if (row.tabIndex !== 0) row.tabIndex = 0;
     setAttributeIfChanged(row, 'role', 'button');
     setAttributeIfChanged(row, 'aria-expanded', String(row.classList.contains('expanded')));
-    setAttributeIfChanged(row, 'aria-label', `${name}, ${t('dashboard.stat.totalTokens')}: ${formatNumber(value)}, ${t('dashboard.stat.totalCost')}: ${formatCost(cost || 0)}`);
+    const tokenLabel = tokenDataUnavailable === true
+      ? (t('detailTokenUnavailable') || 'Unavailable')
+      : formatNumber(value);
+    const costLabel = tokenDataUnavailable === true ? '' : `, ${t('dashboard.stat.totalCost')}: ${formatCost(cost || 0)}`;
+    setAttributeIfChanged(row, 'aria-label', `${name}, ${t('dashboard.stat.totalTokens')}: ${tokenLabel}${costLabel}`);
   } else {
     if (row.hasAttribute('tabindex')) row.removeAttribute('tabindex');
     if (row.hasAttribute('role')) row.removeAttribute('role');
@@ -5283,6 +5289,9 @@ function renderSessionDetail({ detail, loading, error } = {}) {
 
   const rows = sessionDetailApi.exchangeRows(detail, { now: new Date(), sortBy: state.detailSort });
   if (rows.length === 0) { container.append(detailNote(t('detailEmpty') || 'No activity in this period.')); return; }
+  if (detail?.tokenDataUnavailable === true) {
+    container.append(detailNote(t('detailTokenDataUnavailable') || 'Token data is unavailable for this session.'));
+  }
 
   const sort = document.createElement('button');
   sort.className = 'detail-sort';
@@ -5321,8 +5330,11 @@ function exchangeNode(row, max) {
   }
   exTitle.append(document.createTextNode(row.title));
   wrap.querySelector('.detail-ex-sub').textContent = row.subtitle;
-  wrap.querySelector('.detail-ex-value').textContent = formatNumber(row.value);
-  wrap.querySelector('.detail-ex-cost').textContent = formatCost(row.cost);
+  const tokensAvailable = row.tokensAvailable !== false;
+  wrap.querySelector('.detail-ex-value').textContent = tokensAvailable
+    ? formatNumber(row.value)
+    : (t('detailTokenUnavailable') || 'Unavailable');
+  wrap.querySelector('.detail-ex-cost').textContent = tokensAvailable ? formatCost(row.cost) : '';
   applyBarScale(wrap.querySelector('.bar-fill'), rowWidth(row.value, max) / 100);
 
   const turnsEl = wrap.querySelector('.detail-turns');
@@ -5348,10 +5360,15 @@ function turnNode(turn) {
   el.innerHTML = '<div class="detail-turn-label"><span class="detail-turn-title"></span><span class="detail-turn-split"></span><span class="detail-turn-tools"></span></div>'
     + '<div class="detail-turn-metrics"><span class="detail-turn-value"></span><span class="detail-turn-cost"></span></div>';
   el.querySelector('.detail-turn-title').textContent = `AI ${turn.label}`;
-  el.querySelector('.detail-turn-split').textContent = split;
+  const tokensAvailable = turn.tokensAvailable !== false;
+  el.querySelector('.detail-turn-split').textContent = tokensAvailable
+    ? split
+    : (t('detailTokenUnavailable') || 'Unavailable');
   el.querySelector('.detail-turn-tools').textContent = turn.tools ? `⊢ ${turn.tools}` : '';
-  el.querySelector('.detail-turn-value').textContent = formatNumber(turn.value);
-  el.querySelector('.detail-turn-cost').textContent = formatCost(turn.cost);
+  el.querySelector('.detail-turn-value').textContent = tokensAvailable
+    ? formatNumber(turn.value)
+    : (t('detailTokenUnavailable') || 'Unavailable');
+  el.querySelector('.detail-turn-cost').textContent = tokensAvailable ? formatCost(turn.cost) : '';
   return el;
 }
 

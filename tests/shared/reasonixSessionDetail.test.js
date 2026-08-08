@@ -7,6 +7,11 @@ const path = require('node:path');
 const test = require('node:test');
 
 const { readSessionDetail } = require('../../src/shared/sessionDetail');
+const {
+  countReasonixProviderMessages,
+  parseReasonixEventLog,
+  readReasonixSessionEvents
+} = require('../../src/shared/reasonixSessionDetail');
 
 function writeJson(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -36,7 +41,7 @@ function readReasonix(home, stateHome, sessionId, period = 'total', now = new Da
   });
 }
 
-test('Reasonix routed detail resolves by BranchMeta ID and maps typed prompts/turns/tools', () => {
+test('Reasonix legacy typed model.final compatibility still maps prompts/turns/tools', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'reasonix-detail-'));
   const stateHome = path.join(root, 'state');
   const projectDirectory = path.join('projects', 'opaque-project', 'sessions');
@@ -112,37 +117,131 @@ test('Reasonix routed detail resolves by BranchMeta ID and maps typed prompts/tu
   assert.doesNotMatch(JSON.stringify(detail), new RegExp(root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 });
 
-test('Reasonix detail supports current replace/append message snapshots and ignores internal prompt wrappers', () => {
+test('Reasonix official schema replays replace/append, timestamps messages, and leaves tokens unavailable', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'reasonix-snapshot-detail-'));
   const stateHome = path.join(root, 'state');
   const directory = path.join(stateHome, 'sessions');
   fs.mkdirSync(directory, { recursive: true });
-  writeJson(path.join(directory, 'legacy-name.meta.json'), { ID: 'snapshot-1' });
+  writeJson(path.join(directory, 'filename-is-not-the-id.jsonl.meta'), { id: 'snapshot-1' });
   const initial = {
+    schema_version: 1,
     type: 'replace',
     created_at: '2026-08-08T09:00:00.000Z',
     messages: [
       { id: 'system', role: 'system', content: 'internal' },
-      { id: 'user-1', role: 'user', createdAt: '2026-08-08T09:00:01.000Z', content: '<reasoning-language>English</reasoning-language>\n测试一下' },
-      { id: 'assistant-1', role: 'assistant', createdAt: '2026-08-08T09:00:02.000Z', tool_calls: [{ name: 'search' }] }
+      {
+        id: 'user-1',
+        role: 'user',
+        createdAt: 1786179601000,
+        raw_content: '<response-language>English</response-language><reasoning-language>English</reasoning-language><active-goal>internal</active-goal>\n真实输入<memory-recall>internal recall</memory-recall>',
+        content: '<reasoning-language>English</reasoning-language>\nprovider-visible wrapper'
+      },
+      { id: 'assistant-1', role: 'assistant', createdAt: 1786179602000, tool_calls: [{ name: 'search' }] },
+      { id: 'tool-1', role: 'tool', createdAt: 1786179602500, name: 'search' },
+      {
+        id: 'old-user',
+        role: 'user',
+        createdAt: '2026-07-31T10:00:01.000Z',
+        raw_content: '上个月的请求',
+        content: 'provider old request'
+      },
+      { id: 'old-assistant', role: 'assistant', createdAt: '2026-07-31T10:00:02.000Z' }
     ]
   };
   const append = {
+    schema_version: 1,
     type: 'append',
+    message_index: 6,
     created_at: '2026-08-08T09:01:00.000Z',
     messages: [
-      { id: 'user-2', role: 'user', createdAt: '2026-08-08T09:01:01.000Z', content: '推送远端' },
-      { id: 'assistant-2', role: 'assistant', createdAt: '2026-08-08T09:01:02.000Z' }
+      { id: 'user-2', role: 'user', createdAt: 1786179661000, raw_content: '推送远端', content: 'provider request' },
+      { id: 'assistant-2', role: 'assistant', createdAt: 1786179662000, tool_calls: [{ function: { name: 'write_file' } }] }
     ]
   };
-  fs.writeFileSync(path.join(directory, 'legacy-name.events.jsonl'), `${JSON.stringify(initial)}\n${JSON.stringify(append)}\n`);
+  fs.writeFileSync(path.join(directory, 'filename-is-not-the-id.events.jsonl'), `${JSON.stringify(initial)}\n${JSON.stringify(append)}\n`);
 
   const detail = readReasonix(root, stateHome, 'reasonix:snapshot-1');
   assert.equal(detail.found, true);
-  assert.deepEqual(detail.exchanges.map((exchange) => exchange.promptPreview), ['测试一下', '推送远端']);
-  assert.equal(detail.totals.turnCount, 2);
+  assert.deepEqual(detail.exchanges.map((exchange) => exchange.promptPreview), ['真实输入', '上个月的请求', '推送远端']);
+  assert.equal(detail.totals.turnCount, 3);
   assert.deepEqual(detail.exchanges[0].tools, ['search']);
+  assert.deepEqual(detail.exchanges[2].tools, ['write_file']);
   assert.equal(detail.totals.totalTokens, 0);
+  assert.equal(detail.tokensAvailable, false);
+  assert.equal(detail.tokenDataUnavailable, true);
+  assert.equal(detail.exchanges[0].tokensAvailable, false);
+
+  const today = readReasonix(root, stateHome, 'reasonix:snapshot-1', 'today');
+  assert.deepEqual(today.exchanges.map((exchange) => exchange.promptPreview), ['真实输入', '推送远端']);
+  assert.equal(today.totals.turnCount, 2);
+  const month = readReasonix(root, stateHome, 'reasonix:snapshot-1', 'month');
+  assert.deepEqual(month.exchanges.map((exchange) => exchange.promptPreview), ['真实输入', '推送远端']);
+  assert.equal(month.totals.turnCount, 2);
+
+  const sessionEvents = readReasonixSessionEvents({
+    sessionId: 'reasonix:snapshot-1',
+    home: root,
+    env: { REASONIX_STATE_HOME: stateHome },
+    platform: 'linux',
+    now: new Date(2026, 7, 8, 12, 0)
+  });
+  assert.equal(sessionEvents.messageCount, 3);
+  assert.equal(countReasonixProviderMessages(sessionEvents.events), 3);
+  assert.equal(sessionEvents.tokenDataAvailable, false);
+  assert.doesNotMatch(JSON.stringify(sessionEvents), new RegExp(root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('Reasonix replay retains the last trusted state after illegal append, unsupported schema, or torn tail', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'reasonix-replay-damage-'));
+  const stateHome = path.join(root, 'state');
+  const directory = path.join(stateHome, 'sessions');
+  fs.mkdirSync(directory, { recursive: true });
+  writeJson(path.join(directory, 'damaged.jsonl.meta'), { id: 'damaged' });
+  const replace = {
+    schema_version: 1,
+    type: 'replace',
+    created_at: '2026-08-08T09:00:00.000Z',
+    messages: [
+      { role: 'user', raw_content: '可信 Prompt', createdAt: 1786179601000 },
+      { role: 'assistant', createdAt: 1786179602000 }
+    ]
+  };
+  const legalAppend = {
+    schema_version: 1,
+    type: 'append',
+    message_index: 2,
+    created_at: '2026-08-08T09:01:00.000Z',
+    messages: [
+      { role: 'user', raw_content: '合法 append', createdAt: 1786179661000 },
+      { role: 'assistant', createdAt: 1786179662000 }
+    ]
+  };
+  const illegalAppend = {
+    schema_version: 1,
+    type: 'append',
+    message_index: 1,
+    created_at: '2026-08-08T09:02:00.000Z',
+    messages: [{ role: 'assistant', createdAt: 1786179722000 }]
+  };
+  const neverApplied = {
+    schema_version: 1,
+    type: 'append',
+    message_index: 3,
+    created_at: '2026-08-08T09:03:00.000Z',
+    messages: [{ role: 'assistant', createdAt: 1786179782000 }]
+  };
+  fs.writeFileSync(
+    path.join(directory, 'damaged.events.jsonl'),
+    `${JSON.stringify(replace)}\n${JSON.stringify(legalAppend)}\n${JSON.stringify(illegalAppend)}\n${JSON.stringify(neverApplied)}\n{"schema_version":1,"type":`
+  );
+
+  const detail = readReasonix(root, stateHome, 'reasonix:damaged', 'total');
+  assert.deepEqual(detail.exchanges.map((exchange) => exchange.promptPreview), ['可信 Prompt', '合法 append']);
+  assert.equal(detail.totals.turnCount, 2);
+
+  const unsupported = parseReasonixEventLog(`${JSON.stringify(replace)}\n${JSON.stringify({ schema_version: 2, type: 'replace', messages: [] })}`);
+  assert.equal(unsupported.filter((event) => event.kind === 'prompt').length, 1);
+  assert.equal(unsupported.filter((event) => event.kind === 'turn').length, 1);
 });
 
 test('Reasonix detail skips missing or corrupt identity/transcript files', () => {
