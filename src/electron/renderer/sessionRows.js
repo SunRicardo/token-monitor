@@ -55,6 +55,7 @@
   function sessionIdLabel(id) {
     const raw = String(id || '').trim();
     if (!raw) return '';
+    if (raw.startsWith('reasonix:')) return raw.slice('reasonix:'.length);
     const rollout = raw.match(/^rollout-\d{4}-\d{2}-\d{2}T\d{2}[:-]\d{2}[:-]\d{2}-(.+)$/);
     if (rollout) return rollout[1];
     if (/^\d{4}-\d{2}-\d{2}T\d{2}[:-]\d{2}/.test(raw)) return '';
@@ -84,6 +85,27 @@
     return typeof value === 'string' ? value.trim() : '';
   }
 
+  function sessionTitleParts(session, labels, fallbackLabel = 'Session', explicitModel = '') {
+    const client = textValue(session?.client);
+    const clientLabel = labels[client] || client || fallbackLabel;
+    const modelLabel = textValue(explicitModel) || sessionModelLabel(session);
+    return {
+      client,
+      clientLabel,
+      modelLabel,
+      titleParts: [clientLabel, modelLabel].filter(Boolean)
+    };
+  }
+
+  function nativeSessionTitle(session) {
+    const explicitTitle = [session?.customTitle, session?.topicTitle, session?.preview]
+      .map(textValue)
+      .find(Boolean);
+    if (explicitTitle) return explicitTitle;
+    const derivedTitle = textValue(session?.title);
+    return derivedTitle && derivedTitle !== 'Reasonix Session' ? derivedTitle : '';
+  }
+
   function messageLabel(session) {
     const count = finiteNumber(session?.messageCount);
     return count > 0 ? `${formatNumber(count)} msg${count === 1 ? '' : 's'}` : '';
@@ -96,23 +118,23 @@
     const colors = options.clientColors || {};
     const stable = typeof options.stableColor === 'function' ? options.stableColor : stableColor;
     const palette = options.fallbackColors || fallbackColors;
-    const client = session?.client || 'reasonix';
-    const clientLabel = labels[client] || client || 'Reasonix';
-    const title = textValue(session?.title) || 'Reasonix Session';
-    const model = textValue(session?.model) || sessionModelLabel(session);
+    const client = textValue(session?.client) || 'reasonix';
+    const { clientLabel, titleParts } = sessionTitleParts(
+      { ...session, client },
+      labels,
+      'Reasonix',
+      session?.model
+    );
     const project = textValue(session?.projectLabel);
     const turns = finiteNumber(session?.turns);
     const subtitleParts = [
-      clientLabel,
-      model,
-      project,
       sessionActivityLabel(session, now),
       turns > 0 ? `${formatNumber(turns)} turn${turns === 1 ? '' : 's'}` : ''
     ].filter(Boolean);
     return {
       key: `native-session:${key}`,
-      kind: 'native-session',
-      name: title,
+      kind: 'session',
+      name: titleParts.join(' · '),
       subtitle: subtitleParts.join(' · '),
       detail: sessionIdLabel(session?.sessionId || key),
       value,
@@ -123,8 +145,10 @@
       stale: false,
       client,
       sortTime: sessionTimestampValue(session),
-      title: `${clientLabel} session ${title}`,
+      title: `${clientLabel} session ${sessionIdLabel(session?.sessionId || key)}`,
       nativeSessionBreakdown: {
+        sessionTitle: nativeSessionTitle(session),
+        ...(project ? { projectLabel: project } : {}),
         promptTokens: finiteNumber(session?.promptTokens),
         completionTokens: finiteNumber(session?.completionTokens),
         reasoningTokens: finiteNumber(session?.reasoningTokens),
@@ -148,10 +172,7 @@
       .map(([key, session]) => {
         const value = finiteNumber(session?.totalTokens);
         if (value <= 0) return null;
-        const client = session?.client || '';
-        const clientLabel = labels[client] || client || 'Session';
-        const modelLabel = sessionModelLabel(session);
-        const titleParts = [clientLabel, modelLabel].filter(Boolean);
+        const { client, titleParts, clientLabel, modelLabel } = sessionTitleParts(session, labels);
         const sessionId = session?.sessionId || key;
         const archived = session?.archived === true || session?.deleted === true || session?.sourceDeleted === true;
         const subtitleParts = [

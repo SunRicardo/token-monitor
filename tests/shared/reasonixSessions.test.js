@@ -494,9 +494,12 @@ test('Reasonix native rows label requests separately from messages and merge pro
     now: new Date('2026-08-08T12:00:00.000Z')
   });
   assert.equal(rows.length, 1);
-  assert.equal(rows[0].kind, 'native-session');
-  assert.equal(rows[0].name, 'Build a dashboard');
+  assert.equal(rows[0].kind, 'session');
+  assert.equal(rows[0].name, 'Reasonix · deepseek-v4');
   assert.match(rows[0].subtitle, /2 turns/);
+  assert.equal(rows[0].detail, 'row-id');
+  assert.equal(rows[0].nativeSessionBreakdown.sessionTitle, 'Build a dashboard');
+  assert.equal(rows[0].nativeSessionBreakdown.projectLabel, 'Token Monitor');
   assert.equal(rows[0].nativeSessionBreakdown.cacheMissTokens, 80);
   assert.equal(rows[0].nativeSessionBreakdown.providerRequests, 4);
   assert.equal(rows[0].nativeSessionBreakdown.reportedCostUsd, 0.25);

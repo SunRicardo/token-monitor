@@ -1783,7 +1783,12 @@ function updateRow(row, { name, subtitle, detail, value, cost, max, color, barBa
     if (isExpanded) row.classList.add('expanded');
   } else if (nativeSessionBreakdown) {
     const breakdownRows = [
-      [t('reasonix.native.total'), value, false],
+      ...(nativeSessionBreakdown.sessionTitle
+        ? [[t('reasonix.native.sessionTitle'), nativeSessionBreakdown.sessionTitle, 'text']]
+        : []),
+      ...(nativeSessionBreakdown.projectLabel
+        ? [[t('reasonix.native.project'), nativeSessionBreakdown.projectLabel, 'text']]
+        : []),
       [t('reasonix.native.prompt'), nativeSessionBreakdown.promptTokens, false],
       [t('reasonix.native.completion'), nativeSessionBreakdown.completionTokens, false],
       [t('reasonix.native.reasoning'), nativeSessionBreakdown.reasoningTokens, false],
@@ -1795,8 +1800,8 @@ function updateRow(row, { name, subtitle, detail, value, cost, max, color, barBa
     const accordionSignature = JSON.stringify(breakdownRows);
     if (accordionInner.dataset.signature !== accordionSignature) {
       const content = document.createElement('div');
-      content.className = 'accordion-content native-session-breakdown';
-      for (const [labelText, rawValue, isCost] of breakdownRows) {
+      content.className = 'accordion-content';
+      for (const [labelText, rawValue, valueKind] of breakdownRows) {
         const item = document.createElement('div');
         item.className = 'accordion-row';
         const label = document.createElement('div');
@@ -1804,9 +1809,12 @@ function updateRow(row, { name, subtitle, detail, value, cost, max, color, barBa
         label.textContent = labelText;
         const metric = document.createElement('div');
         metric.className = 'accordion-value';
-        metric.textContent = isCost
+        const displayValue = valueKind === 'text'
+          ? rawValue
+          : valueKind
           ? (rawValue === undefined ? '—' : formatCost(rawValue))
           : formatNumber(rawValue || 0);
+        metric.textContent = displayValue;
         item.append(label, metric);
         content.append(item);
       }
